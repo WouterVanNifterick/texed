@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
+import dexedIcon from './assets/dexed-icon.svg';
 import { useDexedSynth } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
 import { getVoiceName, withVoiceName, voiceToSysex } from './state/params';
@@ -163,6 +164,7 @@ export default function App() {
       <div className="rack">
         <header className="topbar">
         <div className="logo">
+          <img src={dexedIcon} alt="" className="logo-icon" width={28} height={28} />
           DEXED<span>·WEB</span>
         </div>
 
@@ -252,6 +254,7 @@ export default function App() {
 
       {!started && (
         <div className="start-overlay">
+          <img src={dexedIcon} alt="" className="start-icon" width={72} height={72} />
           <button type="button" className="start" onClick={handleStart}>
             START AUDIO
           </button>

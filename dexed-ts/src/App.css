@@ -70,10 +70,18 @@
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 2px;
   color: var(--text);
+}
+
+.logo-icon {
+  flex: none;
+  display: block;
 }
 
 .logo span {
@@ -519,6 +527,11 @@
   gap: 14px;
   background: rgb(10 12 17 / 72%);
   backdrop-filter: blur(6px);
+}
+
+.start-icon {
+  display: block;
+  filter: drop-shadow(0 0 20px rgb(255 180 84 / 35%));
 }
 
 .start-overlay p {

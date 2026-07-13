@@ -8,9 +8,11 @@ const BOX = 17;
 
 interface AlgoDisplayProps {
   algorithm: number; // 0..31
+  hoverOp: number | null; // display op number 1..6
+  onHover: (opNum: number | null) => void;
 }
 
-export function AlgoDisplay({ algorithm }: AlgoDisplayProps) {
+export function AlgoDisplay({ algorithm, hoverOp, onHover }: AlgoDisplayProps) {
   const g = algoGraph(algorithm);
   const width = g.cols * CELL + 10;
   const height = g.rows * CELL + 10;
@@ -35,7 +37,12 @@ export function AlgoDisplay({ algorithm }: AlgoDisplayProps) {
         );
       })}
       {g.nodes.map((n) => (
-        <g key={n.op} className={n.carrier ? 'carrier' : undefined}>
+        <g
+          key={n.op}
+          className={`${n.carrier ? 'carrier' : ''}${n.num === hoverOp ? ' hilite' : ''}`}
+          onPointerEnter={() => onHover(n.num)}
+          onPointerLeave={() => onHover(null)}
+        >
           {n.feedback && (
             <path
               d={`M ${cx(n.x) + BOX / 2} ${cy(n.y) - 3} h 5 v -${BOX / 2 + 4} h -${BOX / 2 + 5} v 4`}

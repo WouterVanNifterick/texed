@@ -3,10 +3,10 @@
 // status updates never re-render the whole panel.
 
 import { memo } from 'react';
-import type { SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
 import { OP, G, opBase, formatOpFreq, formatDetune, CURVES, OSC_MODES } from '../state/params';
 import { algoGraph } from '../state/algo';
-import { Knob, Cycle, useStatus } from './ui';
+import { Knob, Cycle } from './ui';
 import { EnvGraph } from './EnvGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
@@ -40,6 +40,8 @@ interface OperatorPanelProps {
   voice: Uint8Array;
   setParam: (offset: number, value: number) => void;
   subscribeStatus: Subscribe;
+  hovered: boolean;
+  onHover: (opNum: number | null) => void;
 }
 
 export const OperatorPanel = memo(function OperatorPanel({
@@ -47,6 +49,8 @@ export const OperatorPanel = memo(function OperatorPanel({
   voice,
   setParam,
   subscribeStatus,
+  hovered,
+  onHover,
 }: OperatorPanelProps) {
   const base = opBase(opNum);
   const opIdx = 6 - opNum; // sysex order, used by the engine status
@@ -59,7 +63,11 @@ export const OperatorPanel = memo(function OperatorPanel({
   const levels = [v(4), v(5), v(6), v(7)];
 
   return (
-    <section className={`panel op-panel${enabled ? '' : ' disabled'}`}>
+    <section
+      className={`panel op-panel${enabled ? '' : ' disabled'}${hovered ? ' hilite' : ''}`}
+      onPointerEnter={() => onHover(opNum)}
+      onPointerLeave={() => onHover(null)}
+    >
       <div className="panel-head">
         <button
           type="button"
@@ -76,12 +84,12 @@ export const OperatorPanel = memo(function OperatorPanel({
 
       <LiveEnvGraph subscribe={subscribeStatus} opIdx={opIdx} rates={rates} levels={levels} />
 
-      <div className="ctl-row">
-        {[0, 1, 2, 3].map((i) => (
-          <Knob key={`r${i}`} label={`R${i + 1}`} value={v(OP.egRate(i))} max={99} onChange={set(OP.egRate(i))} />
-        ))}
+      <div className="eg-grid">
         {[0, 1, 2, 3].map((i) => (
           <Knob key={`l${i}`} label={`L${i + 1}`} value={v(OP.egLevel(i))} max={99} onChange={set(OP.egLevel(i))} />
+        ))}
+        {[0, 1, 2, 3].map((i) => (
+          <Knob key={`r${i}`} label={`R${i + 1}`} value={v(OP.egRate(i))} max={99} onChange={set(OP.egRate(i))} />
         ))}
       </div>
 

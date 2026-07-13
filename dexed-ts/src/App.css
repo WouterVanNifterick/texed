@@ -12,16 +12,26 @@
   --mono: Consolas, 'SF Mono', monospace;
 }
 
-/* ==== Rack layout: everything on one screen ==== */
+/* ==== Rack layout: fixed 1440x810 stage, scaled to fit the window ==== */
+
+.app-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(1200px 600px at 50% -200px, #1a1e29, var(--bg));
+}
 
 .rack {
-  height: 100vh;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1440px;
+  height: 850px;
+  transform: translate(-50%, -50%) scale(var(--stage-scale, 1));
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  overflow: hidden;
-  background: radial-gradient(1200px 600px at 50% -200px, #1a1e29, var(--bg));
 }
 
 .editor {
@@ -182,6 +192,11 @@
   opacity: 0.35;
 }
 
+.op-panel.hilite {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 10px rgb(255 180 84 / 18%), inset 0 0 12px rgb(255 180 84 / 6%);
+}
+
 .op-power {
   padding: 3px 8px;
   font-size: 11px;
@@ -248,7 +263,7 @@
 
 .env-graph {
   width: 100%;
-  height: clamp(26px, 5.5vh, 46px);
+  height: 44px;
   background: #0b0d12;
   border: 1px solid #232735;
   border-radius: 4px;
@@ -315,6 +330,20 @@
   stroke-dasharray: 2 2;
 }
 
+.algo-display g {
+  cursor: pointer;
+}
+
+.hilite .algo-node {
+  stroke: var(--accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+
+.carrier.hilite .algo-node {
+  stroke: #fff;
+}
+
 /* ==== Controls ==== */
 
 .ctl-row {
@@ -322,6 +351,14 @@
   justify-content: space-between;
   align-items: flex-end;
   gap: 1px;
+}
+
+/* EG knobs: 4 columns, level above its rate. */
+.eg-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  row-gap: 3px;
 }
 
 .ctl-label {

@@ -1,17 +1,10 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 // The worklet is bundled into a single self-contained ES module by Vite.
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
 import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
 import { initVoice } from '../engine/cartridge';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
-
-export const IDLE_STATUS: SynthStatus = {
-  amps: [0, 0, 0, 0, 0, 0],
-  steps: [4, 4, 4, 4, 4, 4],
-  pitchStep: 4,
-  lfo: 0,
-};
 
 export interface DexedSynth {
   start: () => Promise<void>;
@@ -36,6 +29,22 @@ export interface DexedSynth {
   panic: () => void;
   /** Subscribe to the ~30 Hz realtime status stream. Returns unsubscribe. */
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
+}
+
+/**
+ * Subscribe to the synth status stream and re-render only when the selected
+ * slice changes. Keeps 30 Hz updates confined to small meter components.
+ */
+export function useStatus<T>(
+  subscribe: (cb: (s: SynthStatus) => void) => () => void,
+  selector: (s: SynthStatus) => T,
+  initial: T,
+): T {
+  const [value, setValue] = useState<T>(initial);
+  const sel = useRef(selector);
+  sel.current = selector;
+  useEffect(() => subscribe((s) => setValue(sel.current(s))), [subscribe]);
+  return value;
 }
 
 export function useDexedSynth(): DexedSynth {

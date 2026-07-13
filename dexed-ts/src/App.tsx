@@ -25,6 +25,7 @@ export default function App() {
   const [reso, setReso] = useState(0);
   const [program, setProgram] = useState(0);
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
+  const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
   const midiRef = useRef<MidiConnection | null>(null);
   const heldKeys = useRef<Set<string>>(new Set());
@@ -95,6 +96,18 @@ export default function App() {
     return () => midiRef.current?.close();
   }, []);
 
+  // Fixed-size stage scaled to fit the window, like a resizable plugin UI.
+  useEffect(() => {
+    const update = () =>
+      document.documentElement.style.setProperty(
+        '--stage-scale',
+        String(Math.min(window.innerWidth / 1440, window.innerHeight / 850)),
+      );
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   const onEngine = useCallback(() => {
     const next = (engine + 1) % ENGINES.length;
     setEngine(next);
@@ -146,8 +159,9 @@ export default function App() {
   }, [synth]);
 
   return (
-    <div className="rack">
-      <header className="topbar">
+    <div className="app-root">
+      <div className="rack">
+        <header className="topbar">
         <div className="logo">
           DEXED<span>·WEB</span>
         </div>
@@ -220,12 +234,21 @@ export default function App() {
             voice={synth.voice}
             setParam={synth.setParam}
             subscribeStatus={synth.subscribeStatus}
+            hovered={hoverOp === opNum}
+            onHover={setHoverOp}
           />
         ))}
-        <GlobalPanel voice={synth.voice} setParam={synth.setParam} subscribeStatus={synth.subscribeStatus} />
+        <GlobalPanel
+          voice={synth.voice}
+          setParam={synth.setParam}
+          subscribeStatus={synth.subscribeStatus}
+          hoverOp={hoverOp}
+          onHoverOp={setHoverOp}
+        />
       </main>
 
-      <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
+        <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
+      </div>
 
       {!started && (
         <div className="start-overlay">

@@ -1,8 +1,6 @@
-// Small reusable VST-style controls: rotary knob, cycle button, LED toggle,
-// plus the useStatus hook that feeds realtime visualizations.
+// Small reusable VST-style controls: rotary knob, cycle button, LED toggle.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SynthStatus } from '../audio/useDexedSynth';
+import { useCallback, useRef } from 'react';
 
 interface KnobProps {
   label: string;
@@ -31,12 +29,14 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
 }
 
 export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent }: KnobProps) {
-  const drag = useRef<{ startY: number; startValue: number } | null>(null);
+  const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.currentTarget.setPointerCapture(e.pointerId);
-      drag.current = { startY: e.clientY, startValue: value };
+      const scale =
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) || 1;
+      drag.current = { startY: e.clientY, startValue: value, scale };
     },
     [value],
   );
@@ -46,7 +46,7 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       if (!drag.current) return;
       const range = max - min;
       const fine = e.shiftKey ? 0.15 : 1;
-      const dv = ((drag.current.startY - e.clientY) / 130) * range * fine;
+      const dv = ((drag.current.startY - e.clientY) / (130 * drag.current.scale)) * range * fine;
       const next = Math.round(Math.min(max, Math.max(min, drag.current.startValue + dv)));
       if (next !== value) onChange(next);
     },
@@ -133,20 +133,4 @@ export function Toggle({ label, on, onChange }: ToggleProps) {
       </button>
     </div>
   );
-}
-
-/**
- * Subscribe to the synth status stream and re-render only when the selected
- * slice changes. Keeps 30 Hz updates confined to small meter components.
- */
-export function useStatus<T>(
-  subscribe: (cb: (s: SynthStatus) => void) => () => void,
-  selector: (s: SynthStatus) => T,
-  initial: T,
-): T {
-  const [value, setValue] = useState<T>(initial);
-  const sel = useRef(selector);
-  sel.current = selector;
-  useEffect(() => subscribe((s) => setValue(sel.current(s))), [subscribe]);
-  return value;
 }

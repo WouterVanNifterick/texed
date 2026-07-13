@@ -2,9 +2,9 @@
 // and the pitch envelope.
 
 import { memo } from 'react';
-import type { SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
 import { G, LFO_WAVES, formatTranspose } from '../state/params';
-import { Knob, Cycle, Toggle, useStatus } from './ui';
+import { Knob, Cycle, Toggle } from './ui';
 import { AlgoDisplay } from './AlgoDisplay';
 import { EnvGraph } from './EnvGraph';
 
@@ -28,9 +28,17 @@ interface GlobalPanelProps {
   voice: Uint8Array;
   setParam: (offset: number, value: number) => void;
   subscribeStatus: Subscribe;
+  hoverOp: number | null;
+  onHoverOp: (opNum: number | null) => void;
 }
 
-export const GlobalPanel = memo(function GlobalPanel({ voice, setParam, subscribeStatus }: GlobalPanelProps) {
+export const GlobalPanel = memo(function GlobalPanel({
+  voice,
+  setParam,
+  subscribeStatus,
+  hoverOp,
+  onHoverOp,
+}: GlobalPanelProps) {
   const set = (offset: number) => (value: number) => setParam(offset, value);
   const pitchRates = [voice[G.pitchEgRate(0)], voice[G.pitchEgRate(1)], voice[G.pitchEgRate(2)], voice[G.pitchEgRate(3)]];
   const pitchLevels = [
@@ -46,7 +54,7 @@ export const GlobalPanel = memo(function GlobalPanel({ voice, setParam, subscrib
         <div className="panel-head">
           <span className="panel-title">ALGORITHM</span>
         </div>
-        <AlgoDisplay algorithm={voice[G.algorithm]} />
+        <AlgoDisplay algorithm={voice[G.algorithm]} hoverOp={hoverOp} onHover={onHoverOp} />
         <div className="ctl-row">
           <Knob label="ALGO" value={voice[G.algorithm]} max={31} format={(a) => `${a + 1}`} onChange={set(G.algorithm)} />
           <Knob label="F/BACK" value={voice[G.feedback]} max={7} onChange={set(G.feedback)} />
@@ -84,18 +92,7 @@ export const GlobalPanel = memo(function GlobalPanel({ voice, setParam, subscrib
           <span className="panel-title">PITCH EG</span>
         </div>
         <LivePitchEnv subscribe={subscribeStatus} rates={pitchRates} levels={pitchLevels} />
-        <div className="ctl-row">
-          {[0, 1, 2, 3].map((i) => (
-            <Knob
-              key={`r${i}`}
-              label={`R${i + 1}`}
-              value={voice[G.pitchEgRate(i)]}
-              max={99}
-              onChange={set(G.pitchEgRate(i))}
-            />
-          ))}
-        </div>
-        <div className="ctl-row">
+        <div className="eg-grid">
           {[0, 1, 2, 3].map((i) => (
             <Knob
               key={`l${i}`}
@@ -103,6 +100,15 @@ export const GlobalPanel = memo(function GlobalPanel({ voice, setParam, subscrib
               value={voice[G.pitchEgLevel(i)]}
               max={99}
               onChange={set(G.pitchEgLevel(i))}
+            />
+          ))}
+          {[0, 1, 2, 3].map((i) => (
+            <Knob
+              key={`r${i}`}
+              label={`R${i + 1}`}
+              value={voice[G.pitchEgRate(i)]}
+              max={99}
+              onChange={set(G.pitchEgRate(i))}
             />
           ))}
         </div>

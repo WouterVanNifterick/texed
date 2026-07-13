@@ -1,9 +1,10 @@
-// Global voice parameters: algorithm + feedback, LFO (with live level meter)
-// and the pitch envelope.
+// Global voice parameters: algorithm + feedback, LFO (with live level meter),
+// the pitch envelope and the DX7II AMEM supplement.
 
 import { memo } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
 import { G, LFO_WAVES, formatTranspose } from '../state/params';
+import * as Sup from '../state/supplement';
 import { Knob, Cycle, Toggle } from './ui';
 import { AlgoDisplay } from './AlgoDisplay';
 import { EnvGraph } from './EnvGraph';
@@ -26,7 +27,9 @@ function LivePitchEnv({ subscribe, rates, levels }: { subscribe: Subscribe; rate
 
 interface GlobalPanelProps {
   voice: Uint8Array;
+  supplement: Uint8Array;
   setParam: (offset: number, value: number) => void;
+  setSupplementParam: (offset: number, value: number) => void;
   subscribeStatus: Subscribe;
   hoverOp: number | null;
   onHoverOp: (opNum: number | null) => void;
@@ -34,12 +37,15 @@ interface GlobalPanelProps {
 
 export const GlobalPanel = memo(function GlobalPanel({
   voice,
+  supplement,
   setParam,
+  setSupplementParam,
   subscribeStatus,
   hoverOp,
   onHoverOp,
 }: GlobalPanelProps) {
   const set = (offset: number) => (value: number) => setParam(offset, value);
+  const setSup = (edit: Sup.ByteEdit) => setSupplementParam(edit.offset, edit.value);
   const pitchRates = [voice[G.pitchEgRate(0)], voice[G.pitchEgRate(1)], voice[G.pitchEgRate(2)], voice[G.pitchEgRate(3)]];
   const pitchLevels = [
     voice[G.pitchEgLevel(0)],
@@ -111,6 +117,82 @@ export const GlobalPanel = memo(function GlobalPanel({
               onChange={set(G.pitchEgRate(i))}
             />
           ))}
+        </div>
+      </section>
+
+      <section className="panel" style={{ flex: '1.22 1 0%' }}>
+        <div className="panel-head">
+          <span className="panel-title">DX7II</span>
+        </div>
+        <div className="ctl-row">
+          <Toggle label="MONO" on={Sup.getMono(supplement)} onChange={(on) => setSup(Sup.setMono(supplement, on))} />
+          <Toggle label="UNISON" on={Sup.getUnison(supplement)} onChange={(on) => setSup(Sup.setUnison(supplement, on))} />
+          <Knob
+            label="UNI DET"
+            value={Sup.getUnisonDetune(supplement)}
+            max={7}
+            size={24}
+            onChange={(v) => setSup(Sup.setUnisonDetune(supplement, v))}
+          />
+          <Toggle
+            label="RND PT"
+            on={Sup.getRandomPitch(supplement)}
+            onChange={(on) => setSup(Sup.setRandomPitch(supplement, on))}
+          />
+        </div>
+        <div className="ctl-row">
+          <Knob
+            label="PB RNG"
+            value={Sup.getPitchBendRange(supplement)}
+            max={12}
+            size={24}
+            onChange={(v) => setSup(Sup.setPitchBendRange(supplement, v))}
+          />
+          <Knob
+            label="PB STEP"
+            value={Sup.getPitchBendStep(supplement)}
+            max={12}
+            size={24}
+            onChange={(v) => setSup(Sup.setPitchBendStep(supplement, v))}
+          />
+          <Knob
+            label="PORTA"
+            value={Sup.getPortaTime(supplement)}
+            max={99}
+            size={24}
+            onChange={(v) => setSup(Sup.setPortaTime(supplement, v))}
+          />
+          <Cycle
+            label="P MODE"
+            value={Sup.getPortaMode(supplement)}
+            options={Sup.PORTA_MODES}
+            onChange={(v) => setSup(Sup.setPortaMode(supplement, v))}
+          />
+          <Toggle
+            label="GLISS"
+            on={Sup.getPortaGliss(supplement)}
+            onChange={(on) => setSup(Sup.setPortaGliss(supplement, on))}
+          />
+        </div>
+        <div className="ctl-row">
+          <Cycle
+            label="PEG RNG"
+            value={Sup.getPitchEgRange(supplement)}
+            options={Sup.PEG_RANGES}
+            onChange={(v) => setSup(Sup.setPitchEgRange(supplement, v))}
+          />
+          <Knob
+            label="PEG RS"
+            value={Sup.getPitchEgScaleRate(supplement)}
+            max={7}
+            size={24}
+            onChange={(v) => setSup(Sup.setPitchEgScaleRate(supplement, v))}
+          />
+          <Toggle
+            label="PEG VEL"
+            on={Sup.getPitchEgVelSens(supplement)}
+            onChange={(on) => setSup(Sup.setPitchEgVelSens(supplement, on))}
+          />
         </div>
       </section>
     </div>

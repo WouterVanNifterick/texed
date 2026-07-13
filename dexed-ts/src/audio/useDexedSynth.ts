@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-// The worklet is bundled into a single self-contained ES module by Vite.
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
 import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
-import type { PartConfig } from '../engine/synth-rack';
+import type { PartConfig, ProgramOption } from '../engine/synth-rack';
+import type { VoiceRef } from '../engine/voice-library';
+import type { LoadReport } from '../engine/sysex-loader';
 import { initVoice } from '../engine/cartridge';
+import { createDefaultAmem } from '../engine/amem';
+import type { SystemSetup } from '../engine/system-setup';
+import { voiceRefEquals } from '../engine/synth-rack';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
 
 export interface DexedSynth {
   start: () => Promise<void>;
   ready: boolean;
+  programOptions: ProgramOption[];
   programNames: string[];
-  /** UI mirror of the engine's current 156-byte voice. */
+  loadReport: LoadReport | null;
   voice: Uint8Array;
+  /** 35-byte DX7II AMEM supplement for the selected part's voice. */
+  supplement: Uint8Array;
+  systemSetup: SystemSetup | null;
+  masterTuneCents: number;
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
   controlChange: (controller: number, value: number, channel?: number) => void;
@@ -20,28 +29,26 @@ export interface DexedSynth {
   aftertouch: (value: number, channel?: number) => void;
   setEngine: (engine: number) => void;
   setProgram: (index: number) => void;
+  setVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
   loadCart: (data: ArrayBuffer) => void;
-  /** Set one voice byte: updates the UI mirror and the engine. */
   setParam: (offset: number, value: number) => void;
-  /** Replace the whole voice (e.g. after a name edit). */
+  setSupplementParam: (offset: number, value: number) => void;
+  setMasterTune: (cents: number) => void;
   setVoice: (voice: Uint8Array) => void;
   setFx: (cutoff: number, reso: number, gain: number) => void;
   setMasterGain: (gain: number) => void;
   panic: () => void;
-  /** Multitimbral rack: per-part config + selection. */
   partConfigs: PartConfig[];
   selectedPart: number;
   selectPart: (index: number) => void;
   setPart: (index: number, config: Partial<PartConfig>) => void;
   setPolyphonyCap: (cap: number) => void;
-  /** Subscribe to the ~30 Hz realtime status stream. Returns unsubscribe. */
+  performanceNames: string[];
+  performanceIndex: number;
+  selectPerformance: (index: number) => void;
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
 }
 
-/**
- * Subscribe to the synth status stream and re-render only when the selected
- * slice changes. Keeps 30 Hz updates confined to small meter components.
- */
 export function useStatus<T>(
   subscribe: (cb: (s: SynthStatus) => void) => () => void,
   selector: (s: SynthStatus) => T,
@@ -59,10 +66,16 @@ export function useDexedSynth(): DexedSynth {
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
   const [ready, setReady] = useState(false);
-  const [programNames, setProgramNames] = useState<string[]>([]);
+  const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
+  const [loadReport, setLoadReport] = useState<LoadReport | null>(null);
   const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
+  const [supplement, setSupplementState] = useState<Uint8Array>(() => createDefaultAmem());
+  const [systemSetup, setSystemSetup] = useState<SystemSetup | null>(null);
+  const [masterTuneCents, setMasterTuneCents] = useState(0);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
   const [selectedPart, setSelectedPart] = useState(0);
+  const [performanceNames, setPerformanceNames] = useState<string[]>([]);
+  const [performanceIndex, setPerformanceIndex] = useState(0);
 
   const post = useCallback((msg: ToWorkletMessage, transfer?: Transferable[]) => {
     nodeRef.current?.port.postMessage(msg, transfer ?? []);
@@ -83,11 +96,24 @@ export function useDexedSynth(): DexedSynth {
     node.port.onmessage = (e: MessageEvent<FromWorkletMessage>) => {
       const m = e.data;
       if (m.type === 'ready') setReady(true);
-      else if (m.type === 'programNames') setProgramNames(m.names);
-      else if (m.type === 'voice') setVoiceState(new Uint8Array(m.data));
-      else if (m.type === 'parts') {
+      else if (m.type === 'programNames') {
+        setProgramOptions(m.names.map((label, i) => ({ ref: { bank: 'internalA', program: i }, label })));
+      } else if (m.type === 'programState') {
+        setProgramOptions(m.options);
+      } else if (m.type === 'loadReport') {
+        setLoadReport(m.report);
+      } else if (m.type === 'voice') {
+        setVoiceState(new Uint8Array(m.data));
+        setSupplementState(new Uint8Array(m.supplement));
+      } else if (m.type === 'systemSetup') {
+        setSystemSetup(m.setup);
+        setMasterTuneCents(m.masterTuneCents);
+      } else if (m.type === 'parts') {
         setPartConfigs(m.configs);
         setSelectedPart(m.selectedPart);
+      } else if (m.type === 'performances') {
+        setPerformanceNames(m.names);
+        setPerformanceIndex(m.index);
       } else if (m.type === 'status') {
         for (const cb of statusSubs.current) cb(m);
       }
@@ -119,7 +145,18 @@ export function useDexedSynth(): DexedSynth {
     [post],
   );
   const setEngine = useCallback((engine: number) => post({ type: MsgType.SetEngine, engine }), [post]);
-  const setProgram = useCallback((index: number) => post({ type: MsgType.SetProgram, index }), [post]);
+  const setProgram = useCallback((index: number) => {
+    const opt = programOptions[index];
+    if (opt) {
+      post({ type: MsgType.SetVoiceRef, voice: opt.ref });
+    } else {
+      post({ type: MsgType.SetProgram, index });
+    }
+  }, [post, programOptions]);
+  const setVoiceRef = useCallback(
+    (ref: VoiceRef, partIndex?: number) => post({ type: MsgType.SetVoiceRef, voice: ref, partIndex }),
+    [post],
+  );
   const loadCart = useCallback((data: ArrayBuffer) => post({ type: MsgType.LoadCart, data }, [data]), [post]);
 
   const setParam = useCallback(
@@ -130,6 +167,26 @@ export function useDexedSynth(): DexedSynth {
         return next;
       });
       post({ type: MsgType.SetParam, offset, value });
+    },
+    [post],
+  );
+
+  const setSupplementParam = useCallback(
+    (offset: number, value: number) => {
+      setSupplementState((prev) => {
+        const next = new Uint8Array(prev);
+        next[offset] = value;
+        return next;
+      });
+      post({ type: MsgType.SetSupplementParam, offset, value });
+    },
+    [post],
+  );
+
+  const setMasterTune = useCallback(
+    (cents: number) => {
+      setMasterTuneCents(cents);
+      post({ type: MsgType.SetMasterTune, cents });
     },
     [post],
   );
@@ -157,16 +214,28 @@ export function useDexedSynth(): DexedSynth {
   );
   const setPolyphonyCap = useCallback((cap: number) => post({ type: MsgType.SetPolyphonyCap, cap }), [post]);
 
+  const selectPerformance = useCallback(
+    (index: number) => post({ type: MsgType.SelectPerformance, index }),
+    [post],
+  );
+
   const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
     statusSubs.current.add(cb);
     return () => statusSubs.current.delete(cb);
   }, []);
 
+  const programNames = programOptions.map((o) => o.label);
+
   return {
     start,
     ready,
+    programOptions,
     programNames,
+    loadReport,
     voice,
+    supplement,
+    systemSetup,
+    masterTuneCents,
     noteOn,
     noteOff,
     controlChange,
@@ -174,8 +243,11 @@ export function useDexedSynth(): DexedSynth {
     aftertouch,
     setEngine,
     setProgram,
+    setVoiceRef,
     loadCart,
     setParam,
+    setSupplementParam,
+    setMasterTune,
     setVoice,
     setFx,
     setMasterGain,
@@ -185,6 +257,14 @@ export function useDexedSynth(): DexedSynth {
     selectPart,
     setPart,
     setPolyphonyCap,
+    performanceNames,
+    performanceIndex,
+    selectPerformance,
     subscribeStatus,
   };
+}
+
+export function programIndexForVoice(options: ProgramOption[], voice: VoiceRef): number {
+  const idx = options.findIndex((o) => voiceRefEquals(o.ref, voice));
+  return idx >= 0 ? idx : 0;
 }

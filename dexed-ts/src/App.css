@@ -89,6 +89,46 @@
   font-weight: 400;
 }
 
+.part-edit-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.part-strip {
+  display: flex;
+  gap: 2px;
+}
+
+.part-btn {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  font: 10px/1 var(--mono);
+  font-weight: 700;
+  color: var(--dim);
+  background: #100e07;
+  border: 1px solid #3a3320;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.part-btn:hover {
+  color: var(--text);
+  border-color: #5a5030;
+}
+
+.part-btn.selected {
+  color: #7fc4ff;
+  background: #1a3048;
+  border-color: #3a6a9a;
+  box-shadow: 0 0 6px rgb(127 196 255 / 25%);
+}
+
+.part-btn.off:not(.selected) {
+  opacity: 0.45;
+}
+
 .voice-name {
   width: 130px;
   padding: 5px 8px;
@@ -383,6 +423,8 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
+  border-radius: 50%;
+  outline: none;
 }
 
 .knob-inline {
@@ -394,6 +436,14 @@
 .knob-inline .knob-value {
   min-width: 2.5ch;
   text-align: left;
+}
+
+.knob:focus svg {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+
+.knob:focus .knob-body {
+  stroke: color-mix(in srgb, var(--accent) 45%, #10131a);
 }
 
 .knob svg {
@@ -482,6 +532,201 @@
 .cycle .toggle.on .led {
   background: var(--green);
   box-shadow: 0 0 5px var(--green);
+}
+
+/* ==== Part rack sliders ==== */
+
+.part-slider {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.part-slider-track,
+.part-slider-fill {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.part-slider-track {
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: #262b38;
+  border: 1px solid #10131a;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.part-slider-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  background: var(--dim);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.part-slider-fill {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+  z-index: 1;
+}
+
+.part-slider input[type='range'] {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.part-slider input[type='range']:focus {
+  outline: none;
+}
+
+.part-slider:focus-within .part-slider-track {
+  border-color: color-mix(in srgb, var(--accent) 35%, #10131a);
+}
+
+.part-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  background: transparent;
+}
+
+.part-slider input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 2px;
+  height: 10px;
+  margin-top: -2px;
+  border: none;
+  border-radius: 1px;
+  background: var(--text);
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.part-slider:focus-within input[type='range']::-webkit-slider-thumb {
+  box-shadow:
+    0 0 1px rgba(0, 0, 0, 0.6),
+    0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.part-slider input[type='range']::-moz-range-track {
+  height: 6px;
+  background: transparent;
+  border: none;
+}
+
+.part-slider input[type='range']::-moz-range-thumb {
+  width: 2px;
+  height: 10px;
+  border: none;
+  border-radius: 1px;
+  background: var(--text);
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.part-slider:focus-within input[type='range']::-moz-range-thumb {
+  box-shadow:
+    0 0 1px rgba(0, 0, 0, 0.6),
+    0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ==== Part rack note range ==== */
+
+.note-range {
+  width: 100%;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.note-range-track {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.note-range-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 6px;
+  border-radius: 3px;
+  transform: translateY(-50%);
+  background: #262b38;
+  border: 1px solid #10131a;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.note-range:focus-within .note-range-track::before {
+  border-color: color-mix(in srgb, var(--accent) 35%, #10131a);
+}
+
+.note-range-fill {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  border-radius: 1px;
+  transform: translateY(-50%);
+  background: var(--accent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.note-range-thumb {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: ew-resize;
+  z-index: 2;
+}
+
+.note-range-thumb::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  transform: translate(-50%, -50%);
+  background: var(--text);
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.note-range-thumb:focus {
+  outline: none;
+}
+
+.note-range-thumb:focus::before {
+  box-shadow:
+    0 0 1px rgba(0, 0, 0, 0.6),
+    0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 /* ==== Keyboard ==== */

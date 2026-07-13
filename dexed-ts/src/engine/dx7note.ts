@@ -13,6 +13,7 @@ import { sar64 } from './fixedpoint';
 import { kControllerPitch, kControllerPitchRangeUp, kControllerPitchStep, kControllerPitchRangeDn } from './controllers';
 import type { Controllers } from './controllers';
 import type { TuningState } from './tuning';
+import { VoiceSupplement, extendedAmsTable } from './amem';
 
 const FEEDBACK_BITDEPTH = 8;
 
@@ -86,7 +87,10 @@ function scaleLevel(
 }
 
 const pitchmodsenstab = [0, 10, 20, 33, 55, 92, 153, 255];
-const ampmodsenstab = [0, 4342338, 7171437, 16777216];
+
+// DX7II pitch EG range (AMEM): 8va (full DX7 range), 2va, 1va, ½va, expressed
+// as a right shift of the Q24 pitch EG output.
+const pegRangeShift = [0, 2, 3, 4];
 
 export interface VoiceStatus {
   amp: number[];
@@ -96,6 +100,7 @@ export interface VoiceStatus {
 
 export class Dx7Note {
   private tuningState: TuningState;
+  private supplement: VoiceSupplement | null = null;
 
   private params: FmOpParams[] = [];
   private env: Env[] = [];
@@ -113,6 +118,11 @@ export class Dx7Note {
   private pitchmodsens = 0;
   private ampmoddepth = 0;
 
+  // DX7II supplement (AMEM) state, latched at note-on.
+  private pegShift = 0;
+  private pegVelScale = 1;
+  private randPitchOffset = 0;
+
   private initialised = false;
   private mpePitchBend = 8192;
 
@@ -125,6 +135,29 @@ export class Dx7Note {
       this.params.push(p);
       this.env.push(new Env());
     }
+  }
+
+  setTuningState(state: TuningState): void {
+    this.tuningState = state;
+  }
+
+  setSupplement(sup: VoiceSupplement | null): void {
+    this.supplement = sup;
+  }
+
+  private amsForOp(op: number, patch: Uint8Array): number {
+    const off = op * 21;
+    let ams = patch[off + 14] & 3;
+    if (this.supplement) {
+      const ext = this.supplement.amsIndex(op);
+      if (ext > 3) ams = ext;
+    }
+    return Math.min(7, ams);
+  }
+
+  private amsTableValue(ams: number): number {
+    if (ams < extendedAmsTable.length) return extendedAmsTable[ams];
+    return extendedAmsTable[extendedAmsTable.length - 1];
   }
 
   private oscFreq(midinote: number, mode: number, coarse: number, fine: number, detune: number): number {
@@ -148,6 +181,14 @@ export class Dx7Note {
     this.initialised = true;
     const rates = new Int32Array(4);
     const levels = new Int32Array(4);
+
+    const sup = this.supplement;
+    this.pegShift = sup ? pegRangeShift[sup.pitchEgRange & 3] : 0;
+    this.pegVelScale = sup?.pitchEgVelSens ? Math.max(1, velocity) / 127 : 1;
+    // Random pitch fluctuation: up to ±8 cents per note-on.
+    this.randPitchOffset = sup?.randomPitch
+      ? Math.trunc((Math.random() * 2 - 1) * (((1 << 24) / 12) * 0.08))
+      : 0;
 
     for (let op = 0; op < 6; op++) {
       const off = op * 21;
@@ -177,14 +218,15 @@ export class Dx7Note {
       const coarse = patch[off + 18];
       const fine = patch[off + 19];
       const detune = patch[off + 20];
-      const freq = this.oscFreq(midinote, mode, coarse, fine, detune);
+      const freq = this.oscFreq(midinote, mode, coarse, fine, detune) + (mode === 0 ? this.randPitchOffset : 0);
       this.opMode[op] = mode;
       this.basepitch[op] = freq;
       this.portaCurpitch[op] = freq;
-      this.ampmodsens[op] = ampmodsenstab[patch[off + 14] & 3];
+      this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
     }
+    const pegRateAdj = sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
     for (let i = 0; i < 4; i++) {
-      rates[i] = patch[126 + i];
+      rates[i] = Math.min(99, patch[126 + i] + pegRateAdj);
       levels[i] = patch[130 + i];
     }
     this.pitchenv.set(rates, levels);
@@ -212,7 +254,10 @@ export class Dx7Note {
     const pmod1 = Math.abs(Number((BigInt(pmd) * BigInt(senslfo)) >> 39n));
     const pmod2 = Math.abs(sar64(ctrls.pitchMod * senslfo, 14) | 0);
     let pitchMod = Math.max(pmod1, pmod2);
-    pitchMod = this.pitchenv.getsample() + pitchMod * (senslfo < 0 ? -1 : 1);
+    let peg = this.pitchenv.getsample();
+    if (this.pegShift) peg >>= this.pegShift;
+    if (this.pegVelScale !== 1) peg = Math.trunc(peg * this.pegVelScale);
+    pitchMod = peg + pitchMod * (senslfo < 0 ? -1 : 1);
 
     // ---- PITCH BEND ----
     const pitchbend = ctrls.values_[kControllerPitch];
@@ -315,8 +360,9 @@ export class Dx7Note {
       const coarse = patch[off + 18];
       const fine = patch[off + 19];
       const detune = patch[off + 20];
-      this.basepitch[op] = this.oscFreq(midinote, mode, coarse, fine, detune);
-      this.ampmodsens[op] = ampmodsenstab[patch[off + 14] & 3];
+      this.basepitch[op] =
+        this.oscFreq(midinote, mode, coarse, fine, detune) + (mode === 0 ? this.randPitchOffset : 0);
+      this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
       this.opMode[op] = mode;
 
       for (let i = 0; i < 4; i++) {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import dexedIcon from './assets/dexed-icon.svg';
-import { useDexedSynth } from './audio/useDexedSynth';
+import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
 import { getVoiceName, withVoiceName, voiceToSysex } from './state/params';
 import { Keyboard } from './components/Keyboard';
@@ -25,7 +25,6 @@ export default function App() {
   const [volume, setVolume] = useState(80);
   const [cutoff, setCutoff] = useState(99);
   const [reso, setReso] = useState(0);
-  const [program, setProgram] = useState(0);
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
@@ -33,7 +32,18 @@ export default function App() {
   const [polyphony, setPolyphony] = useState(32);
   const midiRef = useRef<MidiConnection | null>(null);
   const heldKeys = useRef<Set<string>>(new Set());
+  const [loadMsg, setLoadMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!synth.loadReport) return;
+    const { applied, skipped } = synth.loadReport;
+    const parts = [...applied];
+    if (skipped.length) parts.push(`skipped: ${skipped.join(', ')}`);
+    setLoadMsg(parts.join(' · '));
+    const t = setTimeout(() => setLoadMsg(null), 6000);
+    return () => clearTimeout(t);
+  }, [synth.loadReport]);
 
   const noteOn = useCallback(
     (note: number, velocity: number, channel = 1) => {
@@ -136,10 +146,7 @@ export default function App() {
   );
 
   const onSelectProgram = useCallback(
-    (idx: number) => {
-      setProgram(idx);
-      synth.setProgram(idx);
-    },
+    (idx: number) => synth.setProgram(idx),
     [synth],
   );
 
@@ -147,10 +154,14 @@ export default function App() {
     async (file: File | undefined) => {
       if (!file) return;
       synth.loadCart(await file.arrayBuffer());
-      setProgram(0);
     },
     [synth],
   );
+
+  const selectedVoice = synth.partConfigs[synth.selectedPart]?.voice;
+  const program = selectedVoice
+    ? programIndexForVoice(synth.programOptions, selectedVoice)
+    : 0;
 
   const onSaveVoice = useCallback(() => {
     const syx = voiceToSysex(synth.voice);
@@ -171,31 +182,52 @@ export default function App() {
           DEXED<span>·WEB</span>
         </div>
 
-        <input
-          className="voice-name"
-          value={getVoiceName(synth.voice)}
-          maxLength={10}
-          spellCheck={false}
-          onChange={(e) => synth.setVoice(withVoiceName(synth.voice, e.target.value.toUpperCase()))}
-          title="Voice name"
-        />
+        <div className="part-edit-group">
+          <div className="part-strip" title="Select part for voice editing">
+            {Array.from({ length: 8 }, (_, i) => {
+              const cfg = synth.partConfigs[i];
+              const selected = i === synth.selectedPart;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`part-btn${selected ? ' selected' : ''}${cfg && !cfg.enabled ? ' off' : ''}`}
+                  onClick={() => synth.selectPart(i)}
+                  title={`Part ${i + 1}${cfg && !cfg.enabled ? ' (disabled)' : ''}`}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+          </div>
+          <input
+            className="voice-name"
+            value={getVoiceName(synth.voice)}
+            maxLength={10}
+            spellCheck={false}
+            onChange={(e) => synth.setVoice(withVoiceName(synth.voice, e.target.value.toUpperCase()))}
+            title={`Voice name — editing part ${synth.selectedPart + 1}`}
+          />
+        </div>
 
         <select
           className="program-select"
           value={program}
           onChange={(e) => onSelectProgram(Number(e.target.value))}
-          disabled={synth.programNames.length === 0}
+          disabled={synth.programOptions.length === 0}
         >
-          {synth.programNames.length === 0 ? (
+          {synth.programOptions.length === 0 ? (
             <option value={0}>INIT VOICE</option>
           ) : (
-            synth.programNames.map((name, i) => (
+            synth.programOptions.map((opt, i) => (
               <option key={i} value={i}>
-                {String(i + 1).padStart(2, '0')} {name}
+                {opt.label}
               </option>
             ))
           )}
         </select>
+
+        {loadMsg && <span className="load-msg" title={loadMsg}>{loadMsg}</span>}
 
         <button type="button" className="bar-btn" onClick={() => fileRef.current?.click()}>
           LOAD
@@ -240,7 +272,9 @@ export default function App() {
             key={opNum}
             opNum={opNum}
             voice={synth.voice}
+            supplement={synth.supplement}
             setParam={synth.setParam}
+            setSupplementParam={synth.setSupplementParam}
             subscribeStatus={synth.subscribeStatus}
             hovered={hoverOp === opNum}
             onHover={setHoverOp}
@@ -248,7 +282,9 @@ export default function App() {
         ))}
         <GlobalPanel
           voice={synth.voice}
+          supplement={synth.supplement}
           setParam={synth.setParam}
+          setSupplementParam={synth.setSupplementParam}
           subscribeStatus={synth.subscribeStatus}
           hoverOp={hoverOp}
           onHoverOp={setHoverOp}
@@ -262,10 +298,16 @@ export default function App() {
         <PartRack
           configs={synth.partConfigs}
           selectedPart={synth.selectedPart}
-          programNames={synth.programNames}
+          programOptions={synth.programOptions}
+          performanceNames={synth.performanceNames}
+          performanceIndex={synth.performanceIndex}
+          onSelectPerformance={synth.selectPerformance}
           polyphony={polyphony}
+          masterTuneCents={synth.masterTuneCents}
+          onMasterTune={synth.setMasterTune}
           onSelect={synth.selectPart}
           onSetPart={synth.setPart}
+          onSetVoiceRef={synth.setVoiceRef}
           onPolyphony={(n) => {
             setPolyphony(n);
             synth.setPolyphonyCap(n);

@@ -9,7 +9,7 @@
 //   byte[2] = 0x0n, byte[3]:  -> bulk dump          (n = channel)
 //       0x00  VCED   single voice           (155 data, 163 total)
 //       0x02  PMEM   DX1/DX5 performance    (4096 data, 4104 total)
-//       0x06  performance bulk (DX7II/TX802, 1120 data)
+//       0x06  packed 32 supplement (DX7II AMEM, 1120 data) OR TX802 performance
 //       0x09  VMEM   32-voice cartridge     (4096 data, 4104 total)
 //       0x7E  named bulk: "LM  ####xx" (10 chars) then data
 //           "LM  8973PM"  DX7II performance memory
@@ -28,12 +28,14 @@ export const SysexKind = {
   Cartridge: 'cartridge',
   Aced: 'aced',
   AcedBank: 'acedBank',
+  Amem: 'amem',
   Dx5Performance: 'dx5Performance',
   Performance: 'performance',
   Dx7iiPerformance: 'dx7iiPerformance',
   Dx7iiPerformanceEdit: 'dx7iiPerformanceEdit',
   FractionalScale: 'fractionalScale',
   Microtune: 'microtune',
+  SystemSetup: 'systemSetup',
   ParamChange: 'paramChange',
   Unknown: 'unknown',
 } as const;
@@ -92,15 +94,43 @@ function verifyChecksum(frame: Uint8Array, dataStart: number, dataLen: number): 
 }
 
 const NAMED_KINDS: Record<string, SysexKind> = {
+  '8952PM': SysexKind.Dx7iiPerformance,
+  '8952PE': SysexKind.Dx7iiPerformanceEdit,
   '8973PM': SysexKind.Dx7iiPerformance,
   '8973PE': SysexKind.Dx7iiPerformanceEdit,
   '8973AE': SysexKind.Aced,
   '8973AM': SysexKind.AcedBank,
+  '8973S': SysexKind.SystemSetup,
   FKSYEM: SysexKind.FractionalScale,
   FKSYC: SysexKind.FractionalScale,
   MCRYE: SysexKind.Microtune,
   MCRYM: SysexKind.Microtune,
 };
+
+/** Compact a 10-char LM format id for NAMED_KINDS lookup (handles MCRYMx slot byte). */
+function compactFormatKey(formatId: string): string {
+  const trimmed = formatId.replace(/^LM/, '').replace(/[\s-]/g, '');
+  for (const key of Object.keys(NAMED_KINDS)) {
+    if (trimmed.startsWith(key)) return key;
+  }
+  return trimmed;
+}
+
+const TX802_PERF_BLOCK = 140;
+
+/** True when a format-0x06 1120-byte payload looks like a TX802 performance dump. */
+function isTx802PerformancePayload(data: Uint8Array): boolean {
+  if (data.length < TX802_PERF_BLOCK * 2) return false;
+  let enabledParts = 0;
+  for (let t = 0; t < 8; t++) {
+    const blk = data.subarray(t * TX802_PERF_BLOCK, (t + 1) * TX802_PERF_BLOCK);
+    if (blk.length < TX802_PERF_BLOCK) break;
+    const outAssign = blk[5] & 0x03;
+    const outVol = blk[22] & 0x7f;
+    if (outAssign !== 0 || outVol > 0) enabledParts++;
+  }
+  return enabledParts >= 1;
+}
 
 /** Classify a single F0..F7 frame. */
 export function identifyFrame(frame: Uint8Array): SysexFrame {
@@ -133,13 +163,17 @@ export function identifyFrame(frame: Uint8Array): SysexFrame {
     }
     case 0x06: {
       const size = (frame[4] << 7) | frame[5];
-      return { ...base, kind: SysexKind.Performance, checksumOk: verifyChecksum(frame, 6, size) };
+      const data = frame.subarray(6, 6 + size);
+      const kind = size === 1120 && !isTx802PerformancePayload(data)
+        ? SysexKind.Amem
+        : SysexKind.Performance;
+      return { ...base, kind, checksumOk: verifyChecksum(frame, 6, size) };
     }
     case 0x7e: {
       const size = (frame[4] << 7) | frame[5];
       const formatId = readFormatId(frame);
       // Compact the id (drop the "LM  " prefix and spaces/dashes) for lookup.
-      const key = formatId.replace(/^LM/, '').replace(/[\s-]/g, '');
+      const key = compactFormatKey(formatId);
       const kind = NAMED_KINDS[key] ?? SysexKind.Unknown;
       // Named dumps carry the id in the first 10 payload bytes; the checksum
       // covers size bytes starting at byte[6] (the id is part of the payload).

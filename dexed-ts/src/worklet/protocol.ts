@@ -1,6 +1,11 @@
 // Message protocol between the main thread and the Dexed AudioWorklet.
 
-import type { PartConfig } from '../engine/synth-rack';
+import type { PartConfig, ProgramOption } from '../engine/synth-rack';
+import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
+import type { LoadReport } from '../engine/sysex-loader';
+import type { SystemSetup } from '../engine/system-setup';
+
+export type { VoiceRef, VoiceBankId };
 
 export const MsgType = {
   NoteOn: 'noteOn',
@@ -11,15 +16,18 @@ export const MsgType = {
   LoadVoice: 'loadVoice',
   LoadCart: 'loadCart',
   SetProgram: 'setProgram',
+  SetVoiceRef: 'setVoiceRef',
   SetEngine: 'setEngine',
   SetFx: 'setFx',
   SetMasterGain: 'setMasterGain',
   SetParam: 'setParam',
+  SetSupplementParam: 'setSupplementParam',
+  SetMasterTune: 'setMasterTune',
   Panic: 'panic',
-  // Multitimbral (SynthRack)
   SelectPart: 'selectPart',
   SetPart: 'setPart',
   SetPolyphonyCap: 'setPolyphonyCap',
+  SelectPerformance: 'selectPerformance',
 } as const;
 
 export interface NoteOnMsg {
@@ -60,6 +68,12 @@ export interface LoadCartMsg {
 export interface SetProgramMsg {
   type: typeof MsgType.SetProgram;
   index: number;
+  bank?: VoiceBankId;
+}
+export interface SetVoiceRefMsg {
+  type: typeof MsgType.SetVoiceRef;
+  voice: VoiceRef;
+  partIndex?: number;
 }
 export interface SelectPartMsg {
   type: typeof MsgType.SelectPart;
@@ -73,6 +87,10 @@ export interface SetPartMsg {
 export interface SetPolyphonyCapMsg {
   type: typeof MsgType.SetPolyphonyCap;
   cap: number;
+}
+export interface SelectPerformanceMsg {
+  type: typeof MsgType.SelectPerformance;
+  index: number;
 }
 export interface SetEngineMsg {
   type: typeof MsgType.SetEngine;
@@ -93,6 +111,15 @@ export interface SetParamMsg {
   offset: number; // byte offset into the 156-byte voice
   value: number;
 }
+export interface SetSupplementParamMsg {
+  type: typeof MsgType.SetSupplementParam;
+  offset: number; // byte offset into the 35-byte AMEM supplement
+  value: number;
+}
+export interface SetMasterTuneMsg {
+  type: typeof MsgType.SetMasterTune;
+  cents: number;
+}
 export interface PanicMsg {
   type: typeof MsgType.Panic;
 }
@@ -106,14 +133,18 @@ export type ToWorkletMessage =
   | LoadVoiceMsg
   | LoadCartMsg
   | SetProgramMsg
+  | SetVoiceRefMsg
   | SetEngineMsg
   | SetFxMsg
   | SetMasterGainMsg
   | SetParamMsg
+  | SetSupplementParamMsg
+  | SetMasterTuneMsg
   | PanicMsg
   | SelectPartMsg
   | SetPartMsg
-  | SetPolyphonyCapMsg;
+  | SetPolyphonyCapMsg
+  | SelectPerformanceMsg;
 
 export interface ReadyMsg {
   type: 'ready';
@@ -122,10 +153,26 @@ export interface ProgramNamesMsg {
   type: 'programNames';
   names: string[];
 }
+export interface ProgramStateMsg {
+  type: 'programState';
+  options: ProgramOption[];
+  banks: { id: VoiceBankId; label: string; populated: boolean }[];
+}
+export interface LoadReportMsg {
+  type: 'loadReport';
+  report: LoadReport;
+}
 /** Full current voice, sent after program/cartridge/voice loads. */
 export interface VoiceMsg {
   type: 'voice';
   data: Uint8Array; // 156 bytes
+  supplement: Uint8Array; // 35-byte DX7II AMEM supplement
+}
+/** System setup (8973S) + current master tune, sent after loads/tune changes. */
+export interface SystemSetupMsg {
+  type: 'systemSetup';
+  masterTuneCents: number;
+  setup: SystemSetup | null;
 }
 /** Periodic realtime status for UI meters (~30 Hz). */
 export interface StatusMsg {
@@ -146,4 +193,19 @@ export interface PartsMsg {
   selectedPart: number;
 }
 
-export type FromWorkletMessage = ReadyMsg | ProgramNamesMsg | VoiceMsg | StatusMsg | PartsMsg;
+export interface PerformancesMsg {
+  type: 'performances';
+  names: string[];
+  index: number;
+}
+
+export type FromWorkletMessage =
+  | ReadyMsg
+  | ProgramNamesMsg
+  | ProgramStateMsg
+  | LoadReportMsg
+  | VoiceMsg
+  | SystemSetupMsg
+  | StatusMsg
+  | PartsMsg
+  | PerformancesMsg;

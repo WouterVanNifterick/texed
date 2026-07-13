@@ -5,6 +5,7 @@
 import { memo } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
 import { OP, G, opBase, formatOpFreq, formatDetune, CURVES, OSC_MODES } from '../state/params';
+import { getAms, setAms } from '../state/supplement';
 import { algoGraph } from '../state/algo';
 import { Knob, Cycle } from './ui';
 import { EnvGraph } from './EnvGraph';
@@ -38,7 +39,9 @@ function LiveEnvGraph({
 interface OperatorPanelProps {
   opNum: number; // 1..6
   voice: Uint8Array;
+  supplement: Uint8Array;
   setParam: (offset: number, value: number) => void;
+  setSupplementParam: (offset: number, value: number) => void;
   subscribeStatus: Subscribe;
   hovered: boolean;
   onHover: (opNum: number | null) => void;
@@ -47,7 +50,9 @@ interface OperatorPanelProps {
 export const OperatorPanel = memo(function OperatorPanel({
   opNum,
   voice,
+  supplement,
   setParam,
+  setSupplementParam,
   subscribeStatus,
   hovered,
   onHover,
@@ -56,6 +61,16 @@ export const OperatorPanel = memo(function OperatorPanel({
   const opIdx = 6 - opNum; // sysex order, used by the engine status
   const v = (rel: number) => voice[base + rel];
   const set = (rel: number) => (value: number) => setParam(base + rel, value);
+
+  // AMS spans two stores: 0–3 lives in the voice, the DX7II extension 4–7 in
+  // the AMEM supplement. The engine uses the supplement value when it is > 3.
+  const amsExt = getAms(supplement, opIdx);
+  const ams = amsExt > 3 ? amsExt : v(OP.ampModSens);
+  const onAms = (value: number) => {
+    setParam(base + OP.ampModSens, Math.min(3, value));
+    const edit = setAms(supplement, opIdx, value);
+    setSupplementParam(edit.offset, edit.value);
+  };
 
   const enabled = (voice[G.opEnable] & (1 << opIdx)) !== 0;
   const carrier = algoGraph(voice[G.algorithm]).nodes.find((n) => n.op === opIdx)?.carrier;
@@ -109,7 +124,7 @@ export const OperatorPanel = memo(function OperatorPanel({
         <Cycle label="L CRV" value={v(OP.leftCurve)} options={CURVES} onChange={set(OP.leftCurve)} />
         <Cycle label="R CRV" value={v(OP.rightCurve)} options={CURVES} onChange={set(OP.rightCurve)} />
         <Knob label="RATE SC" value={v(OP.rateScaling)} max={7} onChange={set(OP.rateScaling)} />
-        <Knob label="AMS" value={v(OP.ampModSens)} max={3} onChange={set(OP.ampModSens)} />
+        <Knob label="AMS" value={ams} max={7} onChange={onAms} />
       </div>
     </section>
   );

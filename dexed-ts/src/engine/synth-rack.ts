@@ -9,22 +9,39 @@ import { PluginFx } from './plugin-fx';
 import { Cartridge } from './cartridge';
 import { Part, EngineType } from './part';
 import { initSynthTables } from './synth-unit';
+import type { ParsedPerformance } from './performance';
+import type { LoadReport } from './sysex-loader';
+import type { SystemSetup } from './system-setup';
+import {
+  VoiceLibrary,
+  defaultVoiceRef,
+  voiceRefEquals,
+  type VoiceRef,
+  type VoiceBankId,
+} from './voice-library';
+
+export type { VoiceRef, VoiceBankId };
 
 export const NUM_PARTS = 8;
 export const DEFAULT_POLYPHONY = 32;
+
+export function inNoteRange(pitch: number, low: number, high: number): boolean {
+  return low <= high ? pitch >= low && pitch <= high : pitch <= high || pitch >= low;
+}
 
 export interface PartConfig {
   enabled: boolean;
   /** 0 = omni (all channels), 1..16 = specific MIDI channel. */
   rxChannel: number;
-  volume: number; // 0..1
-  pan: number; // -1 (hard left) .. +1 (hard right)
-  noteLow: number; // 0..127 inclusive
-  noteHigh: number; // 0..127 inclusive
-  noteShift: number; // semitones added to engine pitch
-  detune: number; // cents (stored for round-trip; audible mapping is approximate)
-  /** Program number in the loaded bank this part uses (for UI / performance load). */
-  voiceNumber: number;
+  volume: number;
+  pan: number;
+  noteLow: number;
+  noteHigh: number;
+  noteShift: number;
+  detune: number;
+  voice: VoiceRef;
+  /** @deprecated Use voice.program — kept for protocol compat during migration. */
+  voiceNumber?: number;
 }
 
 function defaultPartConfig(enabled: boolean): PartConfig {
@@ -37,7 +54,7 @@ function defaultPartConfig(enabled: boolean): PartConfig {
     noteHigh: 127,
     noteShift: 0,
     detune: 0,
-    voiceNumber: 0,
+    voice: defaultVoiceRef(),
   };
 }
 
@@ -47,10 +64,13 @@ export interface RackStatus {
   steps: number[];
   pitchStep: number;
   lfo: number;
-  /** Active (sounding) voice count per part. */
   partActivity: number[];
-  /** Total sounding voices across all parts. */
   totalActive: number;
+}
+
+export interface ProgramOption {
+  ref: VoiceRef;
+  label: string;
 }
 
 export class SynthRack {
@@ -58,10 +78,13 @@ export class SynthRack {
   private configs: PartConfig[] = [];
   private fxL = new PluginFx();
   private fxR = new PluginFx();
+  private library = new VoiceLibrary();
 
   private polyphonyCap = DEFAULT_POLYPHONY;
   private masterGain = 0.8;
   private selected = 0;
+  private lastLoadReport: LoadReport | null = null;
+  private masterTuneCents_ = 0;
 
   private scratch = new Float32Array(128);
 
@@ -80,7 +103,13 @@ export class SynthRack {
     this.fxR.init(sampleRate);
   }
 
-  // ==== Global config ====
+  get voiceLibrary(): VoiceLibrary {
+    return this.library;
+  }
+
+  getLoadReport(): LoadReport | null {
+    return this.lastLoadReport;
+  }
 
   setEngineType(type: EngineType): void {
     for (const p of this.parts) p.setEngineType(type);
@@ -110,48 +139,99 @@ export class SynthRack {
     return this.selected;
   }
 
-  // ==== Per-part config ====
-
   getPartConfig(index: number): PartConfig {
-    return { ...this.configs[index] };
+    const c = this.configs[index];
+    return { ...c, voice: { ...c.voice } };
   }
 
   getPartConfigs(): PartConfig[] {
-    return this.configs.map((c) => ({ ...c }));
+    return this.configs.map((c) => ({ ...c, voice: { ...c.voice } }));
   }
 
   setPartConfig(index: number, patch: Partial<PartConfig>): void {
     if (index < 0 || index >= NUM_PARTS) return;
     const cfg = this.configs[index];
-    Object.assign(cfg, patch);
+    if (patch.voice) cfg.voice = { ...patch.voice };
+    if (patch.voiceNumber !== undefined) {
+      cfg.voice = { ...cfg.voice, program: patch.voiceNumber };
+    }
+    const { voice: _v, voiceNumber: _vn, ...rest } = patch;
+    Object.assign(cfg, rest);
+    if (patch.voice !== undefined || patch.voiceNumber !== undefined) {
+      this.applyVoiceToPart(index);
+    }
     if (patch.noteShift !== undefined) this.parts[index].extraTranspose = cfg.noteShift;
+    if (patch.detune !== undefined) this.parts[index].extraDetune = cfg.detune;
     if (patch.enabled === false) this.parts[index].panic();
   }
 
-  // ==== Voice / bank loading ====
-
-  /** Load a cartridge as the shared bank for every part (TX802/TX816 style). */
-  loadCartridge(cart: Cartridge): void {
+  /** Load a full VoiceLibrary from a parsed sysex file. */
+  loadLibrary(lib: VoiceLibrary, report?: LoadReport): void {
+    this.library = lib;
+    this.lastLoadReport = report ?? null;
     for (let i = 0; i < NUM_PARTS; i++) {
-      this.parts[i].loadCartridge(cart);
-      this.parts[i].setProgram(this.configs[i].voiceNumber);
+      this.applyVoiceToPart(i);
+    }
+    if (lib.performances.length > 0) {
+      this.selectPerformance(0);
     }
   }
 
-  loadCartridgeForPart(index: number, cart: Cartridge): void {
-    if (index < 0 || index >= NUM_PARTS) return;
-    this.parts[index].loadCartridge(cart);
-    this.parts[index].setProgram(this.configs[index].voiceNumber);
+  /** Legacy: load a single VMEM cartridge into internalA. */
+  loadCartridge(cart: Cartridge): void {
+    this.library.loadLegacyCartridge(cart);
+    for (let i = 0; i < NUM_PARTS; i++) {
+      this.applyVoiceToPart(i);
+    }
   }
 
   cartridgeProgramNames(): string[] {
-    return this.parts[this.selected].cartridgeProgramNames();
+    return this.programOptions().map((o) => o.label);
   }
 
-  setProgramForPart(index: number, program: number): void {
+  programOptions(): ProgramOption[] {
+    const opts = this.library.programOptions();
+    if (opts.length > 0) return opts;
+    return [{ ref: defaultVoiceRef(), label: 'INIT VOICE' }];
+  }
+
+  setProgramForPart(index: number, program: number, bank?: VoiceBankId): void {
     if (index < 0 || index >= NUM_PARTS) return;
-    this.configs[index].voiceNumber = program;
-    this.parts[index].setProgram(program);
+    const cfg = this.configs[index];
+    cfg.voice = {
+      bank: bank ?? cfg.voice.bank,
+      program: program & 0x1f,
+    };
+    this.applyVoiceToPart(index);
+  }
+
+  setVoiceRefForPart(index: number, ref: VoiceRef): void {
+    if (index < 0 || index >= NUM_PARTS) return;
+    this.configs[index].voice = { bank: ref.bank, program: ref.program & 0x1f };
+    this.applyVoiceToPart(index);
+  }
+
+  private applyVoiceToPart(index: number): void {
+    const ref = this.configs[index].voice;
+    const slot = this.library.resolve(ref);
+    if (slot) {
+      this.parts[index].loadVoiceSlot(slot.vmem, slot.amem);
+    } else {
+      this.parts[index].setProgram(ref.program);
+    }
+  }
+
+  applyMasterTuneCents(cents: number): void {
+    this.masterTuneCents_ = cents;
+    for (const p of this.parts) p.setMasterTuneCents(cents);
+  }
+
+  get masterTuneCents(): number {
+    return this.masterTuneCents_;
+  }
+
+  getSystemSetup(): SystemSetup | null {
+    return this.library.systemSetup;
   }
 
   loadVoiceForPart(index: number, patch: Uint8Array): void {
@@ -159,16 +239,49 @@ export class SynthRack {
     this.parts[index].loadVoice(patch);
   }
 
+  loadPerformances(perfs: ParsedPerformance[]): void {
+    this.library.performances = perfs;
+    this.library.performanceIndex = 0;
+  }
+
+  selectPerformance(index: number): void {
+    const perfs = this.library.performances;
+    if (index < 0 || index >= perfs.length) return;
+    this.library.performanceIndex = index;
+    const { parts } = perfs[index];
+    for (let i = 0; i < NUM_PARTS; i++) {
+      this.setPartConfig(i, { ...defaultPartConfig(false), ...parts[i] });
+    }
+  }
+
+  getPerformanceState(): { names: string[]; index: number } {
+    return {
+      names: this.library.performances.map((p) => p.name),
+      index: this.library.performanceIndex,
+    };
+  }
+
+  getBankInfos() {
+    return this.library.bankInfos();
+  }
+
   setVoiceParamForPart(index: number, offset: number, value: number): void {
     if (index < 0 || index >= NUM_PARTS) return;
     this.parts[index].setVoiceParam(offset, value);
+  }
+
+  setSupplementParamForPart(index: number, offset: number, value: number): void {
+    if (index < 0 || index >= NUM_PARTS) return;
+    this.parts[index].setSupplementParam(offset, value);
   }
 
   getVoiceData(index = this.selected): Uint8Array {
     return this.parts[index].getVoiceData();
   }
 
-  // ==== MIDI routing ====
+  getSupplementData(index = this.selected): Uint8Array {
+    return this.parts[index].getSupplementData();
+  }
 
   private matches(index: number, channel: number): boolean {
     const cfg = this.configs[index];
@@ -182,11 +295,9 @@ export class SynthRack {
     return n;
   }
 
-  /** Steal voices across all parts until there is room for `needed` more. */
   private enforceCap(needed: number): void {
     let guard = NUM_PARTS * 16 + needed;
     while (this.totalActiveVoices() + needed > this.polyphonyCap && guard-- > 0) {
-      // Prefer stealing a released voice; otherwise the globally oldest keydown.
       let bestPart = -1;
       let bestSeq = Infinity;
       let bestReleased = false;
@@ -216,7 +327,7 @@ export class SynthRack {
     for (let i = 0; i < NUM_PARTS; i++) {
       if (!this.matches(i, channel)) continue;
       const cfg = this.configs[i];
-      if (pitch < cfg.noteLow || pitch > cfg.noteHigh) continue;
+      if (!inNoteRange(pitch, cfg.noteLow, cfg.noteHigh)) continue;
       this.enforceCap(1);
       this.parts[i].noteOn(pitch, velocity, channel);
     }
@@ -247,7 +358,6 @@ export class SynthRack {
     }
   }
 
-  // UI-originated controllers (no MIDI channel) act on the selected part.
   controlChangeSelected(ctrl: number, value: number): void {
     this.parts[this.selected].controlChange(ctrl, value);
   }
@@ -264,8 +374,6 @@ export class SynthRack {
     for (const p of this.parts) p.panic();
   }
 
-  // ==== Status ====
-
   getStatus(): RackStatus {
     const s = this.parts[this.selected].getStatus();
     const partActivity = this.parts.map((p) => p.activeVoiceCount());
@@ -280,8 +388,6 @@ export class SynthRack {
     };
   }
 
-  // ==== Render (stereo) ====
-
   render(outL: Float32Array, outR: Float32Array, numSamples: number): void {
     if (this.scratch.length < numSamples) this.scratch = new Float32Array(numSamples);
     const scratch = this.scratch;
@@ -292,7 +398,6 @@ export class SynthRack {
       const cfg = this.configs[i];
       if (!cfg.enabled) continue;
       this.parts[i].render(scratch, numSamples);
-      // Equal-power pan: pan -1 -> (1,0), 0 -> (~.707,~.707), +1 -> (0,1).
       const th = (cfg.pan + 1) * 0.25 * Math.PI;
       const gl = Math.cos(th) * cfg.volume;
       const gr = Math.sin(th) * cfg.volume;
@@ -312,3 +417,5 @@ export class SynthRack {
     }
   }
 }
+
+export { voiceRefEquals };

@@ -4,27 +4,42 @@
 export interface TuningState {
   midinoteToLogfreq(midinote: number): number;
   isStandardTuning(): boolean;
+  setMasterTuneCents(cents: number): void;
 }
 
 class StandardTuning implements TuningState {
   private table = new Int32Array(128);
+  private masterTuneCents = 0;
 
   constructor() {
-    const base = 50857777; // (1 << 24) * (log(440)/log(2) - 69/12)
-    const step = (1 << 24) / 12; // integer division in C: 1398101
-    const stepInt = Math.trunc(step);
+    this.rebuildTable();
+  }
+
+  private rebuildTable(): void {
+    const base = 50857777;
+    const step = Math.trunc((1 << 24) / 12);
+    const tuneOffset = Math.trunc((this.masterTuneCents / 100) * step);
     for (let mn = 0; mn < 128; mn++) {
-      this.table[mn] = base + stepInt * mn;
+      this.table[mn] = base + step * mn + tuneOffset;
     }
   }
 
+  setMasterTuneCents(cents: number): void {
+    this.masterTuneCents = cents;
+    this.rebuildTable();
+  }
+
   midinoteToLogfreq(midinote: number): number {
-    const mn = midinote < 0 ? 0 : midinote > 127 ? 127 : midinote;
-    return this.table[mn];
+    const clamped = Math.max(0, Math.min(127, midinote));
+    const lo = Math.floor(clamped);
+    const hi = Math.min(127, lo + 1);
+    const frac = clamped - lo;
+    if (frac === 0) return this.table[lo];
+    return Math.trunc(this.table[lo] * (1 - frac) + this.table[hi] * frac);
   }
 
   isStandardTuning(): boolean {
-    return true;
+    return this.masterTuneCents === 0;
   }
 }
 

@@ -21,6 +21,7 @@ import {
 import { Dx7Note, type VoiceStatus } from './dx7note';
 import { createStandardTuning, type TuningState } from './tuning';
 import { Cartridge, initVoice } from './cartridge';
+import { VoiceSupplement, createDefaultAmem, AMEM_SLOT_SIZE } from './amem';
 
 export const MAX_ACTIVE_NOTES = 16;
 
@@ -47,6 +48,8 @@ export class Part {
   private voices: Voice[] = [];
   private data = initVoice();
   private cartridge: Cartridge | null = null;
+  private supplement = new VoiceSupplement(createDefaultAmem());
+  private monoMode = false;
 
   private currentNote = 0;
   private nextKeydownSeq = 0;
@@ -56,6 +59,9 @@ export class Part {
   /** Performance-level transpose (semitones) added to engine pitch only; does
    * not affect note-on/off matching. Set by SynthRack from the part's noteShift. */
   extraTranspose = 0;
+
+  /** Performance-level detune in cents (−7..+7). Set by SynthRack from PartConfig.detune. */
+  extraDetune = 0;
 
   private lastLfoValue = 0;
   private peekStatus: VoiceStatus = { amp: [0, 0, 0, 0, 0, 0], ampStep: [0, 0, 0, 0, 0, 0], pitchStep: 0 };
@@ -107,7 +113,51 @@ export class Part {
 
   loadVoice(patch: Uint8Array): void {
     this.data.set(patch.subarray(0, 156));
+    // A bare voice (VCED) leaves the DX7II supplement untouched, matching
+    // hardware behavior where a voice edit keeps the current ACED buffer.
+    this.monoMode = this.supplement.mono;
+    this.applySupplementToControllers();
     this.refreshVoices();
+  }
+
+  /** Load VMEM + AMEM together (DX7II bank slot). */
+  loadVoiceSlot(vmem: Uint8Array, amem: Uint8Array): void {
+    this.data.set(vmem.subarray(0, 156));
+    this.supplement = new VoiceSupplement(amem);
+    this.monoMode = this.supplement.mono;
+    this.applySupplementToControllers();
+    this.refreshVoices();
+  }
+
+  getSupplementData(): Uint8Array {
+    return this.supplement.raw.slice();
+  }
+
+  /** Edit one byte of the 35-byte AMEM supplement and re-apply it. */
+  setSupplementParam(offset: number, value: number): void {
+    if (offset < 0 || offset >= AMEM_SLOT_SIZE) return;
+    if (this.supplement.raw[offset] === value) return;
+    const raw = createDefaultAmem();
+    raw.set(this.supplement.raw.subarray(0, AMEM_SLOT_SIZE));
+    raw[offset] = value & 0x7f;
+    this.supplement = new VoiceSupplement(raw);
+    this.monoMode = this.supplement.mono;
+    this.applySupplementToControllers();
+    this.refreshVoices();
+  }
+
+  private applySupplementToControllers(): void {
+    this.supplement.applyToControllers(this.controllers);
+    for (const v of this.voices) {
+      v.dx7Note.setSupplement(this.supplement);
+    }
+  }
+
+  setMasterTuneCents(cents: number): void {
+    this.tuningState.setMasterTuneCents(cents);
+    for (const v of this.voices) {
+      v.dx7Note.setTuningState(this.tuningState);
+    }
   }
 
   setVoiceParam(offset: number, value: number): void {
@@ -130,9 +180,10 @@ export class Part {
   }
 
   setProgram(idx: number): void {
-    if (!this.cartridge) return;
-    const patch = this.cartridge.unpackProgram(idx);
-    this.data.set(patch);
+    if (this.cartridge) {
+      const patch = this.cartridge.unpackProgram(idx);
+      this.data.set(patch);
+    }
     this.refreshVoices();
   }
 
@@ -144,9 +195,10 @@ export class Part {
     this.controllers.opSwitch = sw;
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       if (this.voices[i].live) {
+        this.voices[i].dx7Note.setSupplement(this.supplement);
         this.voices[i].dx7Note.update(
           this.data,
-          this.voices[i].midiNote + this.transpositionShift(),
+          this.enginePitch(this.voices[i].midiNote),
           this.voices[i].velocity,
           this.voices[i].channel,
         );
@@ -182,10 +234,23 @@ export class Part {
     return this.data[144] - 24 + this.extraTranspose;
   }
 
+  private enginePitch(midiNote: number): number {
+    return midiNote + this.transpositionShift() + this.extraDetune / 100;
+  }
+
   noteOn(pitch: number, velocity: number, channel = 1): void {
     if (velocity === 0) {
       this.noteOff(pitch, channel);
       return;
+    }
+
+    if (this.monoMode) {
+      for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
+        if (this.voices[i].keydown) {
+          this.voices[i].keydown = false;
+          this.voices[i].dx7Note.keyup();
+        }
+      }
     }
 
     let triggerLfo = true;
@@ -197,6 +262,17 @@ export class Part {
     }
     if (triggerLfo) this.lfo.keydown();
 
+    // DX7II unison: stack a second, detuned voice per note.
+    if (this.supplement.unison) {
+      const spreadCents = (this.supplement.unisonDetune + 1) * 5;
+      this.triggerVoice(pitch, velocity, channel, -spreadCents);
+      this.triggerVoice(pitch, velocity, channel, spreadCents);
+    } else {
+      this.triggerVoice(pitch, velocity, channel, 0);
+    }
+  }
+
+  private triggerVoice(pitch: number, velocity: number, channel: number, detuneCents: number): void {
     const note = this.chooseNote(pitch);
     this.currentNote = (note + 1) % MAX_ACTIVE_NOTES;
     const v = this.voices[note];
@@ -208,7 +284,8 @@ export class Part {
     v.keydownSeq = this.nextKeydownSeq++;
 
     const voiceSteal = v.dx7Note.isPlaying();
-    v.dx7Note.init(this.data, pitch + this.transpositionShift(), velocity, channel);
+    v.dx7Note.setSupplement(this.supplement);
+    v.dx7Note.init(this.data, this.enginePitch(pitch) + detuneCents / 100, velocity, channel);
     if (this.data[136] && !voiceSteal) {
       v.dx7Note.oscSync();
     }
@@ -234,27 +311,27 @@ export class Part {
   }
 
   noteOff(pitch: number, channel = 1): void {
-    let note: number;
-    for (note = 0; note < MAX_ACTIVE_NOTES; note++) {
-      if (this.voices[note].midiNote === pitch && this.voices[note].keydown && this.voices[note].channel === channel) {
-        this.voices[note].keydown = false;
-        break;
+    // Release every matching voice: unison stacks two voices per note.
+    let released = false;
+    for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
+      const v = this.voices[note];
+      if (v.midiNote === pitch && v.keydown && v.channel === channel) {
+        v.keydown = false;
+        released = true;
+        if (this.sustain) v.sustained = true;
+        else v.dx7Note.keyup();
       }
     }
-    if (note >= MAX_ACTIVE_NOTES) {
-      for (note = 0; note < MAX_ACTIVE_NOTES; note++) {
-        if (this.voices[note].midiNote === pitch && this.voices[note].keydown) {
-          this.voices[note].keydown = false;
-          break;
-        }
-      }
-      if (note >= MAX_ACTIVE_NOTES) return;
-    }
+    if (released) return;
 
-    if (this.sustain) {
-      this.voices[note].sustained = true;
-    } else {
-      this.voices[note].dx7Note.keyup();
+    for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
+      const v = this.voices[note];
+      if (v.midiNote === pitch && v.keydown) {
+        v.keydown = false;
+        if (this.sustain) v.sustained = true;
+        else v.dx7Note.keyup();
+        return;
+      }
     }
   }
 

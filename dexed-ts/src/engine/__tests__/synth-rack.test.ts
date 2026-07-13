@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { SynthRack } from '../synth-rack';
+import { cartridgeFromSyx } from '../sysex';
+import { loadSysexFile } from '../sysex-loader';
 import { N } from '../synth';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const romCart = (): ReturnType<typeof cartridgeFromSyx> =>
+  cartridgeFromSyx(new Uint8Array(readFileSync(join(here, 'fixtures', 'rom1a.syx'))));
 
 const peak = (buf: Float32Array): number => {
   let p = 0;
@@ -65,6 +74,22 @@ describe('SynthRack', () => {
     expect(renderPeak(rack2, 50).l).toBeLessThan(1e-6);
   });
 
+  it('honors inverted per-part note ranges', () => {
+    const rack = new SynthRack(44100);
+    rack.setPartConfig(0, { enabled: true, rxChannel: 0, noteLow: 80, noteHigh: 40 });
+
+    rack.noteOn(60, 100, 1);
+    expect(renderPeak(rack, 50).l).toBeLessThan(1e-6);
+
+    rack.noteOff(60, 1);
+    rack.noteOn(30, 100, 1);
+    expect(renderPeak(rack, 100).l).toBeGreaterThan(0);
+
+    rack.noteOff(30, 1);
+    rack.noteOn(100, 100, 1);
+    expect(renderPeak(rack, 100).l).toBeGreaterThan(0);
+  });
+
   it('pans a part hard right', () => {
     const rack = new SynthRack(44100);
     rack.setPartConfig(0, { pan: 1 });
@@ -84,6 +109,21 @@ describe('SynthRack', () => {
     expect(status.totalActive).toBeLessThanOrEqual(4);
   });
 
+  it('loads voice data when voiceNumber is set via setPartConfig', () => {
+    const rack = new SynthRack(44100);
+    const cart = romCart();
+    expect(cart).not.toBeNull();
+    rack.loadCartridge(cart!);
+
+    const prog0 = rack.getVoiceData(1);
+    rack.setPartConfig(1, { voice: { bank: 'internalA', program: 5 } });
+    const prog5 = rack.getVoiceData(1);
+    expect(prog5).not.toEqual(prog0);
+
+    rack.setPartConfig(1, { voice: { bank: 'internalA', program: 0 } });
+    expect(rack.getVoiceData(1)).toEqual(rack.getVoiceData(0));
+  });
+
   it('stops all voices on panic', () => {
     const rack = new SynthRack(44100);
     rack.noteOn(60, 100, 1);
@@ -94,5 +134,22 @@ describe('SynthRack', () => {
     // Audio decays toward silence (the global FX filter rings briefly).
     const after = renderPeak(rack, 200).l;
     expect(after).toBeLessThan(before * 0.5);
+  });
+
+  it('plays after selecting a TX802 performance with omni routing', () => {
+    const rack = new SynthRack(44100);
+    const result = loadSysexFile(new Uint8Array(readFileSync(join(here, 'fixtures', 'tx802-prg1.syx'))));
+    expect(result.loaded).toBe(true);
+    rack.loadLibrary(result.library);
+
+    rack.noteOn(60, 100, 1);
+    expect(renderPeak(rack, 100).l).toBeGreaterThan(0);
+  });
+
+  it.each([-7, -1, 1, 7])('produces audio with part detune %i cents', (detune) => {
+    const rack = new SynthRack(44100);
+    rack.setPartConfig(0, { detune });
+    rack.noteOn(60, 100, 1);
+    expect(renderPeak(rack, 200).l).toBeGreaterThan(0);
   });
 });

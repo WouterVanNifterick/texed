@@ -31,10 +31,12 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
 }
 
 export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked' }: KnobProps) {
+  const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      root.current?.focus();
       e.currentTarget.setPointerCapture(e.pointerId);
       const scale =
         parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) || 1;
@@ -67,6 +69,44 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
     [value, min, max, onChange],
   );
 
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const range = max - min;
+      const pageStep = Math.max(1, Math.round(range / 10));
+      let next: number | null = null;
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          next = value + 1;
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          next = value - 1;
+          break;
+        case 'PageUp':
+          next = value + pageStep;
+          break;
+        case 'PageDown':
+          next = value - pageStep;
+          break;
+        case 'Home':
+          next = min;
+          break;
+        case 'End':
+          next = max;
+          break;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      const clamped = Math.min(max, Math.max(min, next));
+      if (clamped !== value) onChange(clamped);
+    },
+    [value, min, max, onChange],
+  );
+
   const c = size / 2;
   const r = c - 3;
   const start = -ARC / 2;
@@ -78,8 +118,17 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
 
   return (
     <div
+      ref={root}
       className={`knob${layout === 'inline' ? ' knob-inline' : ''}`}
       style={{ width: layout === 'inline' ? undefined : size + 8 }}
+      tabIndex={0}
+      role="slider"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      aria-valuetext={display}
+      aria-label={label || undefined}
+      onKeyDown={onKeyDown}
     >
       <svg
         width={size}
@@ -88,6 +137,7 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
+        aria-hidden
       >
         <circle cx={c} cy={c} r={r} className="knob-body" />
         <path d={arcPath(c, c, r, start, start + ARC)} className="knob-track" />
@@ -98,6 +148,212 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       </svg>
       <div className="knob-value">{display}</div>
       {label ? <div className="ctl-label">{label}</div> : null}
+    </div>
+  );
+}
+
+interface PartSliderProps {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+  onClick?: (e: React.MouseEvent<HTMLInputElement>) => void;
+  /** Fill grows from center (for pan); default fills from the left (volume). */
+  center?: boolean;
+  label?: string;
+}
+
+/** Compact rack fader styled to match knobs. */
+export function PartSlider({ value, min, max, onChange, onClick, center = false, label }: PartSliderProps) {
+  const span = max - min || 1;
+  const pct = ((value - min) / span) * 100;
+  const fillStyle = center
+    ? { left: `${Math.min(pct, 50)}%`, width: `${Math.abs(pct - 50)}%` }
+    : { left: '0%', width: `${pct}%` };
+
+  return (
+    <div className={`part-slider${center ? ' part-slider--center' : ''}`}>
+      <div className="part-slider-track" aria-hidden />
+      {center ? <div className="part-slider-center" aria-hidden /> : null}
+      <div className="part-slider-fill" aria-hidden style={fillStyle} />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(Number(e.target.value))}
+        onClick={onClick}
+      />
+    </div>
+  );
+}
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const MIDI_MAX = 127;
+
+function noteLabel(n: number): string {
+  return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
+}
+
+function notePct(n: number): number {
+  return (n / MIDI_MAX) * 100;
+}
+
+function noteFromClientX(track: HTMLElement, clientX: number): number {
+  const rect = track.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  return Math.round(frac * MIDI_MAX);
+}
+
+function rangeFills(low: number, high: number): { left: string; width: string }[] {
+  if (low <= high) {
+    return [{ left: `${notePct(low)}%`, width: `${notePct(high) - notePct(low)}%` }];
+  }
+  return [
+    { left: '0%', width: `${notePct(high)}%` },
+    { left: `${notePct(low)}%`, width: `${100 - notePct(low)}%` },
+  ];
+}
+
+interface NoteRangeProps {
+  low: number;
+  high: number;
+  onChange: (low: number, high: number) => void;
+  label?: string;
+}
+
+/** Dual-thumb MIDI note range (0–127), accent fill shows active range. */
+export function NoteRange({ low, high, onChange, label }: NoteRangeProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<'low' | 'high' | null>(null);
+
+  const setBound = useCallback(
+    (bound: 'low' | 'high', value: number) => {
+      const next = Math.min(MIDI_MAX, Math.max(0, value));
+      if (bound === 'low') {
+        if (next !== low) onChange(next, high);
+      } else if (next !== high) {
+        onChange(low, next);
+      }
+    },
+    [low, high, onChange],
+  );
+
+  const onTrackPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!trackRef.current || (e.target as HTMLElement).closest('.note-range-thumb')) return;
+      e.stopPropagation();
+      const note = noteFromClientX(trackRef.current, e.clientX);
+      const bound = Math.abs(note - low) <= Math.abs(note - high) ? 'low' : 'high';
+      drag.current = bound;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setBound(bound, note);
+    },
+    [low, high, setBound],
+  );
+
+  const onThumbPointerDown = useCallback((bound: 'low' | 'high', e: React.PointerEvent) => {
+    e.stopPropagation();
+    drag.current = bound;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    (e.currentTarget as HTMLElement).focus();
+  }, []);
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!drag.current || !trackRef.current) return;
+      setBound(drag.current, noteFromClientX(trackRef.current, e.clientX));
+    },
+    [setBound],
+  );
+
+  const onPointerUp = useCallback(() => {
+    drag.current = null;
+  }, []);
+
+  const onThumbKeyDown = useCallback(
+    (bound: 'low' | 'high', e: React.KeyboardEvent) => {
+      const value = bound === 'low' ? low : high;
+      let next: number | null = null;
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          next = value + 1;
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          next = value - 1;
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = MIDI_MAX;
+          break;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      setBound(bound, next);
+    },
+    [low, high, setBound],
+  );
+
+  const fills = rangeFills(low, high);
+
+  return (
+    <div
+      className="note-range"
+      role="group"
+      aria-label={label}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        ref={trackRef}
+        className="note-range-track"
+        onPointerDown={onTrackPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+      >
+        {fills.map((style, i) => (
+          <div key={i} className="note-range-fill" aria-hidden style={style} />
+        ))}
+        <button
+          type="button"
+          className="note-range-thumb"
+          style={{ left: `${notePct(low)}%` }}
+          role="slider"
+          aria-valuemin={0}
+          aria-valuemax={MIDI_MAX}
+          aria-valuenow={low}
+          aria-valuetext={noteLabel(low)}
+          aria-label="Low note"
+          onPointerDown={(e) => onThumbPointerDown('low', e)}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onKeyDown={(e) => onThumbKeyDown('low', e)}
+        />
+        <button
+          type="button"
+          className="note-range-thumb"
+          style={{ left: `${notePct(high)}%` }}
+          role="slider"
+          aria-valuemin={0}
+          aria-valuemax={MIDI_MAX}
+          aria-valuenow={high}
+          aria-valuetext={noteLabel(high)}
+          aria-label="High note"
+          onPointerDown={(e) => onThumbPointerDown('high', e)}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onKeyDown={(e) => onThumbKeyDown('high', e)}
+        />
+      </div>
     </div>
   );
 }

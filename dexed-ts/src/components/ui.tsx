@@ -12,6 +12,8 @@ interface KnobProps {
   format?: (value: number) => string;
   size?: number;
   accent?: string;
+  /** `stacked` (default): value under dial. `inline`: value beside dial. */
+  layout?: 'stacked' | 'inline';
 }
 
 const ARC = 270; // degrees of travel, gap at the bottom
@@ -28,7 +30,7 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent }: KnobProps) {
+export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked' }: KnobProps) {
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
   const onPointerDown = useCallback(
@@ -72,8 +74,13 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
   const angle = start + frac * ARC;
   const [px, py] = polar(c, c, r - 3, angle);
 
+  const display = format ? format(value) : String(value);
+
   return (
-    <div className="knob" style={{ width: size + 8 }}>
+    <div
+      className={`knob${layout === 'inline' ? ' knob-inline' : ''}`}
+      style={{ width: layout === 'inline' ? undefined : size + 8 }}
+    >
       <svg
         width={size}
         height={size}
@@ -89,8 +96,8 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
         )}
         <line x1={c} y1={c} x2={px} y2={py} className="knob-pointer" />
       </svg>
-      <div className="knob-value">{format ? format(value) : value}</div>
-      <div className="ctl-label">{label}</div>
+      <div className="knob-value">{display}</div>
+      {label ? <div className="ctl-label">{label}</div> : null}
     </div>
   );
 }

@@ -385,6 +385,17 @@
   gap: 1px;
 }
 
+.knob-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.knob-inline .knob-value {
+  min-width: 2.5ch;
+  text-align: left;
+}
+
 .knob svg {
   cursor: ns-resize;
   touch-action: none;

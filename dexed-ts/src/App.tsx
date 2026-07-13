@@ -7,6 +7,7 @@ import { getVoiceName, withVoiceName, voiceToSysex } from './state/params';
 import { Keyboard } from './components/Keyboard';
 import { OperatorPanel } from './components/OperatorPanel';
 import { GlobalPanel } from './components/GlobalPanel';
+import { PartRack } from './components/PartRack';
 import { Knob } from './components/ui';
 
 const QWERTY_MAP: Record<string, number> = {
@@ -28,21 +29,23 @@ export default function App() {
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
+  const [showParts, setShowParts] = useState(false);
+  const [polyphony, setPolyphony] = useState(32);
   const midiRef = useRef<MidiConnection | null>(null);
   const heldKeys = useRef<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const noteOn = useCallback(
-    (note: number, velocity: number) => {
-      synth.noteOn(note, velocity);
+    (note: number, velocity: number, channel = 1) => {
+      synth.noteOn(note, velocity, channel);
       setActiveNotes((prev) => new Set(prev).add(note));
     },
     [synth],
   );
 
   const noteOff = useCallback(
-    (note: number) => {
-      synth.noteOff(note);
+    (note: number, channel = 1) => {
+      synth.noteOff(note, channel);
       setActiveNotes((prev) => {
         const next = new Set(prev);
         next.delete(note);
@@ -58,11 +61,11 @@ export default function App() {
     synth.setEngine(engine);
     synth.setMasterGain(volume / 99);
     const conn = await initMidi({
-      noteOn: (n, v) => noteOn(n, v),
-      noteOff: (n) => noteOff(n),
-      controlChange: (c, val) => synth.controlChange(c, val),
-      pitchBend: (v) => synth.pitchBend(v),
-      aftertouch: (v) => synth.aftertouch(v),
+      noteOn: (n, v, ch) => noteOn(n, v, ch),
+      noteOff: (n, ch) => noteOff(n, ch),
+      controlChange: (cc, val, ch) => synth.controlChange(cc, val, ch),
+      pitchBend: (v, ch) => synth.pitchBend(v, ch),
+      aftertouch: (v, ch) => synth.aftertouch(v, ch),
     });
     midiRef.current = conn;
     if (conn) setMidiInputs(conn.inputNames);
@@ -213,6 +216,9 @@ export default function App() {
         <button type="button" className="bar-btn" onClick={onEngine} title="FM engine">
           {ENGINES[engine]}
         </button>
+        <button type="button" className="bar-btn" onClick={() => setShowParts(true)} title="Multi-timbral part rack">
+          PARTS
+        </button>
 
         <div className="bar-knobs">
           <Knob label="VOLUME" value={volume} max={99} size={28} onChange={onVolume} />
@@ -251,6 +257,23 @@ export default function App() {
 
         <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
       </div>
+
+      {showParts && (
+        <PartRack
+          configs={synth.partConfigs}
+          selectedPart={synth.selectedPart}
+          programNames={synth.programNames}
+          polyphony={polyphony}
+          onSelect={synth.selectPart}
+          onSetPart={synth.setPart}
+          onPolyphony={(n) => {
+            setPolyphony(n);
+            synth.setPolyphonyCap(n);
+          }}
+          subscribeStatus={synth.subscribeStatus}
+          onClose={() => setShowParts(false)}
+        />
+      )}
 
       {!started && (
         <div className="start-overlay">

@@ -3,9 +3,9 @@
 export interface MidiHandlers {
   noteOn: (note: number, velocity: number, channel: number) => void;
   noteOff: (note: number, channel: number) => void;
-  controlChange: (controller: number, value: number) => void;
-  pitchBend: (value: number) => void;
-  aftertouch: (value: number) => void;
+  controlChange: (controller: number, value: number, channel: number) => void;
+  pitchBend: (value: number, channel: number) => void;
+  aftertouch: (value: number, channel: number) => void;
 }
 
 export interface MidiConnection {
@@ -27,13 +27,13 @@ function handleMessage(data: Uint8Array, h: MidiHandlers): void {
       h.noteOff(data[1], channel);
       break;
     case 0xb0:
-      h.controlChange(data[1], data[2]);
+      h.controlChange(data[1], data[2], channel);
       break;
     case 0xd0:
-      h.aftertouch(data[1]);
+      h.aftertouch(data[1], channel);
       break;
     case 0xe0:
-      h.pitchBend(data[1] | (data[2] << 7));
+      h.pitchBend(data[1] | (data[2] << 7), channel);
       break;
   }
 }

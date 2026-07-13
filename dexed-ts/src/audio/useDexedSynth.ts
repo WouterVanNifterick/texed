@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // The worklet is bundled into a single self-contained ES module by Vite.
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
 import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
+import type { PartConfig } from '../engine/synth-rack';
 import { initVoice } from '../engine/cartridge';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
@@ -14,9 +15,9 @@ export interface DexedSynth {
   voice: Uint8Array;
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
-  controlChange: (controller: number, value: number) => void;
-  pitchBend: (value: number) => void;
-  aftertouch: (value: number) => void;
+  controlChange: (controller: number, value: number, channel?: number) => void;
+  pitchBend: (value: number, channel?: number) => void;
+  aftertouch: (value: number, channel?: number) => void;
   setEngine: (engine: number) => void;
   setProgram: (index: number) => void;
   loadCart: (data: ArrayBuffer) => void;
@@ -27,6 +28,12 @@ export interface DexedSynth {
   setFx: (cutoff: number, reso: number, gain: number) => void;
   setMasterGain: (gain: number) => void;
   panic: () => void;
+  /** Multitimbral rack: per-part config + selection. */
+  partConfigs: PartConfig[];
+  selectedPart: number;
+  selectPart: (index: number) => void;
+  setPart: (index: number, config: Partial<PartConfig>) => void;
+  setPolyphonyCap: (cap: number) => void;
   /** Subscribe to the ~30 Hz realtime status stream. Returns unsubscribe. */
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
 }
@@ -54,6 +61,8 @@ export function useDexedSynth(): DexedSynth {
   const [ready, setReady] = useState(false);
   const [programNames, setProgramNames] = useState<string[]>([]);
   const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
+  const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
+  const [selectedPart, setSelectedPart] = useState(0);
 
   const post = useCallback((msg: ToWorkletMessage, transfer?: Transferable[]) => {
     nodeRef.current?.port.postMessage(msg, transfer ?? []);
@@ -76,7 +85,10 @@ export function useDexedSynth(): DexedSynth {
       if (m.type === 'ready') setReady(true);
       else if (m.type === 'programNames') setProgramNames(m.names);
       else if (m.type === 'voice') setVoiceState(new Uint8Array(m.data));
-      else if (m.type === 'status') {
+      else if (m.type === 'parts') {
+        setPartConfigs(m.configs);
+        setSelectedPart(m.selectedPart);
+      } else if (m.type === 'status') {
         for (const cb of statusSubs.current) cb(m);
       }
     };
@@ -95,11 +107,17 @@ export function useDexedSynth(): DexedSynth {
     [post],
   );
   const controlChange = useCallback(
-    (controller: number, value: number) => post({ type: MsgType.Cc, controller, value }),
+    (controller: number, value: number, channel?: number) => post({ type: MsgType.Cc, controller, value, channel }),
     [post],
   );
-  const pitchBend = useCallback((value: number) => post({ type: MsgType.PitchBend, value }), [post]);
-  const aftertouch = useCallback((value: number) => post({ type: MsgType.Aftertouch, value }), [post]);
+  const pitchBend = useCallback(
+    (value: number, channel?: number) => post({ type: MsgType.PitchBend, value, channel }),
+    [post],
+  );
+  const aftertouch = useCallback(
+    (value: number, channel?: number) => post({ type: MsgType.Aftertouch, value, channel }),
+    [post],
+  );
   const setEngine = useCallback((engine: number) => post({ type: MsgType.SetEngine, engine }), [post]);
   const setProgram = useCallback((index: number) => post({ type: MsgType.SetProgram, index }), [post]);
   const loadCart = useCallback((data: ArrayBuffer) => post({ type: MsgType.LoadCart, data }, [data]), [post]);
@@ -132,6 +150,13 @@ export function useDexedSynth(): DexedSynth {
   const setMasterGain = useCallback((gain: number) => post({ type: MsgType.SetMasterGain, gain }), [post]);
   const panic = useCallback(() => post({ type: MsgType.Panic }), [post]);
 
+  const selectPart = useCallback((index: number) => post({ type: MsgType.SelectPart, index }), [post]);
+  const setPart = useCallback(
+    (index: number, config: Partial<PartConfig>) => post({ type: MsgType.SetPart, index, config }),
+    [post],
+  );
+  const setPolyphonyCap = useCallback((cap: number) => post({ type: MsgType.SetPolyphonyCap, cap }), [post]);
+
   const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
     statusSubs.current.add(cb);
     return () => statusSubs.current.delete(cb);
@@ -155,6 +180,11 @@ export function useDexedSynth(): DexedSynth {
     setFx,
     setMasterGain,
     panic,
+    partConfigs,
+    selectedPart,
+    selectPart,
+    setPart,
+    setPolyphonyCap,
     subscribeStatus,
   };
 }

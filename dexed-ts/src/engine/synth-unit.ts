@@ -139,6 +139,7 @@ export class SynthUnit {
   /** Set a single byte of the current voice and refresh live voices. */
   setVoiceParam(offset: number, value: number): void {
     if (offset < 0 || offset > 155) return;
+    if (this.data[offset] === value) return;
     this.data[offset] = value;
     this.refreshVoices();
   }
@@ -172,7 +173,7 @@ export class SynthUnit {
       if (this.voices[i].live) {
         this.voices[i].dx7Note.update(
           this.data,
-          this.voices[i].midiNote,
+          this.voices[i].midiNote + this.transpositionShift(),
           this.voices[i].velocity,
           this.voices[i].channel,
         );
@@ -204,6 +205,15 @@ export class SynthUnit {
     return bestNote;
   }
 
+  /**
+   * Patch transpose (byte 144, 24 = no shift) offsets the note the engine
+   * plays. Playback-pitch only: voices are allocated and released by the raw
+   * MIDI note, so held notes always match their note-off.
+   */
+  private transpositionShift(): number {
+    return this.data[144] - 24;
+  }
+
   noteOn(pitch: number, velocity: number, channel = 1): void {
     if (velocity === 0) {
       this.noteOff(pitch, channel);
@@ -230,7 +240,7 @@ export class SynthUnit {
     v.keydownSeq = this.nextKeydownSeq++;
 
     const voiceSteal = v.dx7Note.isPlaying();
-    v.dx7Note.init(this.data, pitch, velocity, channel);
+    v.dx7Note.init(this.data, pitch + this.transpositionShift(), velocity, channel);
     if (this.data[136] && !voiceSteal) {
       v.dx7Note.oscSync();
     }

@@ -1,0 +1,156 @@
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: #8b90a0;
+  font-size: 14px;
+}
+
+.start-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  background: #171a22;
+}
+
+.start-panel p {
+  color: #8b90a0;
+  margin: 0;
+}
+
+button.start {
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #12141a;
+  background: #ffb454;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button.start:hover {
+  background: #ffc06e;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  padding: 16px;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  background: #171a22;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #8b90a0;
+}
+
+.control span {
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.control select,
+.control input[type='range'],
+.control input[type='file'] {
+  accent-color: #ffb454;
+}
+
+.control select {
+  background: #232735;
+  color: #e6e8ee;
+  border: 1px solid #333a4d;
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-width: 140px;
+}
+
+button.panic {
+  padding: 8px 16px;
+  background: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  align-self: flex-end;
+}
+
+button.panic:hover {
+  background: #e46461;
+}
+
+/* Keyboard */
+.keyboard {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  user-select: none;
+  touch-action: none;
+}
+
+.key {
+  position: absolute;
+  top: 0;
+  padding: 0;
+  border: 1px solid #0c0e13;
+  cursor: pointer;
+}
+
+.key.white {
+  height: 100%;
+  background: linear-gradient(#f6f7fb, #d9dce6);
+  border-radius: 0 0 5px 5px;
+  z-index: 1;
+}
+
+.key.white.active {
+  background: linear-gradient(#ffd79a, #ffb454);
+}
+
+.key.black {
+  height: 62%;
+  background: linear-gradient(#2a2e3a, #0c0e13);
+  border-radius: 0 0 4px 4px;
+  z-index: 2;
+}
+
+.key.black.active {
+  background: linear-gradient(#ffb454, #c8832f);
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+footer .hint {
+  margin-left: auto;
+}

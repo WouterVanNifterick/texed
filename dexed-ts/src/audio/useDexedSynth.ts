@@ -1,12 +1,24 @@
 import { useCallback, useRef, useState } from 'react';
 // The worklet is bundled into a single self-contained ES module by Vite.
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
-import { MsgType, type ToWorkletMessage, type FromWorkletMessage } from '../worklet/protocol';
+import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
+import { initVoice } from '../engine/cartridge';
+
+export type SynthStatus = Omit<StatusMsg, 'type'>;
+
+export const IDLE_STATUS: SynthStatus = {
+  amps: [0, 0, 0, 0, 0, 0],
+  steps: [4, 4, 4, 4, 4, 4],
+  pitchStep: 4,
+  lfo: 0,
+};
 
 export interface DexedSynth {
   start: () => Promise<void>;
   ready: boolean;
   programNames: string[];
+  /** UI mirror of the engine's current 156-byte voice. */
+  voice: Uint8Array;
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
   controlChange: (controller: number, value: number) => void;
@@ -15,17 +27,24 @@ export interface DexedSynth {
   setEngine: (engine: number) => void;
   setProgram: (index: number) => void;
   loadCart: (data: ArrayBuffer) => void;
-  loadVoice: (data: ArrayBuffer) => void;
+  /** Set one voice byte: updates the UI mirror and the engine. */
+  setParam: (offset: number, value: number) => void;
+  /** Replace the whole voice (e.g. after a name edit). */
+  setVoice: (voice: Uint8Array) => void;
   setFx: (cutoff: number, reso: number, gain: number) => void;
   setMasterGain: (gain: number) => void;
   panic: () => void;
+  /** Subscribe to the ~30 Hz realtime status stream. Returns unsubscribe. */
+  subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
 }
 
 export function useDexedSynth(): DexedSynth {
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
+  const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
   const [ready, setReady] = useState(false);
   const [programNames, setProgramNames] = useState<string[]>([]);
+  const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
 
   const post = useCallback((msg: ToWorkletMessage, transfer?: Transferable[]) => {
     nodeRef.current?.port.postMessage(msg, transfer ?? []);
@@ -47,6 +66,10 @@ export function useDexedSynth(): DexedSynth {
       const m = e.data;
       if (m.type === 'ready') setReady(true);
       else if (m.type === 'programNames') setProgramNames(m.names);
+      else if (m.type === 'voice') setVoiceState(new Uint8Array(m.data));
+      else if (m.type === 'status') {
+        for (const cb of statusSubs.current) cb(m);
+      }
     };
     node.connect(ctx.destination);
     ctxRef.current = ctx;
@@ -71,7 +94,28 @@ export function useDexedSynth(): DexedSynth {
   const setEngine = useCallback((engine: number) => post({ type: MsgType.SetEngine, engine }), [post]);
   const setProgram = useCallback((index: number) => post({ type: MsgType.SetProgram, index }), [post]);
   const loadCart = useCallback((data: ArrayBuffer) => post({ type: MsgType.LoadCart, data }, [data]), [post]);
-  const loadVoice = useCallback((data: ArrayBuffer) => post({ type: MsgType.LoadVoice, data }, [data]), [post]);
+
+  const setParam = useCallback(
+    (offset: number, value: number) => {
+      setVoiceState((prev) => {
+        const next = new Uint8Array(prev);
+        next[offset] = value;
+        return next;
+      });
+      post({ type: MsgType.SetParam, offset, value });
+    },
+    [post],
+  );
+
+  const setVoice = useCallback(
+    (v: Uint8Array) => {
+      setVoiceState(v);
+      const buf = v.slice().buffer as ArrayBuffer;
+      post({ type: MsgType.LoadVoice, data: buf }, [buf]);
+    },
+    [post],
+  );
+
   const setFx = useCallback(
     (cutoff: number, reso: number, gain: number) => post({ type: MsgType.SetFx, cutoff, reso, gain }),
     [post],
@@ -79,10 +123,16 @@ export function useDexedSynth(): DexedSynth {
   const setMasterGain = useCallback((gain: number) => post({ type: MsgType.SetMasterGain, gain }), [post]);
   const panic = useCallback(() => post({ type: MsgType.Panic }), [post]);
 
+  const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
+    statusSubs.current.add(cb);
+    return () => statusSubs.current.delete(cb);
+  }, []);
+
   return {
     start,
     ready,
     programNames,
+    voice,
     noteOn,
     noteOff,
     controlChange,
@@ -91,9 +141,11 @@ export function useDexedSynth(): DexedSynth {
     setEngine,
     setProgram,
     loadCart,
-    loadVoice,
+    setParam,
+    setVoice,
     setFx,
     setMasterGain,
     panic,
+    subscribeStatus,
   };
 }

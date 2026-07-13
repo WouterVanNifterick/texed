@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import { useDexedSynth } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
+import { getVoiceName, withVoiceName, voiceToSysex } from './state/params';
 import { Keyboard } from './components/Keyboard';
-import { PatchSelector } from './components/PatchSelector';
-import { Controls } from './components/Controls';
+import { OperatorPanel } from './components/OperatorPanel';
+import { GlobalPanel } from './components/GlobalPanel';
+import { Knob } from './components/ui';
 
 const QWERTY_MAP: Record<string, number> = {
   a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12,
@@ -12,28 +14,26 @@ const QWERTY_MAP: Record<string, number> = {
 };
 
 const OCTAVE_BASE = 60;
+const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 
 export default function App() {
   const synth = useDexedSynth();
   const [started, setStarted] = useState(false);
   const [engine, setEngine] = useState(1); // Mark I default
-  const [masterGain, setMasterGain] = useState(0.8);
-  const [cutoff, setCutoff] = useState(1);
+  const [volume, setVolume] = useState(80);
+  const [cutoff, setCutoff] = useState(99);
   const [reso, setReso] = useState(0);
   const [program, setProgram] = useState(0);
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
   const midiRef = useRef<MidiConnection | null>(null);
   const heldKeys = useRef<Set<string>>(new Set());
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const noteOn = useCallback(
     (note: number, velocity: number) => {
       synth.noteOn(note, velocity);
-      setActiveNotes((prev) => {
-        const next = new Set(prev);
-        next.add(note);
-        return next;
-      });
+      setActiveNotes((prev) => new Set(prev).add(note));
     },
     [synth],
   );
@@ -54,7 +54,7 @@ export default function App() {
     await synth.start();
     setStarted(true);
     synth.setEngine(engine);
-    synth.setMasterGain(masterGain);
+    synth.setMasterGain(volume / 99);
     const conn = await initMidi({
       noteOn: (n, v) => noteOn(n, v),
       noteOff: (n) => noteOff(n),
@@ -64,13 +64,14 @@ export default function App() {
     });
     midiRef.current = conn;
     if (conn) setMidiInputs(conn.inputNames);
-  }, [synth, engine, masterGain, noteOn, noteOff]);
+  }, [synth, engine, volume, noteOn, noteOff]);
 
   // QWERTY input
   useEffect(() => {
     if (!started) return;
     const down = (e: KeyboardEvent) => {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       const semi = QWERTY_MAP[e.key.toLowerCase()];
       if (semi === undefined || heldKeys.current.has(e.key)) return;
       heldKeys.current.add(e.key);
@@ -94,27 +95,25 @@ export default function App() {
     return () => midiRef.current?.close();
   }, []);
 
-  const onEngine = useCallback(
-    (en: number) => {
-      setEngine(en);
-      synth.setEngine(en);
-    },
-    [synth],
-  );
+  const onEngine = useCallback(() => {
+    const next = (engine + 1) % ENGINES.length;
+    setEngine(next);
+    synth.setEngine(next);
+  }, [synth, engine]);
 
-  const onMasterGain = useCallback(
-    (g: number) => {
-      setMasterGain(g);
-      synth.setMasterGain(g);
+  const onVolume = useCallback(
+    (v: number) => {
+      setVolume(v);
+      synth.setMasterGain(v / 99);
     },
     [synth],
   );
 
   const onFx = useCallback(
-    (c: number, r: number, gain: number) => {
+    (c: number, r: number) => {
       setCutoff(c);
       setReso(r);
-      synth.setFx(c, r, gain);
+      synth.setFx(c / 99, r / 99, 1);
     },
     [synth],
   );
@@ -127,53 +126,114 @@ export default function App() {
     [synth],
   );
 
-  const onLoadCart = useCallback(
-    (data: ArrayBuffer) => {
-      synth.loadCart(data);
+  const onLoadFile = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+      synth.loadCart(await file.arrayBuffer());
       setProgram(0);
     },
     [synth],
   );
 
+  const onSaveVoice = useCallback(() => {
+    const syx = voiceToSysex(synth.voice);
+    const url = URL.createObjectURL(new Blob([syx.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${getVoiceName(synth.voice).trim() || 'voice'}.syx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [synth]);
+
   return (
-    <div className="app">
-      <header>
-        <h1>Dexed Web</h1>
-        <p className="subtitle">DX7 FM synthesis in the browser</p>
+    <div className="rack">
+      <header className="topbar">
+        <div className="logo">
+          DEXED<span>·WEB</span>
+        </div>
+
+        <input
+          className="voice-name"
+          value={getVoiceName(synth.voice)}
+          maxLength={10}
+          spellCheck={false}
+          onChange={(e) => synth.setVoice(withVoiceName(synth.voice, e.target.value.toUpperCase()))}
+          title="Voice name"
+        />
+
+        <select
+          className="program-select"
+          value={program}
+          onChange={(e) => onSelectProgram(Number(e.target.value))}
+          disabled={synth.programNames.length === 0}
+        >
+          {synth.programNames.length === 0 ? (
+            <option value={0}>INIT VOICE</option>
+          ) : (
+            synth.programNames.map((name, i) => (
+              <option key={i} value={i}>
+                {String(i + 1).padStart(2, '0')} {name}
+              </option>
+            ))
+          )}
+        </select>
+
+        <button type="button" className="bar-btn" onClick={() => fileRef.current?.click()}>
+          LOAD
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".syx"
+          hidden
+          onChange={(e) => {
+            onLoadFile(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+        <button type="button" className="bar-btn" onClick={onSaveVoice}>
+          SAVE
+        </button>
+        <button type="button" className="bar-btn" onClick={onEngine} title="FM engine">
+          {ENGINES[engine]}
+        </button>
+
+        <div className="bar-knobs">
+          <Knob label="VOLUME" value={volume} max={99} size={28} onChange={onVolume} />
+          <Knob label="CUTOFF" value={cutoff} max={99} size={28} onChange={(c) => onFx(c, reso)} />
+          <Knob label="RESO" value={reso} max={99} size={28} onChange={(r) => onFx(cutoff, r)} />
+        </div>
+
+        <button type="button" className="bar-btn panic" onClick={synth.panic}>
+          PANIC
+        </button>
+        <span className={`midi-led${midiInputs.length > 0 ? ' on' : ''}`} title={midiInputs.join(', ') || 'No MIDI inputs'}>
+          MIDI
+        </span>
       </header>
 
-      {!started ? (
-        <div className="start-panel">
-          <button type="button" className="start" onClick={handleStart}>
-            Start Audio
-          </button>
-          <p>Click to initialize the audio engine.</p>
-        </div>
-      ) : (
-        <>
-          <Controls
-            engine={engine}
-            onEngine={onEngine}
-            masterGain={masterGain}
-            onMasterGain={onMasterGain}
-            cutoff={cutoff}
-            reso={reso}
-            fxGain={1}
-            onFx={onFx}
-            onLoadCart={onLoadCart}
-            onPanic={synth.panic}
+      <main className="editor">
+        {[1, 2, 3, 4, 5, 6].map((opNum) => (
+          <OperatorPanel
+            key={opNum}
+            opNum={opNum}
+            voice={synth.voice}
+            setParam={synth.setParam}
+            subscribeStatus={synth.subscribeStatus}
           />
+        ))}
+        <GlobalPanel voice={synth.voice} setParam={synth.setParam} subscribeStatus={synth.subscribeStatus} />
+      </main>
 
-          <PatchSelector programNames={synth.programNames} selected={program} onSelect={onSelectProgram} />
+      <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
 
-          <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
-
-          <footer>
-            <span>{synth.ready ? 'Engine ready' : 'Loading…'}</span>
-            <span>{midiInputs.length > 0 ? `MIDI: ${midiInputs.join(', ')}` : 'No MIDI inputs'}</span>
-            <span className="hint">Play with mouse, QWERTY (A–K), or a MIDI keyboard.</span>
-          </footer>
-        </>
+      {!started && (
+        <div className="start-overlay">
+          <button type="button" className="start" onClick={handleStart}>
+            START AUDIO
+          </button>
+          <p>Click to initialize the audio engine. Play with mouse, QWERTY (A–K) or MIDI.</p>
+        </div>
       )}
     </div>
   );

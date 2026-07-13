@@ -14,7 +14,7 @@ import { FmCore } from './fm-core';
 import { EngineMkI } from './engine-mki';
 import { EngineOpl } from './engine-opl';
 import { Controllers, kControllerPitch, kControllerPitchRangeUp, kControllerPitchRangeDn, kControllerPitchStep } from './controllers';
-import { Dx7Note } from './dx7note';
+import { Dx7Note, type VoiceStatus } from './dx7note';
 import { createStandardTuning, type TuningState } from './tuning';
 import { PluginFx } from './plugin-fx';
 import { Cartridge, initVoice } from './cartridge';
@@ -60,6 +60,9 @@ export class SynthUnit {
   private nextKeydownSeq = 0;
   private lastActiveVoice = 0;
   private sustain = false;
+
+  private lastLfoValue = 0;
+  private peekStatus: VoiceStatus = { amp: [0, 0, 0, 0, 0, 0], ampStep: [0, 0, 0, 0, 0, 0], pitchStep: 0 };
 
   private extraBuf = new Float32Array(N);
   private extraBufSize = 0;
@@ -133,6 +136,17 @@ export class SynthUnit {
     this.refreshVoices();
   }
 
+  /** Set a single byte of the current voice and refresh live voices. */
+  setVoiceParam(offset: number, value: number): void {
+    if (offset < 0 || offset > 155) return;
+    this.data[offset] = value;
+    this.refreshVoices();
+  }
+
+  getVoiceData(): Uint8Array {
+    return this.data.slice();
+  }
+
   loadCartridge(cart: Cartridge): void {
     this.cartridge = cart;
   }
@@ -149,6 +163,11 @@ export class SynthUnit {
   }
 
   private refreshVoices(): void {
+    let sw = '';
+    for (let op = 0; op < 6; op++) {
+      sw += this.data[155] & (1 << op) ? '1' : '0';
+    }
+    this.controllers.opSwitch = sw;
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       if (this.voices[i].live) {
         this.voices[i].dx7Note.update(
@@ -323,6 +342,38 @@ export class SynthUnit {
     }
   }
 
+  // ==== Status (UI visualization) ====
+
+  /**
+   * Per-operator envelope level (0..1) and stage (0..4) of the most recent
+   * live voice, plus the pitch EG stage and current LFO level (0..1).
+   */
+  getStatus(): { amps: number[]; steps: number[]; pitchStep: number; lfo: number } {
+    let voice: Voice | null = this.voices[this.lastActiveVoice].live ? this.voices[this.lastActiveVoice] : null;
+    if (!voice) {
+      for (const v of this.voices) {
+        if (v.live) {
+          voice = v;
+          break;
+        }
+      }
+    }
+    const amps = [0, 0, 0, 0, 0, 0];
+    const steps = [4, 4, 4, 4, 4, 4];
+    let pitchStep = 4;
+    if (voice) {
+      voice.dx7Note.peekVoiceStatus(this.peekStatus);
+      for (let op = 0; op < 6; op++) {
+        // amp is 2^((levelIn/2^24) - 14) in Q24; map its exponent to 0..1.
+        const a = this.peekStatus.amp[op];
+        amps[op] = a > 1024 ? Math.min(1, (Math.log2(a) - 10) / 16) : 0;
+        steps[op] = this.peekStatus.ampStep[op];
+      }
+      pitchStep = this.peekStatus.pitchStep;
+    }
+    return { amps, steps, pitchStep, lfo: this.lastLfoValue / (1 << 24) };
+  }
+
   // ==== Render ====
 
   /** Render `numSamples` mono samples into `channelData`. */
@@ -348,6 +399,7 @@ export class SynthUnit {
 
         const lfovalue = this.lfo.getsample();
         const lfodelay = this.lfo.getdelay();
+        this.lastLfoValue = lfovalue;
 
         for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
           if (this.voices[note].live) {

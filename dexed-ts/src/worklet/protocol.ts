@@ -12,6 +12,7 @@ export const MsgType = {
   SetEngine: 'setEngine',
   SetFx: 'setFx',
   SetMasterGain: 'setMasterGain',
+  SetParam: 'setParam',
   Panic: 'panic',
 } as const;
 
@@ -65,6 +66,11 @@ export interface SetMasterGainMsg {
   type: typeof MsgType.SetMasterGain;
   gain: number;
 }
+export interface SetParamMsg {
+  type: typeof MsgType.SetParam;
+  offset: number; // byte offset into the 156-byte voice
+  value: number;
+}
 export interface PanicMsg {
   type: typeof MsgType.Panic;
 }
@@ -81,6 +87,7 @@ export type ToWorkletMessage =
   | SetEngineMsg
   | SetFxMsg
   | SetMasterGainMsg
+  | SetParamMsg
   | PanicMsg;
 
 export interface ReadyMsg {
@@ -90,5 +97,18 @@ export interface ProgramNamesMsg {
   type: 'programNames';
   names: string[];
 }
+/** Full current voice, sent after program/cartridge/voice loads. */
+export interface VoiceMsg {
+  type: 'voice';
+  data: Uint8Array; // 156 bytes
+}
+/** Periodic realtime status for UI meters (~30 Hz). */
+export interface StatusMsg {
+  type: 'status';
+  amps: number[]; // per-op envelope output 0..1, sysex op order
+  steps: number[]; // per-op envelope stage 0..4
+  pitchStep: number;
+  lfo: number; // 0..1
+}
 
-export type FromWorkletMessage = ReadyMsg | ProgramNamesMsg;
+export type FromWorkletMessage = ReadyMsg | ProgramNamesMsg | VoiceMsg | StatusMsg;

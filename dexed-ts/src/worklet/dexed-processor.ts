@@ -4,20 +4,29 @@ import { SynthUnit } from '../engine/synth-unit';
 import { Cartridge } from '../engine/cartridge';
 import { MsgType, type ToWorkletMessage, type FromWorkletMessage } from './protocol';
 
+// Status messages every 12 process() calls: ~31 Hz at 48 kHz / 128 frames.
+const STATUS_INTERVAL = 12;
+
 class DexedProcessor extends AudioWorkletProcessor {
   private synth: SynthUnit;
   private masterGain = 0.8;
   private mono = new Float32Array(128);
+  private statusCountdown = STATUS_INTERVAL;
 
   constructor() {
     super();
     this.synth = new SynthUnit(sampleRate);
     this.port.onmessage = (e: MessageEvent<ToWorkletMessage>) => this.handleMessage(e.data);
     this.post({ type: 'ready' });
+    this.postVoice();
   }
 
   private post(msg: FromWorkletMessage): void {
     this.port.postMessage(msg);
+  }
+
+  private postVoice(): void {
+    this.post({ type: 'voice', data: this.synth.getVoiceData() });
   }
 
   private handleMessage(msg: ToWorkletMessage): void {
@@ -39,6 +48,7 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.LoadVoice:
         this.synth.loadVoice(new Uint8Array(msg.data));
+        this.postVoice();
         break;
       case MsgType.LoadCart: {
         const cart = Cartridge.fromSyx(new Uint8Array(msg.data));
@@ -46,11 +56,16 @@ class DexedProcessor extends AudioWorkletProcessor {
           this.synth.loadCartridge(cart);
           this.synth.setProgram(0);
           this.post({ type: 'programNames', names: this.synth.cartridgeProgramNames() });
+          this.postVoice();
         }
         break;
       }
       case MsgType.SetProgram:
         this.synth.setProgram(msg.index);
+        this.postVoice();
+        break;
+      case MsgType.SetParam:
+        this.synth.setVoiceParam(msg.offset, msg.value);
         break;
       case MsgType.SetEngine:
         this.synth.setEngineType(msg.engine as 0 | 1 | 2);
@@ -87,6 +102,11 @@ class DexedProcessor extends AudioWorkletProcessor {
       for (let i = 0; i < numFrames; i++) {
         out[i] = mono[i] * gain;
       }
+    }
+
+    if (--this.statusCountdown <= 0) {
+      this.statusCountdown = STATUS_INTERVAL;
+      this.post({ type: 'status', ...this.synth.getStatus() });
     }
     return true;
   }

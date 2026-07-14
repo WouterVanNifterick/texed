@@ -71,7 +71,7 @@ function scaleCurve(group: number, depth: number, curve: number): number {
   return scale;
 }
 
-function scaleLevel(
+export function scaleLevel(
   midinote: number,
   breakPt: number,
   leftDepth: number,

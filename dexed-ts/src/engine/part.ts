@@ -64,6 +64,7 @@ export class Part {
   extraDetune = 0;
 
   private lastLfoValue = 0;
+  private lastLfoDelay = 0;
   private peekStatus: VoiceStatus = { amp: [0, 0, 0, 0, 0, 0], ampStep: [0, 0, 0, 0, 0, 0], pitchStep: 0 };
 
   private extraBuf = new Float32Array(N);
@@ -471,7 +472,10 @@ export class Part {
       }
       pitchStep = this.peekStatus.pitchStep;
     }
-    return { amps, steps, pitchStep, lfo: this.lastLfoValue / (1 << 24) };
+    // Scale the LFO excursion by the delay ramp so the meter reflects the
+    // modulation that actually reaches the voices.
+    const ramp = this.lastLfoDelay / (1 << 24);
+    return { amps, steps, pitchStep, lfo: 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp };
   }
 
   // ==== Render (mono, no FX) ====
@@ -499,6 +503,7 @@ export class Part {
         const lfovalue = this.lfo.getsample();
         const lfodelay = this.lfo.getdelay();
         this.lastLfoValue = lfovalue;
+        this.lastLfoDelay = lfodelay;
 
         for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
           if (this.voices[note].live) {

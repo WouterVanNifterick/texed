@@ -40,6 +40,8 @@ export interface PartConfig {
   noteShift: number;
   detune: number;
   voice: VoiceRef;
+  /** Resolved display name when voice is set (from loaded banks). */
+  voiceLabel?: string;
   /** @deprecated Use voice.program — kept for protocol compat during migration. */
   voiceNumber?: number;
 }
@@ -141,11 +143,19 @@ export class SynthRack {
 
   getPartConfig(index: number): PartConfig {
     const c = this.configs[index];
-    return { ...c, voice: { ...c.voice } };
+    return {
+      ...c,
+      voice: { ...c.voice },
+      voiceLabel: this.library.voiceLabel(c.voice),
+    };
   }
 
   getPartConfigs(): PartConfig[] {
-    return this.configs.map((c) => ({ ...c, voice: { ...c.voice } }));
+    return this.configs.map((c) => ({
+      ...c,
+      voice: { ...c.voice },
+      voiceLabel: this.library.voiceLabel(c.voice),
+    }));
   }
 
   setPartConfig(index: number, patch: Partial<PartConfig>): void {
@@ -165,15 +175,15 @@ export class SynthRack {
     if (patch.enabled === false) this.parts[index].panic();
   }
 
-  /** Load a full VoiceLibrary from a parsed sysex file. */
+  /** Load a full VoiceLibrary from a parsed sysex file (merges with existing data). */
   loadLibrary(lib: VoiceLibrary, report?: LoadReport): void {
-    this.library = lib;
+    this.library.mergeFrom(lib);
     this.lastLoadReport = report ?? null;
     for (let i = 0; i < NUM_PARTS; i++) {
       this.applyVoiceToPart(i);
     }
-    if (lib.performances.length > 0) {
-      this.selectPerformance(0);
+    if (this.library.performances.length > 0) {
+      this.selectPerformance(this.library.performanceIndex);
     }
   }
 

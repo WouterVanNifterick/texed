@@ -116,15 +116,30 @@ function compactFormatKey(formatId: string): string {
   return trimmed;
 }
 
+import { looksLikeAmemBulk } from './amem';
+
 const TX802_PERF_BLOCK = 140;
+
+/** Bulk payload bytes from a classified frame (handles undersized 8952PM headers). */
+export function bulkPayloadFromFrame(frame: SysexFrame): Uint8Array | null {
+  const raw = frame.raw;
+  if (raw.length < 8) return null;
+  let size = (raw[4] << 7) | raw[5];
+  const actualSize = raw.length - 8;
+  if (frame.format === 0x7e && size < actualSize) size = actualSize;
+  if (size <= 0 || 6 + size > raw.length) return null;
+  let data = raw.subarray(6, 6 + size);
+  if (frame.format === 0x7e && data.length > 10) data = data.subarray(10);
+  return data;
+}
 
 /** True when a format-0x06 1120-byte payload looks like a TX802 performance dump. */
 function isTx802PerformancePayload(data: Uint8Array): boolean {
-  if (data.length < TX802_PERF_BLOCK * 2) return false;
+  if (data.length !== TX802_PERF_BLOCK * 8) return false;
+  if (looksLikeAmemBulk(data)) return false;
   let enabledParts = 0;
   for (let t = 0; t < 8; t++) {
     const blk = data.subarray(t * TX802_PERF_BLOCK, (t + 1) * TX802_PERF_BLOCK);
-    if (blk.length < TX802_PERF_BLOCK) break;
     const outAssign = blk[5] & 0x03;
     const outVol = blk[22] & 0x7f;
     if (outAssign !== 0 || outVol > 0) enabledParts++;
@@ -191,6 +206,29 @@ export function identifySysex(bytes: Uint8Array): SysexFrame[] {
 
 // ==== VCED (single voice) <-> 156-byte editable voice ====
 
+/** True when `bytes` is raw VCED parameter data (no F0..F7 wrapper). */
+export function isRawVcedBuffer(bytes: Uint8Array): boolean {
+  if (bytes.length === 0 || bytes[0] === 0xf0) return false;
+  return bytes.length === 155 || bytes.length === 156 || (bytes.length > 155 && bytes.length % 155 === 0);
+}
+
+/**
+ * Convert raw VCED bytes (155 or 156) into the 156-byte editable voice.
+ * 155-byte dumps omit the operator on/off mask; it defaults to 0x3F (all ops on).
+ */
+export function voiceFromRawVced(data: Uint8Array): Uint8Array | null {
+  if (data.length === 155) {
+    const out = new Uint8Array(156);
+    out.set(data);
+    out[155] = 0x3f;
+    return out;
+  }
+  if (data.length === 156) {
+    return data.slice();
+  }
+  return null;
+}
+
 /**
  * Convert a VCED single-voice frame (F0 43 0n 00 01 1B <155 bytes> cksum F7)
  * into the 156-byte editable voice used by the engine. The 156th byte is the
@@ -199,10 +237,7 @@ export function identifySysex(bytes: Uint8Array): SysexFrame[] {
  */
 export function voiceFromVced(frame: Uint8Array): Uint8Array | null {
   if (frame.length < 6 + 155) return null;
-  const out = new Uint8Array(156);
-  out.set(frame.subarray(6, 6 + 155));
-  out[155] = 0x3f;
-  return out;
+  return voiceFromRawVced(frame.subarray(6, 6 + 155));
 }
 
 /** Serialize a 156-byte editable voice as a 163-byte VCED single-voice dump. */

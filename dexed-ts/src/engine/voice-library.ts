@@ -56,6 +56,13 @@ export function decodeDx7iiVoiceRef(raw: number): VoiceRef {
   };
 }
 
+/** Decode a TX802 TPMEM voice number (1–128, 1-based). Voice 0 = no voice assigned. */
+export function decodeTx802VoiceRef(vnum: number): VoiceRef | null {
+  const v = vnum & 0x7f;
+  if (v === 0) return null;
+  return decodeDx7iiVoiceRef(v - 1);
+}
+
 /** Encode a VoiceRef back to a DX7II PMEM voice byte. */
 export function encodeDx7iiVoiceRef(ref: VoiceRef): number {
   let base = ref.program % 32;
@@ -177,6 +184,38 @@ export class VoiceLibrary {
   findProgramOptionIndex(ref: VoiceRef): number {
     const opts = this.programOptions();
     return opts.findIndex((o) => voiceRefEquals(o.ref, ref));
+  }
+
+  /** Human-readable label for a voice ref (from loaded banks). */
+  voiceLabel(ref: VoiceRef): string {
+    const slot = this.resolve(ref);
+    const prefix = VOICE_BANK_LABELS[ref.bank].split(' ')[0];
+    const slotNum = String((ref.program & 0x1f) + 1).padStart(2, '0');
+    if (!slot) return `${prefix} ${slotNum} (bank not loaded)`;
+    const name = voiceNameFromVmem(slot.vmem);
+    return `${prefix} ${slotNum} ${name}`;
+  }
+
+  /** Merge another loaded library into this one (banks, performances, setup). */
+  mergeFrom(other: VoiceLibrary): void {
+    for (const bank of other.populatedBanks()) {
+      const dst = this.ensureBank(bank);
+      for (let i = 0; i < 32; i++) {
+        const slot = other.resolve({ bank, program: i });
+        if (slot) {
+          dst[i].vmem.set(slot.vmem);
+          dst[i].amem.set(slot.amem);
+        }
+      }
+    }
+    if (other.performances.length > 0) {
+      this.performances = other.performances;
+      this.performanceIndex = other.performanceIndex;
+    }
+    if (other.systemSetup) this.systemSetup = other.systemSetup;
+    if (other.microtunings.length > 0) {
+      this.microtunings.push(...other.microtunings);
+    }
   }
 
   clear(): void {

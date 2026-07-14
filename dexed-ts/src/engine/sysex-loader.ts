@@ -6,7 +6,11 @@ import {
   identifySysex,
   SysexKind,
   cartridgeFromSyx,
+  cartridgeFromVoices,
   voiceFromVced,
+  voiceFromRawVced,
+  isRawVcedBuffer,
+  bulkPayloadFromFrame,
   type SysexFrame,
 } from './sysex';
 import { parseSystemSetup, systemSetupPayloadFromFrame, masterTuningCents } from './system-setup';
@@ -41,13 +45,7 @@ function paramChangeBankTag(frame: SysexFrame): VoiceBankId | null {
 }
 
 function payloadFromFrame(frame: SysexFrame): Uint8Array | null {
-  const raw = frame.raw;
-  if (raw.length < 8) return null;
-  const size = (raw[4] << 7) | raw[5];
-  if (size <= 0 || 6 + size > raw.length) return null;
-  let data = raw.subarray(6, 6 + size);
-  if (frame.format === 0x7e && data.length > 10) data = data.subarray(10);
-  return data;
+  return bulkPayloadFromFrame(frame);
 }
 
 export interface LoadResult {
@@ -59,6 +57,10 @@ export interface LoadResult {
 
 export function loadSysexFile(bytes: Uint8Array): LoadResult {
   const frames = identifySysex(bytes);
+  if (frames.length === 0 && isRawVcedBuffer(bytes)) {
+    return loadRawVced(bytes);
+  }
+
   const lib = new VoiceLibrary();
   const report: LoadReport = { frames: frames.length, applied: [], skipped: [] };
 
@@ -180,6 +182,34 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
 
   const loaded = lib.populatedBanks().length > 0 || lib.performances.length > 0 || singleVoice !== null;
   return { library: lib, report, loaded, singleVoice };
+}
+
+function loadRawVced(bytes: Uint8Array): LoadResult {
+  const lib = new VoiceLibrary();
+  const report: LoadReport = { frames: 0, applied: [], skipped: [] };
+
+  if (bytes.length === 155 || bytes.length === 156) {
+    const voice = voiceFromRawVced(bytes);
+    if (!voice) {
+      return { library: lib, report: { ...report, skipped: ['raw VCED (parse failed)'] }, loaded: false, singleVoice: null };
+    }
+    report.applied.push('raw VCED voice');
+    return { library: lib, report, loaded: true, singleVoice: voice };
+  }
+
+  const voices: Uint8Array[] = [];
+  for (let i = 0; i + 155 <= bytes.length; i += 155) {
+    const voice = voiceFromRawVced(bytes.subarray(i, i + 155));
+    if (voice) voices.push(voice);
+  }
+  if (voices.length === 0) {
+    return { library: lib, report: { ...report, skipped: ['raw VCED (parse failed)'] }, loaded: false, singleVoice: null };
+  }
+
+  const cart = cartridgeFromVoices(voices);
+  lib.loadVmemBank('internalA', cart);
+  report.applied.push(`raw VCED bank (${voices.length} voices)`);
+  return { library: lib, report, loaded: true, singleVoice: null };
 }
 
 export function applySystemSetupToParts(

@@ -18,6 +18,27 @@ const QWERTY_MAP: Record<string, number> = {
 const OCTAVE_BASE = 60;
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 
+function patchFiles(files: FileList | File[]): File[] {
+  return Array.from(files).filter((f) => /\.(syx|dx7voice)$/i.test(f.name));
+}
+
+function isFileDrag(dt: DataTransfer | null): boolean {
+  return !!dt && (dt.types.includes('Files') || Array.from(dt.items).some((i) => i.kind === 'file'));
+}
+
+function patchFilesFromDrop(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  const fromList = patchFiles(dt.files);
+  if (fromList.length) return fromList;
+  const fromItems: File[] = [];
+  for (const item of Array.from(dt.items)) {
+    if (item.kind !== 'file') continue;
+    const file = item.getAsFile();
+    if (file) fromItems.push(file);
+  }
+  return patchFiles(fromItems);
+}
+
 export default function App() {
   const synth = useDexedSynth();
   const [started, setStarted] = useState(false);
@@ -33,12 +54,27 @@ export default function App() {
   const midiRef = useRef<MidiConnection | null>(null);
   const heldKeys = useRef<Set<string>>(new Set());
   const [loadMsg, setLoadMsg] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
 
   useEffect(() => {
     if (!synth.loadReport) return;
     const { applied, skipped } = synth.loadReport;
-    const parts = [...applied];
+    const perf = applied.find((a) => a.startsWith('performances'));
+    const banks = applied.filter((a) => a.startsWith('VMEM →'));
+    const amem = applied.filter((a) => a.startsWith('AMEM →'));
+    const parts: string[] = [];
+    if (perf) parts.push(perf);
+    if (banks.length) parts.push(`${banks.length} VMEM bank${banks.length > 1 ? 's' : ''}`);
+    if (amem.length) parts.push(`${amem.length} AMEM pair${amem.length > 1 ? 's' : ''}`);
+    const rest = applied.filter(
+      (a) =>
+        !a.startsWith('performances') &&
+        !a.startsWith('VMEM →') &&
+        !a.startsWith('AMEM'),
+    );
+    parts.push(...rest);
     if (skipped.length) parts.push(`skipped: ${skipped.join(', ')}`);
     setLoadMsg(parts.join(' · '));
     const t = setTimeout(() => setLoadMsg(null), 6000);
@@ -115,7 +151,7 @@ export default function App() {
     const update = () =>
       document.documentElement.style.setProperty(
         '--stage-scale',
-        String(Math.min(window.innerWidth / 1440, window.innerHeight / 850)),
+        String(Math.min(window.innerWidth / 1440, window.innerHeight / 930)),
       );
     update();
     window.addEventListener('resize', update);
@@ -151,17 +187,81 @@ export default function App() {
   );
 
   const onLoadFile = useCallback(
-    async (file: File | undefined) => {
-      if (!file) return;
-      synth.loadCart(await file.arrayBuffer());
+    async (files: FileList | File[] | null) => {
+      if (!files?.length) return;
+      const list = Array.from(files);
+      const chunks: Uint8Array[] = [];
+      for (const file of list) {
+        chunks.push(new Uint8Array(await file.arrayBuffer()));
+      }
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const combined = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) {
+        combined.set(c, off);
+        off += c.length;
+      }
+      synth.loadCart(combined.slice().buffer);
     },
     [synth],
   );
 
+  useEffect(() => {
+    const onDragEnter = (e: DragEvent) => {
+      if (!isFileDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      dragDepth.current += 1;
+      if (dragDepth.current === 1) setDragging(true);
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (!isFileDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'copy';
+    };
+
+    const onDragLeave = () => {
+      dragDepth.current -= 1;
+      if (dragDepth.current <= 0) {
+        dragDepth.current = 0;
+        setDragging(false);
+      }
+    };
+
+    const onDrop = (e: DragEvent) => {
+      if (!isFileDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDragging(false);
+      const files = patchFilesFromDrop(e.dataTransfer);
+      if (!files.length) {
+        setLoadMsg('No .syx or .Dx7Voice files in drop');
+        setTimeout(() => setLoadMsg(null), 6000);
+        return;
+      }
+      void (async () => {
+        if (!started) await handleStart();
+        await onLoadFile(files);
+      })();
+    };
+
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [started, handleStart, onLoadFile]);
+
   const selectedVoice = synth.partConfigs[synth.selectedPart]?.voice;
-  const program = selectedVoice
+  const programIdx = selectedVoice
     ? programIndexForVoice(synth.programOptions, selectedVoice)
     : 0;
+  const program = programIdx >= 0 ? programIdx : 0;
 
   const onSaveVoice = useCallback(() => {
     const syx = voiceToSysex(synth.voice);
@@ -235,11 +335,13 @@ export default function App() {
         <input
           ref={fileRef}
           type="file"
-          accept=".syx"
+          accept=".syx,.Dx7Voice"
+          multiple
           hidden
           onChange={(e) => {
-            onLoadFile(e.target.files?.[0]);
+            const files = e.target.files ? Array.from(e.target.files) : null;
             e.target.value = '';
+            void onLoadFile(files);
           }}
         />
         <button type="button" className="bar-btn" onClick={onSaveVoice}>
@@ -251,6 +353,24 @@ export default function App() {
         <button type="button" className="bar-btn" onClick={() => setShowParts(true)} title="Multi-timbral part rack">
           PARTS
         </button>
+
+        <label className="poly-ctl" title="Polyphony (voices)">
+          POLY
+          <select
+            value={polyphony}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              setPolyphony(n);
+              synth.setPolyphonyCap(n);
+            }}
+          >
+            {[8, 16, 24, 32, 48, 64, 96, 128].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="bar-knobs">
           <Knob label="VOLUME" value={volume} max={99} size={28} onChange={onVolume} />
@@ -302,19 +422,20 @@ export default function App() {
           performanceNames={synth.performanceNames}
           performanceIndex={synth.performanceIndex}
           onSelectPerformance={synth.selectPerformance}
-          polyphony={polyphony}
           masterTuneCents={synth.masterTuneCents}
           onMasterTune={synth.setMasterTune}
           onSelect={synth.selectPart}
           onSetPart={synth.setPart}
           onSetVoiceRef={synth.setVoiceRef}
-          onPolyphony={(n) => {
-            setPolyphony(n);
-            synth.setPolyphonyCap(n);
-          }}
           subscribeStatus={synth.subscribeStatus}
           onClose={() => setShowParts(false)}
         />
+      )}
+
+      {dragging && (
+        <div className="drop-overlay" aria-hidden>
+          Drop .syx or .Dx7Voice files to load
+        </div>
       )}
 
       {!started && (
@@ -323,7 +444,10 @@ export default function App() {
           <button type="button" className="start" onClick={handleStart}>
             START AUDIO
           </button>
-          <p>Click to initialize the audio engine. Play with mouse, QWERTY (A–K) or MIDI.</p>
+          <p>
+            Click to initialize the audio engine, or drop .syx / .Dx7Voice files anywhere to load and start.
+            Play with mouse, QWERTY (A–K) or MIDI.
+          </p>
         </div>
       )}
     </div>

@@ -17,13 +17,11 @@ interface PartRackProps {
   performanceNames: string[];
   performanceIndex: number;
   onSelectPerformance: (index: number) => void;
-  polyphony: number;
   masterTuneCents: number;
   onMasterTune: (cents: number) => void;
   onSelect: (index: number) => void;
   onSetPart: (index: number, config: Partial<PartConfig>) => void;
   onSetVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
-  onPolyphony: (cap: number) => void;
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
   onClose: () => void;
 }
@@ -51,8 +49,8 @@ const c = {
 
 export function PartRack({
   configs, selectedPart, programOptions, performanceNames, performanceIndex,
-  onSelectPerformance, polyphony, masterTuneCents, onMasterTune,
-  onSelect, onSetPart, onSetVoiceRef, onPolyphony, subscribeStatus, onClose,
+  onSelectPerformance, masterTuneCents, onMasterTune,
+  onSelect, onSetPart, onSetVoiceRef, subscribeStatus, onClose,
 }: PartRackProps) {
   const [activity, setActivity] = useState<number[]>([]);
 
@@ -92,12 +90,6 @@ export function PartRack({
               onChange={onMasterTune}
             />
           </label>
-          <label>
-            Polyphony&nbsp;
-            <select style={c.select} value={polyphony} onChange={(e) => onPolyphony(Number(e.target.value))}>
-              {[8, 16, 24, 32, 48, 64, 96, 128].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </label>
           <button type="button" style={c.btn} onClick={onClose}>CLOSE</button>
         </div>
 
@@ -113,6 +105,8 @@ export function PartRack({
             {configs.map((cfg, i) => {
               const selected = i === selectedPart;
               const progIdx = programIndexForVoice(programOptions, cfg.voice);
+              const voiceLabel = cfg.voiceLabel ?? programOptions[progIdx]?.label ?? 'INIT VOICE';
+              const selectValue = progIdx >= 0 ? progIdx : 'unresolved';
               return (
                 <tr
                   key={i}
@@ -145,19 +139,28 @@ export function PartRack({
                   <td style={c.td}>
                     <select
                       style={{ ...c.select, width: 180 }}
-                      value={progIdx}
+                      value={selectValue}
                       onChange={(e) => {
-                        const opt = programOptions[Number(e.target.value)];
+                        const val = e.target.value;
+                        if (val === 'unresolved') return;
+                        const opt = programOptions[Number(val)];
                         if (opt) onSetVoiceRef(opt.ref, i);
                       }}
                       onClick={(e) => e.stopPropagation()}
                       disabled={programOptions.length === 0}
                     >
                       {programOptions.length === 0
-                        ? <option value={0}>INIT VOICE</option>
-                        : programOptions.map((opt, p) => (
-                          <option key={p} value={p}>{opt.label}</option>
-                        ))}
+                        ? <option value="unresolved">{voiceLabel}</option>
+                        : (
+                          <>
+                            {progIdx < 0 && (
+                              <option value="unresolved">{voiceLabel}</option>
+                            )}
+                            {programOptions.map((opt, p) => (
+                              <option key={p} value={p}>{opt.label}</option>
+                            ))}
+                          </>
+                        )}
                     </select>
                   </td>
                   <td style={c.sliderTd}>
@@ -235,8 +238,9 @@ export function PartRack({
           </tbody>
         </table>
         <p style={{ color: '#8a9098', marginTop: 8, maxWidth: 720, lineHeight: 1.4, whiteSpace: 'normal' }}>
-          Click a row to edit that part's voice in the main editor. LOAD a .syx file to import
-          internal/cartridge banks, performances, and system setup.
+          Click a row to edit that part's voice in the main editor. Drop or LOAD .syx
+          or .Dx7Voice files (e.g. TX802 factory A1–B2 + P, or FS1R voice banks) to import banks, AMEM supplements,
+          performances, and system setup.
         </p>
       </div>
     </div>

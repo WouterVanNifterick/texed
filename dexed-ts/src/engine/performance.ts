@@ -2,8 +2,8 @@
 
 import type { PartConfig } from './synth-rack';
 import { NUM_PARTS } from './synth-rack';
-import { SysexKind, type SysexFrame } from './sysex';
-import { decodeDx7iiVoiceRef, defaultVoiceRef, type VoiceRef } from './voice-library';
+import { bulkPayloadFromFrame, SysexKind, type SysexFrame } from './sysex';
+import { decodeDx7iiVoiceRef, decodeTx802VoiceRef, defaultVoiceRef, type VoiceRef } from './voice-library';
 
 export const TX802_PMEM_BLOCK = 84;
 export const DX7II_PERF_BLOCK = 51;
@@ -43,13 +43,16 @@ function mapRxChannel(raw: number): number {
   return ch >= 16 ? 0 : ch + 1;
 }
 
-/** Map TX802 voice number to a VoiceRef (cartridge voices 64–95 → internalA offset). */
-function mapTx802VoiceRef(vnum: number): VoiceRef {
-  const v = vnum & 0xff;
-  if (v >= 64 && v < 128) {
-    return { bank: 'internalA', program: Math.min(31, v - 64) };
-  }
-  return { bank: 'internalA', program: Math.min(31, v & 0x1f) };
+/** Map TX802 voice number (1–128, 1-based) to a bank-aware VoiceRef, or null for voice 0. */
+function mapTx802VoiceRef(vnum: number): VoiceRef | null {
+  return decodeTx802VoiceRef(vnum);
+}
+
+/** Map TX802 output assign (1 = output I, 2 = output II, 3 = both) to stereo pan. */
+function mapOutAssignPan(outAssign: number): number {
+  if (outAssign === 1) return -1;
+  if (outAssign === 2) return 1;
+  return 0;
 }
 
 function disabledParts(): Partial<PartConfig>[] {
@@ -61,11 +64,14 @@ export function parseTx802PmemBlock(block: Uint8Array): ParsedPerformance {
   const parts: Partial<PartConfig>[] = [];
   for (let i = 0; i < NUM_PARTS; i++) {
     const outAssign = block[32 + i] & 0x03;
+    const rawVoice = block[8 + i] & 0x7f;
+    const voiceRef = mapTx802VoiceRef(rawVoice);
     parts.push({
-      enabled: outAssign !== 0,
+      enabled: outAssign !== 0 && rawVoice !== 0,
       rxChannel: mapRxChannel(block[i]),
-      voice: mapTx802VoiceRef(block[8 + i]),
+      voice: voiceRef ?? defaultVoiceRef(),
       volume: (block[24 + i] & 0x7f) / 99,
+      pan: mapOutAssignPan(outAssign),
       detune: ((block[32 + i] >> 3) & 0x0f) - 7,
       noteLow: block[40 + i] & 0x7f,
       noteHigh: block[48 + i] & 0x7f,
@@ -113,6 +119,10 @@ export function parseDx7iiPerfBlock(block: Uint8Array): ParsedPerformance {
 
 const TG_SYSEX_BLOCK = 140;
 
+function readTimbreName(blk: Uint8Array): string {
+  return readAsciiName(blk, 64, 20);
+}
+
 /** Parse a TX802 format-0x06 (1120-byte) single performance dump. */
 export function parseTx802SysexPerf(data: Uint8Array): ParsedPerformance | null {
   if (data.length < TG_SYSEX_BLOCK) return null;
@@ -132,31 +142,40 @@ export function parseTx802SysexPerf(data: Uint8Array): ParsedPerformance | null 
     const nh = blk[45] & 0x7f;
     const noteLow = nh > nl ? nl : 0;
     const noteHigh = nh > nl ? nh : 127;
+    const timbreName = readTimbreName(blk);
+    if (!name && timbreName) name = timbreName;
 
+    const rawVoice = blk[9] & 0x7f;
+    const voiceRef = mapTx802VoiceRef(rawVoice);
     parts[t] = {
-      enabled: true,
-      rxChannel: 0,
-      voice: mapTx802VoiceRef(blk[9]),
+      enabled: rawVoice !== 0,
+      rxChannel: mapRxChannel(blk[0]),
+      voice: voiceRef ?? defaultVoiceRef(),
       volume: outVol > 0 ? outVol / 99 : 1,
-      detune: 0,
+      pan: mapOutAssignPan(outAssign),
+      detune: ((blk[32] >> 3) & 0x0f) - 7,
       noteLow,
       noteHigh,
-      noteShift: 0,
+      noteShift: (blk[56] & 0x3f) - 24,
     };
   }
 
   if (!parts.some((p) => p.enabled)) {
     const blk = data.subarray(0, TG_SYSEX_BLOCK);
+    const rawVoice = blk[9] & 0x7f;
+    const voiceRef = mapTx802VoiceRef(rawVoice);
     parts[0] = {
-      enabled: true,
-      rxChannel: 0,
-      voice: mapTx802VoiceRef(blk[9]),
+      enabled: rawVoice !== 0,
+      rxChannel: mapRxChannel(blk[0]),
+      voice: voiceRef ?? defaultVoiceRef(),
       volume: 1,
-      detune: 0,
+      pan: mapOutAssignPan(blk[5] & 0x03),
+      detune: ((blk[32] >> 3) & 0x0f) - 7,
       noteLow: 0,
       noteHigh: 127,
-      noteShift: 0,
+      noteShift: (blk[56] & 0x3f) - 24,
     };
+    name = readTimbreName(blk);
   }
 
   return { name, parts };
@@ -180,20 +199,25 @@ function decodeTx802HexBank(data: Uint8Array): Uint8Array[] {
     }
     if (!ok) break;
     blocks.push(block);
-    pos += 1;
-    if (pos + 12 <= data.length && data[pos] === 0x0a) pos += 12;
+    if (
+      pos + 13 <= data.length &&
+      data[pos + 1] === 0x01 &&
+      data[pos + 2] === 0x28 &&
+      data[pos + 3] === 0x4c &&
+      data[pos + 4] === 0x4d
+    ) {
+      pos += 13;
+    } else if (pos + 12 <= data.length && data[pos] === 0x0a) {
+      pos += 12;
+    } else if (pos < data.length) {
+      pos += 1;
+    }
   }
   return blocks;
 }
 
 function payloadFromFrame(frame: SysexFrame): Uint8Array | null {
-  const raw = frame.raw;
-  if (raw.length < 8) return null;
-  const size = (raw[4] << 7) | raw[5];
-  if (size <= 0 || 6 + size > raw.length) return null;
-  let data = raw.subarray(6, 6 + size);
-  if (frame.format === 0x7e && data.length > 10) data = data.subarray(10);
-  return data;
+  return bulkPayloadFromFrame(frame);
 }
 
 function isTx802PmemBank(frame: SysexFrame): boolean {

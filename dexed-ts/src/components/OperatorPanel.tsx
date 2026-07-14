@@ -4,11 +4,12 @@
 
 import { memo } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { OP, G, opBase, formatOpFreq, formatDetune, CURVES, OSC_MODES } from '../state/params';
+import { OP, G, opBase, formatOpFreq, formatDetune, OSC_MODES } from '../state/params';
 import { getAms, setAms } from '../state/supplement';
 import { algoGraph } from '../state/algo';
 import { Knob, Cycle } from './ui';
 import { EnvGraph } from './EnvGraph';
+import { ScalingGraph, type ScalingField } from './ScalingGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 
@@ -117,12 +118,16 @@ export const OperatorPanel = memo(function OperatorPanel({
         <Knob label="VEL" value={v(OP.velocitySens)} max={7} onChange={set(OP.velocitySens)} />
       </div>
 
-      <div className="ctl-row">
-        <Knob label="BRK PT" value={v(OP.breakPoint)} max={99} onChange={set(OP.breakPoint)} />
-        <Knob label="L DEP" value={v(OP.leftDepth)} max={99} onChange={set(OP.leftDepth)} />
-        <Knob label="R DEP" value={v(OP.rightDepth)} max={99} onChange={set(OP.rightDepth)} />
-        <Cycle label="L CRV" value={v(OP.leftCurve)} options={CURVES} onChange={set(OP.leftCurve)} />
-        <Cycle label="R CRV" value={v(OP.rightCurve)} options={CURVES} onChange={set(OP.rightCurve)} />
+      <div className="ctl-row scale-row">
+        <ScalingGraph
+          breakPoint={v(OP.breakPoint)}
+          leftDepth={v(OP.leftDepth)}
+          rightDepth={v(OP.rightDepth)}
+          leftCurve={v(OP.leftCurve)}
+          rightCurve={v(OP.rightCurve)}
+          outputLevel={v(OP.outputLevel)}
+          onChange={(field: ScalingField, value) => setParam(base + OP[field], value)}
+        />
         <Knob label="RATE SC" value={v(OP.rateScaling)} max={7} onChange={set(OP.rateScaling)} />
         <Knob label="AMS" value={ams} max={7} onChange={onAms} />
       </div>

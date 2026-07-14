@@ -2,23 +2,25 @@
   --accent: #ffb454;
   --accent-dim: #b97f36;
   --green: #6ee7a0;
-  --bg: #0d0f14;
-  --panel: linear-gradient(#1b1f2a, #14171f);
+  --bg: #0b0d12;
+  --panel: linear-gradient(172deg, #1d222e, #141821 55%, #12151d);
   --panel-solid: #171a22;
-  --line: #2a2f3d;
+  --line: #2b3040;
   --text: #e6e8ee;
   --dim: #8b90a0;
   --lcd: #ffd58a;
   --mono: Consolas, 'SF Mono', monospace;
 }
 
-/* ==== Rack layout: fixed 1440x810 stage, scaled to fit the window ==== */
+/* ==== Rack layout: fixed 1440x930 stage, scaled to fit the window ==== */
 
 .app-root {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: radial-gradient(1200px 600px at 50% -200px, #1a1e29, var(--bg));
+  background:
+    radial-gradient(1100px 500px at 50% -180px, rgb(255 180 84 / 5%), transparent 70%),
+    radial-gradient(1400px 800px at 50% -240px, #1b202c, var(--bg));
 }
 
 .rack {
@@ -26,7 +28,7 @@
   left: 50%;
   top: 50%;
   width: 1440px;
-  height: 850px;
+  height: 930px;
   transform: translate(-50%, -50%) scale(var(--stage-scale, 1));
   display: flex;
   flex-direction: column;
@@ -57,16 +59,32 @@
   min-height: 0;
 }
 
+/* Weighted so the taller pitch EG and the LFO shape graph fit. */
+.global-col .lfo-panel {
+  flex: 1.34;
+}
+
+.global-col .pitch-panel {
+  flex: 1.58;
+}
+
+.global-col .dx7ii-panel {
+  flex: 1.26;
+}
+
 /* ==== Top bar ==== */
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 12px;
+  padding: 5px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 6px 18px rgb(0 0 0 / 35%);
 }
 
 .logo {
@@ -160,8 +178,9 @@
   color: var(--dim);
   background: linear-gradient(#2a2e3a, #1d212b);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
 .bar-btn:hover {
@@ -182,6 +201,34 @@
 .bar-knobs {
   display: flex;
   gap: 4px;
+}
+
+.poly-ctl {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+
+.poly-ctl select {
+  padding: 4px 5px;
+  font: 12px var(--mono);
+  color: var(--lcd);
+  background: #100e07;
+  border: 1px solid #3a3320;
+  border-radius: 4px;
+}
+
+.load-msg {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 10px var(--mono);
+  color: var(--green);
 }
 
 .midi-led {
@@ -218,22 +265,40 @@
   padding: 6px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   min-width: 0;
   min-height: 0;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 4px 14px rgb(0 0 0 / 30%);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .panel-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgb(255 255 255 / 4%);
 }
 
 .panel-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.5px;
   color: var(--dim);
+}
+
+.panel-title::before {
+  content: '';
+  width: 3px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.7;
 }
 
 .op-panel.disabled > :not(.panel-head) {
@@ -253,8 +318,9 @@
   color: #565d70;
   background: linear-gradient(#232735, #191c25);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .op-power.on {
@@ -307,14 +373,157 @@
   max-width: 120px;
 }
 
+/* ==== LFO shape graph ==== */
+
+.lfo-graph {
+  width: 100%;
+  height: 38px;
+  flex: none;
+  background: linear-gradient(#0a0c11, #0d1017);
+  border: 1px solid #232735;
+  border-radius: 6px;
+}
+
+.lfo-delay-zone {
+  fill: rgb(255 180 84 / 6%);
+}
+
+.lfo-wave {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.lfo-env {
+  fill: none;
+  stroke: #5a6175;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ==== Keyboard level scaling graph ==== */
+
+.scale-row {
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.scale-graph {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  background: linear-gradient(#0a0c11, #0d1017);
+  border: 1px solid #232735;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.scale-graph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.scale-grid {
+  stroke: #1d212b;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.scale-baseline {
+  stroke: #3a4051;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.scale-curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px rgb(255 180 84 / 40%));
+}
+
+/* Raw parameter curve where it exceeds what the op's LEVEL leaves room for. */
+.scale-curve-raw {
+  fill: none;
+  stroke: #5a6175;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.scale-bp-hit {
+  fill: transparent;
+  cursor: ew-resize;
+}
+
+.scale-bp-line {
+  stroke: #7fc4ff;
+  stroke-width: 1.2;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.scale-bp-dot {
+  fill: #7fc4ff;
+}
+
+.scale-bp-label {
+  position: absolute;
+  top: 1px;
+  transform: translateX(-50%);
+  font: 8px var(--mono);
+  color: #7fc4ff;
+  pointer-events: none;
+}
+
+.scale-crv {
+  position: absolute;
+  bottom: 1px;
+  padding: 1px 3px;
+  font: 700 7.5px var(--mono);
+  color: var(--lcd);
+  background: rgb(16 14 7 / 75%);
+  border: 1px solid #3a3320;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.scale-crv:hover {
+  border-color: #5c522f;
+  color: #fff;
+}
+
+.scale-crv.left {
+  left: 2px;
+}
+
+.scale-crv.right {
+  right: 2px;
+}
+
 /* ==== Envelope graph ==== */
 
 .env-graph {
   width: 100%;
   height: 44px;
-  background: #0b0d12;
+  flex: none;
+  background: linear-gradient(#0a0c11, #0d1017);
   border: 1px solid #232735;
-  border-radius: 4px;
+  border-radius: 6px;
+}
+
+.env-graph.tall {
+  height: 68px;
 }
 
 .env-shape {
@@ -343,7 +552,7 @@
 .algo-display {
   width: 100%;
   flex: 1;
-  min-height: 70px;
+  min-height: 56px;
 }
 
 .algo-node {
@@ -750,24 +959,60 @@
 
 .key.white {
   height: 100%;
-  background: linear-gradient(#f6f7fb, #d9dce6);
+  background: linear-gradient(#f6f7fb 80%, #d9dce6);
   border-radius: 0 0 4px 4px;
   z-index: 1;
+  box-shadow: inset 0 -4px 6px rgb(0 0 0 / 12%);
 }
 
 .key.white.active {
   background: linear-gradient(#ffd79a, #ffb454);
+  box-shadow: inset 0 -4px 8px rgb(160 90 10 / 45%);
 }
 
 .key.black {
   height: 62%;
-  background: linear-gradient(#2a2e3a, #0c0e13);
+  background: linear-gradient(#343a4a, #0c0e13 85%);
   border-radius: 0 0 3px 3px;
   z-index: 2;
+  box-shadow: inset 0 -3px 4px rgb(255 255 255 / 6%), 0 2px 3px rgb(0 0 0 / 45%);
 }
 
 .key.black.active {
   background: linear-gradient(#ffb454, #c8832f);
+}
+
+/* ==== File drop overlay ==== */
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgb(10 12 17 / 55%);
+  border: 3px dashed var(--accent);
+  margin: 12px;
+  border-radius: 12px;
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  box-shadow: inset 0 0 60px rgb(255 180 84 / 8%);
+  animation: drop-overlay-in 0.15s ease-out;
+}
+
+@keyframes drop-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 /* ==== Start overlay ==== */

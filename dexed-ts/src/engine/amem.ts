@@ -29,6 +29,19 @@ export function unpackAmemBulk(packed: Uint8Array): Uint8Array[] {
   return slots;
 }
 
+/**
+ * True when a 1120-byte format-0x06 payload is DX7II AMEM (32×35-byte slots),
+ * not a TX802 performance dump (8×140-byte timbre blocks).
+ */
+export function looksLikeAmemBulk(data: Uint8Array): boolean {
+  if (data.length !== AMEM_BULK_SIZE) return false;
+  let markers = 0;
+  for (let i = 0; i < 32; i++) {
+    if (data[i * AMEM_SLOT_SIZE + 5] === 0x08) markers++;
+  }
+  return markers >= 16;
+}
+
 /** Extract payload bytes from a format-0x06 or 8973AM SysEx frame. */
 export function amemPayloadFromFrame(raw: Uint8Array): Uint8Array | null {
   if (raw.length < 8) return null;

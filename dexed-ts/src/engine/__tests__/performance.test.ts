@@ -20,7 +20,7 @@ const patchPath = (rel: string): Uint8Array =>
 function makeTx802PmemBlock(name = 'TEST PERFORMANCE NAM '): Uint8Array {
   const block = new Uint8Array(TX802_PMEM_BLOCK);
   block[0] = 0x00;
-  block[8] = 69;
+  block[8] = 6; // TX802 voice 6 → internalA program 5
   block[24] = 99;
   block[32] = 0x3b;
   block[40] = 36;
@@ -50,11 +50,25 @@ describe('parseTx802PmemBlock', () => {
       rxChannel: 1,
       voice: { bank: 'internalA', program: 5 },
       volume: 1,
+      pan: 0,
       detune: 0,
       noteLow: 36,
       noteHigh: 96,
       noteShift: 0,
     });
+  });
+
+  it('maps output assign to pan (I = left, II = right, both = center)', () => {
+    const block = makeTx802PmemBlock();
+    block[32] = 0x39; // output assign 1 = output I
+    block[9] = 6;
+    block[33] = 0x3a; // output assign 2 = output II
+    block[10] = 6;
+    block[34] = 0x3b; // output assign 3 = both
+    const { parts } = parseTx802PmemBlock(block);
+    expect(parts[0]?.pan).toBe(-1);
+    expect(parts[1]?.pan).toBe(1);
+    expect(parts[2]?.pan).toBe(0);
   });
 });
 
@@ -74,16 +88,29 @@ describe('parseDx7iiPerfBlock', () => {
 });
 
 describe('performancesFromFrame — fixtures', () => {
-  it('parses TX802 combo performance frame (format 0x06)', () => {
-    const frames = identifySysex(fx('tx802-prg1.syx'));
-    const perf = frames.find((f) => f.kind === SysexKind.Performance)!;
+  it('parses TX802 8952PM performance bank from factory P.SYX', () => {
+    const bytes = patchPath('TX802_Factory/original/P.SYX');
+    const frames = identifySysex(bytes);
+    const perf = frames.find((f) => f.formatId?.includes('8952PM'))!;
     const perfs = performancesFromFrame(perf);
-    expect(perfs!.length).toBe(1);
-    expect(perfs![0].parts[0]).toMatchObject({
-      enabled: true,
-      rxChannel: 0,
-      voice: { bank: 'internalA', program: 31 },
-    });
+    expect(perfs!.length).toBe(64);
+    const hall = perfs!.find((p) => p.name.includes('Hall'));
+    expect(hall).toBeDefined();
+    expect(hall!.parts.some((p) => p.enabled && p.detune !== 0)).toBe(true);
+  });
+
+  it('pans Coffeeshoped split drum kits across outputs I and II', () => {
+    const bytes = patchPath(
+      'TX802_Collections/Drum_Sounds_Coffeeshoped/TX802-Cfshpd-Drum-Perfs.syx',
+    );
+    const frames = identifySysex(bytes);
+    const perf = frames.find((f) => f.formatId?.includes('8952PM'))!;
+    const perfs = performancesFromFrame(perf)!;
+    const split = perfs.find((p) => p.name === 'Kit 1 (split)');
+    expect(split).toBeDefined();
+    expect(split!.parts.map((p) => p.pan)).toEqual([-1, -1, -1, -1, -1, 1, 1, 1]);
+    const plain = perfs.find((p) => p.name === 'Kit 1');
+    expect(plain!.parts.every((p) => p.pan === 0)).toBe(true);
   });
 });
 

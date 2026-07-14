@@ -5,7 +5,7 @@ import { N } from './synth';
 import { Sin } from './sin';
 
 // prettier-ignore
-const lfoSource = [
+export const lfoSource = [
   0.062541, 0.125031, 0.312393, 0.437120, 0.624610,
   0.750694, 0.936330, 1.125302, 1.249609, 1.436782,
   1.560915, 1.752081, 1.875117, 2.062494, 2.247191,

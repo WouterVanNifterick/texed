@@ -8,6 +8,7 @@ import * as Sup from '../state/supplement';
 import { Knob, Cycle, Toggle } from './ui';
 import { AlgoDisplay } from './AlgoDisplay';
 import { EnvGraph } from './EnvGraph';
+import { LfoGraph } from './LfoGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 
@@ -22,7 +23,7 @@ function LfoMeter({ subscribe }: { subscribe: Subscribe }) {
 
 function LivePitchEnv({ subscribe, rates, levels }: { subscribe: Subscribe; rates: number[]; levels: number[] }) {
   const stage = useStatus(subscribe, (s) => s.pitchStep, 4);
-  return <EnvGraph rates={rates} levels={levels} stage={stage} />;
+  return <EnvGraph rates={rates} levels={levels} stage={stage} tall />;
 }
 
 interface GlobalPanelProps {
@@ -75,11 +76,12 @@ export const GlobalPanel = memo(function GlobalPanel({
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel lfo-panel">
         <div className="panel-head">
           <span className="panel-title">LFO</span>
           <LfoMeter subscribe={subscribeStatus} />
         </div>
+        <LfoGraph waveform={voice[G.lfoWave]} speed={voice[G.lfoSpeed]} delay={voice[G.lfoDelay]} />
         <div className="ctl-row">
           <Cycle label="WAVE" value={voice[G.lfoWave]} options={LFO_WAVES} onChange={set(G.lfoWave)} />
           <Knob label="SPEED" value={voice[G.lfoSpeed]} max={99} onChange={set(G.lfoSpeed)} />
@@ -93,7 +95,7 @@ export const GlobalPanel = memo(function GlobalPanel({
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel pitch-panel">
         <div className="panel-head">
           <span className="panel-title">PITCH EG</span>
         </div>
@@ -120,7 +122,7 @@ export const GlobalPanel = memo(function GlobalPanel({
         </div>
       </section>
 
-      <section className="panel" style={{ flex: '1.22 1 0%' }}>
+      <section className="panel dx7ii-panel">
         <div className="panel-head">
           <span className="panel-title">DX7II</span>
         </div>

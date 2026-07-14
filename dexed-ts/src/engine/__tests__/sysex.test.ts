@@ -55,11 +55,11 @@ describe('identifySysex — golden fixtures', () => {
     expect(frame.format).toBe(0x02);
   });
 
-  it('recognizes a TX802 file as param-change + performance + cartridge', () => {
+  it('recognizes a TX802 bank file as param-change + AMEM + cartridge', () => {
     const frames = identifySysex(fx('tx802-prg1.syx'));
     expect(frames.map((f) => f.kind)).toEqual([
       SysexKind.ParamChange,
-      SysexKind.Performance,
+      SysexKind.Amem,
       SysexKind.Cartridge,
     ]);
     expect(frames[1].format).toBe(0x06);

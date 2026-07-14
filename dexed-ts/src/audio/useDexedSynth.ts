@@ -265,6 +265,5 @@ export function useDexedSynth(): DexedSynth {
 }
 
 export function programIndexForVoice(options: ProgramOption[], voice: VoiceRef): number {
-  const idx = options.findIndex((o) => voiceRefEquals(o.ref, voice));
-  return idx >= 0 ? idx : 0;
+  return options.findIndex((o) => voiceRefEquals(o.ref, voice));
 }

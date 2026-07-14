@@ -61,25 +61,19 @@ class DexedProcessor extends AudioWorkletProcessor {
 
   private handleLoad(bytes: Uint8Array): void {
     const result = loadSysexFile(bytes);
-    if (result.loaded && result.library.populatedBanks().length > 0) {
-      this.rack.loadLibrary(result.library, result.report);
-      applySystemSetupToParts(result.library, (cents) => this.rack.applyMasterTuneCents(cents));
-      this.post({ type: 'loadReport', report: result.report });
-      this.postProgramState();
-      this.postParts();
-      this.postPerformances();
-      this.postVoice();
-      this.postSystemSetup();
-      return;
-    }
 
-    if (result.loaded && result.library.performances.length > 0) {
+    if (result.loaded) {
       this.rack.loadLibrary(result.library, result.report);
       applySystemSetupToParts(result.library, (cents) => this.rack.applyMasterTuneCents(cents));
       this.post({ type: 'loadReport', report: result.report });
       this.postProgramState();
       this.postParts();
-      this.postPerformances();
+      if (this.rack.voiceLibrary.performances.length > 0) {
+        this.postPerformances();
+      }
+      if (result.singleVoice) {
+        this.rack.loadVoiceForPart(this.rack.selectedPart, result.singleVoice);
+      }
       this.postVoice();
       this.postSystemSetup();
       return;

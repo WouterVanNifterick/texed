@@ -11,9 +11,11 @@ interface EnvGraphProps {
   rates: number[];
   levels: number[];
   stage: number; // 0..4
+  /** Taller variant (pitch EG). */
+  tall?: boolean;
 }
 
-export function EnvGraph({ rates, levels, stage }: EnvGraphProps) {
+export function EnvGraph({ rates, levels, stage, tall }: EnvGraphProps) {
   const y = (level: number) => H - PAD - (level / 99) * (H - 2 * PAD);
   // Segment width grows with slowness (99-rate); sustain hold is fixed.
   const w = rates.map((r) => 5 + ((99 - r) / 99) * 20);
@@ -35,7 +37,7 @@ export function EnvGraph({ rates, levels, stage }: EnvGraphProps) {
   const active = stage >= 0 && stage <= 3;
 
   return (
-    <svg className="env-graph" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+    <svg className={`env-graph${tall ? ' tall' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
       <polyline className="env-shape" points={points} />
       {active && (
         <polyline

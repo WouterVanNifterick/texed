@@ -13,9 +13,16 @@ interface EnvGraphProps {
   stage: number; // 0..4
   /** Taller variant (pitch EG). */
   tall?: boolean;
+  /** Fill style: 'amp' fills down to level 0, 'pitch' fills to the 50 midline. */
+  variant?: 'amp' | 'pitch';
 }
 
-export function EnvGraph({ rates, levels, stage, tall }: EnvGraphProps) {
+const FILL = {
+  amp: { id: 'eg-fill-amp', color: '#6ee7a0' },
+  pitch: { id: 'eg-fill-pitch', color: '#7fc4ff' },
+};
+
+export function EnvGraph({ rates, levels, stage, tall, variant = 'amp' }: EnvGraphProps) {
   const y = (level: number) => H - PAD - (level / 99) * (H - 2 * PAD);
   // Segment width grows with slowness (99-rate); sustain hold is fixed.
   const w = rates.map((r) => 5 + ((99 - r) / 99) * 20);
@@ -31,6 +38,12 @@ export function EnvGraph({ rates, levels, stage, tall }: EnvGraphProps) {
   const ys = [y(levels[3]), y(levels[0]), y(levels[1]), y(levels[2]), y(levels[2]), y(levels[3])];
   const points = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
 
+  // Fill between the envelope and its "no effect" line: level 0 for amplitude
+  // envelopes, the 50 midline for the pitch EG (50 = no pitch change).
+  const fill = FILL[variant];
+  const y0 = variant === 'pitch' ? y(50) : y(0);
+  const fillPoints = `${xs[0].toFixed(1)},${y0.toFixed(1)} ${points} ${xs[5].toFixed(1)},${y0.toFixed(1)}`;
+
   // Highlight: stage 0..2 -> that segment; 3 -> sustain + release tail.
   const segFrom = stage <= 2 ? stage : 3;
   const segTo = stage <= 2 ? stage + 1 : 5;
@@ -38,6 +51,23 @@ export function EnvGraph({ rates, levels, stage, tall }: EnvGraphProps) {
 
   return (
     <svg className={`env-graph${tall ? ' tall' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={fill.id} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={0} y2={H}>
+          {variant === 'pitch' ? (
+            <>
+              <stop offset="0%" stopColor={fill.color} stopOpacity={0.4} />
+              <stop offset="50%" stopColor={fill.color} stopOpacity={0.04} />
+              <stop offset="100%" stopColor={fill.color} stopOpacity={0.4} />
+            </>
+          ) : (
+            <>
+              <stop offset="0%" stopColor={fill.color} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={fill.color} stopOpacity={0.03} />
+            </>
+          )}
+        </linearGradient>
+      </defs>
+      <polygon className="graph-fill" fill={`url(#${fill.id})`} points={fillPoints} />
       <polyline className="env-shape" points={points} />
       {active && (
         <polyline

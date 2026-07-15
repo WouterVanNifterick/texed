@@ -23,7 +23,7 @@ function LfoMeter({ subscribe }: { subscribe: Subscribe }) {
 
 function LivePitchEnv({ subscribe, rates, levels }: { subscribe: Subscribe; rates: number[]; levels: number[] }) {
   const stage = useStatus(subscribe, (s) => s.pitchStep, 4);
-  return <EnvGraph rates={rates} levels={levels} stage={stage} tall />;
+  return <EnvGraph rates={rates} levels={levels} stage={stage} tall variant="pitch" />;
 }
 
 interface GlobalPanelProps {

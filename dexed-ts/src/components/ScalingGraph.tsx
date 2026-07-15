@@ -9,7 +9,6 @@
 
 import { useCallback, useRef } from 'react';
 import { scaleLevel } from '../engine/dx7note';
-import { scaleoutlevel } from '../engine/env';
 import { CURVES } from '../state/params';
 
 const W = 127;
@@ -35,8 +34,6 @@ interface ScalingGraphProps {
   rightDepth: number;
   leftCurve: number;
   rightCurve: number;
-  /** Operator output level 0..99; determines where scaling saturates. */
-  outputLevel: number;
   onChange: (field: ScalingField, value: number) => void;
 }
 
@@ -62,7 +59,6 @@ export function ScalingGraph({
   rightDepth,
   leftCurve,
   rightCurve,
-  outputLevel,
   onChange,
 }: ScalingGraphProps) {
   const root = useRef<HTMLDivElement>(null);
@@ -145,18 +141,12 @@ export function ScalingGraph({
   );
 
   // Sample every note: the engine steps the scaling in 3-semitone groups, so
-  // coarser sampling would alias the staircase. The engine applies
-  // min(127, scaleoutlevel(LEVEL) + scaling) floored at 0, so offsets beyond
-  // ±(headroom left by the op's LEVEL) have no audible effect — those bands
-  // are dimmed rather than freezing the curve, so it always follows a drag.
-  const sol = scaleoutlevel(outputLevel);
+  // coarser sampling would alias the staircase.
   const y = (scale: number) => clamp(H / 2 - (scale / MAX_SCALE) * (H / 2 - 4), 3, H - 3);
   const points: string[] = [];
   for (let n = 0; n <= W; n += 1) {
     points.push(`${n},${y(scaleLevel(n, breakPoint, leftDepth, rightDepth, leftCurve, rightCurve)).toFixed(1)}`);
   }
-  const deadTop = y(127 - sol); // above this, scaling can't raise the level further
-  const deadBottom = y(-sol); // below this, the level is already silent
 
   const toggleExp = (side: 'left' | 'right') => {
     const cur = side === 'left' ? leftCurve : rightCurve;
@@ -174,13 +164,23 @@ export function ScalingGraph({
       onWheel={onWheel}
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+        <defs>
+          <linearGradient id="scale-fill" gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={0} y2={H}>
+            <stop offset="0%" stopColor="#ffb454" stopOpacity={0.45} />
+            <stop offset="50%" stopColor="#ffb454" stopOpacity={0.04} />
+            <stop offset="100%" stopColor="#ffb454" stopOpacity={0.45} />
+          </linearGradient>
+        </defs>
         {[12, 36, 60, 84, 108].map((n) => (
           <line key={n} x1={n} y1={0} x2={n} y2={H} className="scale-grid" />
         ))}
         <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="scale-baseline" />
+        <polygon
+          className="graph-fill"
+          fill="url(#scale-fill)"
+          points={`0,${H / 2} ${points.join(' ')} ${W},${H / 2}`}
+        />
         <polyline className="scale-curve" points={points.join(' ')} />
-        {deadTop > 4 && <rect x={0} y={0} width={W} height={deadTop} className="scale-dead" />}
-        {deadBottom < H - 4 && <rect x={0} y={deadBottom} width={W} height={H - deadBottom} className="scale-dead" />}
         <rect x={bpNote - BP_HIT} y={0} width={BP_HIT * 2} height={H} className="scale-bp-hit" />
         <line x1={bpNote} y1={0} x2={bpNote} y2={H} className="scale-bp-line" />
         <circle cx={bpNote} cy={H / 2} r={2.4} className="scale-bp-dot" />

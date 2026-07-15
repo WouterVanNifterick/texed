@@ -125,7 +125,6 @@ export const OperatorPanel = memo(function OperatorPanel({
           rightDepth={v(OP.rightDepth)}
           leftCurve={v(OP.leftCurve)}
           rightCurve={v(OP.rightCurve)}
-          outputLevel={v(OP.outputLevel)}
           onChange={(field: ScalingField, value) => setParam(base + OP[field], value)}
         />
         <Knob label="RATE SC" value={v(OP.rateScaling)} max={7} onChange={set(OP.rateScaling)} />

@@ -19,6 +19,29 @@ export function useTransientMessage(ms = 6000): [string | null, (text: string) =
   return [msg, show];
 }
 
+/** useState backed by localStorage, so view preferences survive reloads. */
+export function usePersistentState<T extends string>(key: string, initial: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      return (localStorage.getItem(key) as T | null) ?? initial;
+    } catch {
+      return initial;
+    }
+  });
+  const set = useCallback(
+    (v: T) => {
+      setValue(v);
+      try {
+        localStorage.setItem(key, v);
+      } catch {
+        // storage unavailable (private mode) — in-memory only
+      }
+    },
+    [key],
+  );
+  return [value, set];
+}
+
 const QWERTY_MAP: Record<string, number> = {
   a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12,
   o: 13, l: 14, p: 15, ';': 16,

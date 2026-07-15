@@ -9,7 +9,9 @@ import { helpProps } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
 import { Knob, Cycle, Toggle } from './ui';
 import { AlgoDisplay } from './AlgoDisplay';
-import { EnvGraph } from './EnvGraph';
+import { LiveEnvEditor } from './EnvEditor';
+import { PITCH_COLOR, type YMode } from './env-draw';
+import { type EnvTimeScale } from './env-time';
 import { LfoGraph } from './LfoGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
@@ -23,11 +25,6 @@ function LfoMeter({ subscribe }: { subscribe: Subscribe }) {
   );
 }
 
-function LivePitchEnv({ subscribe, rates, levels }: { subscribe: Subscribe; rates: number[]; levels: number[] }) {
-  const stage = useStatus(subscribe, (s) => s.pitchStep, 4);
-  return <EnvGraph rates={rates} levels={levels} stage={stage} tall variant="pitch" />;
-}
-
 interface GlobalPanelProps {
   voice: Uint8Array;
   supplement: Uint8Array;
@@ -36,6 +33,10 @@ interface GlobalPanelProps {
   subscribeStatus: Subscribe;
   hoverOp: number | null;
   onHoverOp: (opNum: number | null) => void;
+  timeScale: EnvTimeScale;
+  yMode: YMode;
+  /** Show the pitch EG graph here (hidden in the combined view). */
+  showEnv: boolean;
 }
 
 export const GlobalPanel = memo(function GlobalPanel({
@@ -46,6 +47,9 @@ export const GlobalPanel = memo(function GlobalPanel({
   subscribeStatus,
   hoverOp,
   onHoverOp,
+  timeScale,
+  yMode,
+  showEnv,
 }: GlobalPanelProps) {
   const [tab, setTab] = useState<'dx7ii' | 'ctrl'>('dx7ii');
   const set = (offset: number) => (value: number) => setParam(offset, value);
@@ -178,7 +182,20 @@ export const GlobalPanel = memo(function GlobalPanel({
         <div className="panel-head">
           <span className="panel-title">PITCH EG</span>
         </div>
-        <LivePitchEnv subscribe={subscribeStatus} rates={pitchRates} levels={pitchLevels} />
+        {showEnv && (
+          <LiveEnvEditor
+            kind="pitch"
+            rates={pitchRates}
+            levels={pitchLevels}
+            timeScale={timeScale}
+            yMode={yMode}
+            color={PITCH_COLOR}
+            tall
+            subscribe={subscribeStatus}
+            onSetRate={(i, v) => setParam(G.pitchEgRate(i), v)}
+            onSetLevel={(i, v) => setParam(G.pitchEgLevel(i), v)}
+          />
+        )}
         <div className="eg-grid">
           {[0, 1, 2, 3].map((i) => (
             <Knob

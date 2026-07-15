@@ -9,7 +9,9 @@ import { getAms, setAms, getScalingMode, setScalingMode } from '../state/supplem
 import { algoGraph } from '../state/algo';
 import { helpProps } from '../state/help';
 import { Knob, Cycle, Toggle } from './ui';
-import { EnvGraph } from './EnvGraph';
+import { LiveEnvEditor } from './EnvEditor';
+import { computeAmpParams, type EnvTimeScale } from './env-time';
+import { OP_COLORS, type YMode } from './env-draw';
 import { ScalingGraph, type ScalingField } from './ScalingGraph';
 
 // Help-bar descriptions, paraphrased from the DX7 / DX7II operating manuals.
@@ -42,21 +44,6 @@ function OpMeter({ subscribe, opIdx }: { subscribe: Subscribe; opIdx: number }) 
   );
 }
 
-function LiveEnvGraph({
-  subscribe,
-  opIdx,
-  rates,
-  levels,
-}: {
-  subscribe: Subscribe;
-  opIdx: number;
-  rates: number[];
-  levels: number[];
-}) {
-  const stage = useStatus(subscribe, (s) => s.steps[opIdx], 4);
-  return <EnvGraph rates={rates} levels={levels} stage={stage} />;
-}
-
 interface OperatorPanelProps {
   opNum: number; // 1..6
   voice: Uint8Array;
@@ -66,6 +53,12 @@ interface OperatorPanelProps {
   subscribeStatus: Subscribe;
   hovered: boolean;
   onHover: (opNum: number | null) => void;
+  timeScale: EnvTimeScale;
+  yMode: YMode;
+  /** Show the per-operator envelope graph (hidden in the combined view). */
+  showEnv: boolean;
+  /** Flat 1×6 layout: lay the panel out horizontally. */
+  flat: boolean;
 }
 
 export const OperatorPanel = memo(function OperatorPanel({
@@ -77,6 +70,10 @@ export const OperatorPanel = memo(function OperatorPanel({
   subscribeStatus,
   hovered,
   onHover,
+  timeScale,
+  yMode,
+  showEnv,
+  flat,
 }: OperatorPanelProps) {
   const base = opBase(opNum);
   const opIdx = 6 - opNum; // sysex order, used by the engine status
@@ -100,7 +97,8 @@ export const OperatorPanel = memo(function OperatorPanel({
 
   return (
     <section
-      className={`panel op-panel${enabled ? '' : ' disabled'}${hovered ? ' hilite' : ''}`}
+      className={`panel op-panel${enabled ? '' : ' disabled'}${hovered ? ' hilite' : ''}${flat ? ' flat' : ''}`}
+      style={{ ['--op' as string]: OP_COLORS[opNum - 1] }}
       onPointerEnter={() => onHover(opNum)}
       onPointerLeave={() => onHover(null)}
     >
@@ -121,7 +119,21 @@ export const OperatorPanel = memo(function OperatorPanel({
         <OpMeter subscribe={subscribeStatus} opIdx={opIdx} />
       </div>
 
-      <LiveEnvGraph subscribe={subscribeStatus} opIdx={opIdx} rates={rates} levels={levels} />
+      {showEnv && (
+        <LiveEnvEditor
+          kind="amp"
+          rates={rates}
+          levels={levels}
+          ampParams={computeAmpParams(voice, opNum)}
+          timeScale={timeScale}
+          yMode={yMode}
+          color={OP_COLORS[opNum - 1]}
+          subscribe={subscribeStatus}
+          opIdx={opIdx}
+          onSetRate={(i, val) => setParam(base + OP.egRate(i), val)}
+          onSetLevel={(i, val) => setParam(base + OP.egLevel(i), val)}
+        />
+      )}
 
       <div className="eg-grid">
         {[0, 1, 2, 3].map((i) => (

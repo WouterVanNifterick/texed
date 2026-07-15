@@ -2,6 +2,7 @@
 // Carriers are filled, modulators outlined, self-feedback shown as a loop.
 
 import { algoGraph } from '../state/algo';
+import { opColor } from '../state/op-colors';
 
 const CELL = 26;
 const BOX = 17;
@@ -40,6 +41,7 @@ export function AlgoDisplay({ algorithm, hoverOp, onHover }: AlgoDisplayProps) {
         <g
           key={n.op}
           className={`${n.carrier ? 'carrier' : ''}${n.num === hoverOp ? ' hilite' : ''}`}
+          style={{ ['--op' as string]: opColor(n.num) }}
           onPointerEnter={() => onHover(n.num)}
           onPointerLeave={() => onHover(null)}
         >

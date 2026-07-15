@@ -68,6 +68,80 @@
   min-height: 0;
 }
 
+/* 1×6 stack: operators as six flat rows, global column spanning beside them. */
+.editor.stack {
+  grid-template-columns: 1fr 310px;
+  grid-template-rows: repeat(6, 1fr);
+}
+
+.editor.stack .global-col {
+  grid-column: 2;
+  grid-row: 1 / 7;
+}
+
+/* ==== Mode bar (envelope view / layout / axis switches) ==== */
+
+.mode-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.mode-bar-spacer {
+  flex: 1;
+}
+
+.segmented {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.segmented-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+
+.segmented-group {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgb(0 0 0 / 22%);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.seg {
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.seg:hover {
+  color: var(--text);
+}
+
+.seg.on {
+  color: var(--accent);
+  background: rgb(255 180 84 / 10%);
+  border-color: rgb(255 180 84 / 25%);
+}
+
 .algo-panel {
   gap: 3px;
 }
@@ -509,8 +583,10 @@
 }
 
 .op-panel.hilite {
-  border-color: var(--accent-dim);
-  box-shadow: 0 0 10px rgb(255 180 84 / 18%), inset 0 0 12px rgb(255 180 84 / 6%);
+  border-color: color-mix(in srgb, var(--op, var(--accent)) 55%, var(--line));
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--op, var(--accent)) 30%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 10%, transparent);
 }
 
 .op-power {
@@ -527,9 +603,11 @@
 }
 
 .op-power.on {
-  color: var(--accent);
-  border-color: var(--accent-dim);
-  box-shadow: 0 0 8px rgb(255 180 84 / 25%), inset 0 0 4px rgb(255 180 84 / 15%);
+  color: var(--op, var(--accent));
+  border-color: color-mix(in srgb, var(--op, var(--accent)) 55%, #10131a);
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--op, var(--accent)) 35%, transparent),
+    inset 0 0 4px color-mix(in srgb, var(--op, var(--accent)) 18%, transparent);
 }
 
 .op-role {
@@ -717,19 +795,28 @@
   right: 2px;
 }
 
-/* ==== Envelope graph ==== */
+/* ==== Envelope editor ==== */
 
-.env-graph {
+.env-editor {
+  position: relative;
   width: 100%;
   height: 64px;
   flex: none;
   background: linear-gradient(#0a0c11, #0d1017);
   border: 1px solid #232735;
   border-radius: 6px;
+  touch-action: none;
+  overflow: hidden;
 }
 
-.env-graph.tall {
+.env-editor.tall {
   height: 60px;
+}
+
+.env-editor svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* Gradient area fills between a curve and its "no effect" line. */
@@ -741,22 +828,262 @@
 .env-shape {
   fill: none;
   stroke: #5a6175;
-  stroke-width: 1.4;
+  stroke-width: 1.6;
   vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px rgb(110 231 160 / 25%));
 }
 
 .env-active {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 2.2;
+  stroke: #fff;
+  stroke-width: 2.4;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 2px var(--accent));
+  filter: drop-shadow(0 0 3px var(--accent));
+  pointer-events: none;
 }
 
 .env-grid {
   stroke: #1d212b;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.env-midline {
+  stroke: #3a4051;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.env-gate {
+  stroke: #6b7288;
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* Draggable envelope vertices. */
+.env-node {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -6px 0 0 -6px;
+  padding: 0;
+  border: 2px solid var(--green);
+  border-radius: 50%;
+  background: #0d1017;
+  cursor: grab;
+  touch-action: none;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.env-node:hover,
+.env-node:focus {
+  transform: scale(1.25);
+  outline: none;
+  box-shadow: 0 0 8px rgb(255 255 255 / 35%);
+  z-index: 3;
+}
+
+.env-node:active {
+  cursor: grabbing;
+}
+
+.env-node.unreached {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.env-overflow {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 700 14px var(--mono);
+  color: var(--dim);
+  pointer-events: none;
+}
+
+/* ==== Combined envelope overlay ==== */
+
+.env-overlay-panel {
+  flex: none;
+  height: 208px;
+  gap: 4px;
+}
+
+.env-legend {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+}
+
+.env-chip {
+  --chip: var(--dim);
+  padding: 2px 7px;
+  font: 700 9px var(--mono);
+  letter-spacing: 0.5px;
+  color: var(--dim);
+  background: #100e07;
+  border: 1px solid #2b3040;
+  border-left: 3px solid var(--chip);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.env-chip:hover,
+.env-chip.hover {
+  color: var(--text);
+}
+
+.env-chip.on {
+  color: #12141a;
+  background: var(--chip);
+  border-color: var(--chip);
+}
+
+.env-ref {
+  font: 9px var(--mono);
+  color: var(--dim);
+  opacity: 0.8;
+}
+
+.env-overlay-plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: linear-gradient(#0a0c11, #0d1017);
+  border: 1px solid #232735;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.env-overlay-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.env-bg-trace {
+  fill: none;
+  stroke-width: 1.4;
+  opacity: 0.4;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.env-bg-trace:hover {
+  opacity: 0.8;
+  stroke-width: 1.8;
+}
+
+.env-bg-trace.pitch {
+  stroke-dasharray: 4 3;
+}
+
+/* The selected envelope's editor fills the same box, drawn on top. */
+.env-overlay-fg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.env-overlay-fg .env-shape {
+  stroke-width: 2;
+}
+
+.env-overlay-axis {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font: 8px var(--mono);
+  color: var(--dim);
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+/* ==== Flat 1×6 operator panels ==== */
+/* Everything stays visible; the vertical strip becomes a horizontal row. */
+
+.op-panel.flat {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 6px;
+  padding: 5px 6px;
+  overflow: hidden;
+}
+
+/* Compact identity column — only as wide as OP / role / freq need. */
+.op-panel.flat .panel-head {
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 6px 0 0;
+  border-bottom: none;
+  border-right: 1px solid rgb(255 255 255 / 5%);
+}
+
+.op-panel.flat .op-freq {
+  min-width: 0;
+}
+
+.op-panel.flat .meter {
+  flex: none;
+  align-self: stretch;
+  height: 5px;
+}
+
+/* Grow into leftover space; width:auto so basis isn't 100% of the row. */
+.op-panel.flat .env-editor {
+  flex: 1 1 0;
+  width: auto;
+  height: auto;
+  align-self: stretch;
+  min-width: 110px;
+}
+
+.op-panel.flat .eg-grid {
+  flex: 0 0 auto;
+  grid-template-columns: repeat(8, auto);
+  align-content: center;
+  column-gap: 1px;
+}
+
+.op-panel.flat .ctl-row {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Size to knobs + FRACT; graph takes a modest fixed slice. */
+.op-panel.flat .scale-row {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.op-panel.flat .scale-graph-wrap {
+  flex: 0 0 88px;
+  width: 88px;
+}
+
+.op-panel.flat .scale-graph {
+  min-height: 46px;
 }
 
 /* ==== Algorithm display ==== */
@@ -769,18 +1096,18 @@
 
 .algo-node {
   fill: #232735;
-  stroke: #5a6175;
-  stroke-width: 1;
+  stroke: var(--op, #5a6175);
+  stroke-width: 1.4;
 }
 
 .carrier .algo-node {
-  fill: var(--accent);
+  fill: var(--op, var(--accent));
   stroke: none;
 }
 
 .algo-num {
   font: 700 9px sans-serif;
-  fill: var(--text);
+  fill: var(--op, var(--text));
 }
 
 .carrier .algo-num {
@@ -804,9 +1131,9 @@
 }
 
 .hilite .algo-node {
-  stroke: var(--accent);
-  stroke-width: 2;
-  filter: drop-shadow(0 0 3px var(--accent));
+  stroke: var(--op, var(--accent));
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 4px var(--op, var(--accent)));
 }
 
 .carrier.hilite .algo-node {

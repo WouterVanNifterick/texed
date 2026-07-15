@@ -5,11 +5,15 @@ import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
 import { getVoiceName, voiceToSysex } from './state/params';
 import { trackCc, trackAftertouch } from './state/live-ctrl';
-import { useFileDrop, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
+import { useFileDrop, usePersistentState, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
 import { OperatorPanel } from './components/OperatorPanel';
 import { GlobalPanel } from './components/GlobalPanel';
+import { EnvOverlay, type EnvSelection } from './components/EnvOverlay';
+import { useEnvTimeScale, type TimeMode } from './components/env-time';
+import { type YMode } from './components/env-draw';
+import { Segmented } from './components/ui';
 import { PartRack } from './components/PartRack';
 import { TopBar } from './components/TopBar';
 
@@ -27,6 +31,11 @@ export default function App() {
   const [volume, setVolume] = useState(80);
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
+  const [selectedOp, setSelectedOp] = useState<EnvSelection>(1);
+  const [envView, setEnvView] = usePersistentState<'individual' | 'combined'>('envView', 'individual');
+  const [opLayout, setOpLayout] = usePersistentState<'grid' | 'stack'>('opLayout', 'grid');
+  const [timeMode, setTimeMode] = usePersistentState<TimeMode>('envTimeMode', 'log');
+  const [yMode, setYMode] = usePersistentState<YMode>('envYMode', 'db');
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
   const [showParts, setShowParts] = useState(false);
   const [polyphony, setPolyphony] = useState(32);
@@ -34,6 +43,10 @@ export default function App() {
   const [loadMsg, showLoadMsg] = useTransientMessage();
 
   useStageScale(1440, 1020);
+
+  const timeScale = useEnvTimeScale(synth.voice, timeMode);
+  const combined = envView === 'combined';
+  const stack = opLayout === 'stack';
 
   useEffect(() => {
     if (!synth.loadReport) return;
@@ -216,7 +229,59 @@ export default function App() {
           midiInputs={midiInputs}
         />
 
-        <main className="editor">
+        <div className="mode-bar">
+          <Segmented
+            value={envView}
+            onChange={setEnvView}
+            options={[
+              { value: 'individual', label: 'SEPARATE', help: 'Show one envelope per operator plus the pitch EG.' },
+              { value: 'combined', label: 'COMBINED', help: 'Overlay all envelopes on one plot; edit the selected one on top.' },
+            ]}
+          />
+          <Segmented
+            value={opLayout}
+            onChange={setOpLayout}
+            options={[
+              { value: 'grid', label: '3×2', help: 'Arrange the six operator panels in a 3×2 grid.' },
+              { value: 'stack', label: '1×6', help: 'Stack the six operators as flat horizontal rows.' },
+            ]}
+          />
+          <div className="mode-bar-spacer" />
+          <Segmented
+            label="TIME"
+            value={timeMode}
+            onChange={setTimeMode}
+            options={[
+              { value: 'log', label: 'LOG', help: 'Logarithmic time axis: fast attacks and slow releases are both legible.' },
+              { value: 'linear', label: 'LIN', help: 'Linear time axis (clamped to 10 s), same seconds-per-pixel everywhere.' },
+            ]}
+          />
+          <Segmented
+            label="LEVEL"
+            value={yMode}
+            onChange={setYMode}
+            options={[
+              { value: 'db', label: 'dB', help: 'Decibel level axis: decay stages are straight, quiet levels stay visible.' },
+              { value: 'linear', label: 'LIN', help: 'Linear amplitude axis: matches raw sample output; low levels sit near the floor.' },
+            ]}
+          />
+        </div>
+
+        {combined && (
+          <EnvOverlay
+            voice={synth.voice}
+            timeScale={timeScale}
+            yMode={yMode}
+            selected={selectedOp}
+            onSelect={setSelectedOp}
+            setParam={synth.setParam}
+            subscribeStatus={synth.subscribeStatus}
+            hoverOp={hoverOp}
+            onHoverOp={setHoverOp}
+          />
+        )}
+
+        <main className={`editor${stack ? ' stack' : ''}${combined ? ' combined' : ''}`}>
           {[1, 2, 3, 4, 5, 6].map((opNum) => (
             <OperatorPanel
               key={opNum}
@@ -228,6 +293,10 @@ export default function App() {
               subscribeStatus={synth.subscribeStatus}
               hovered={hoverOp === opNum}
               onHover={setHoverOp}
+              timeScale={timeScale}
+              yMode={yMode}
+              showEnv={!combined}
+              flat={stack}
             />
           ))}
           <GlobalPanel
@@ -238,6 +307,9 @@ export default function App() {
             subscribeStatus={synth.subscribeStatus}
             hoverOp={hoverOp}
             onHoverOp={setHoverOp}
+            timeScale={timeScale}
+            yMode={yMode}
+            showEnv={!combined}
           />
         </main>
 

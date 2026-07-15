@@ -27,6 +27,13 @@ export const OP = {
   detune: 20, // 0-14, displayed -7..+7
 } as const;
 
+/** Neutral stored values for center-relative dial display. */
+export const PARAM_CENTER = {
+  detune: 7,
+  transpose: 24,
+  pitchEgLevel: 50,
+} as const;
+
 // Global parameter offsets.
 export const G = {
   pitchEgRate: (i: number) => 126 + i,

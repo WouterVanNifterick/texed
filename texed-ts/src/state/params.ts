@@ -4,7 +4,7 @@
 
 import { OP, G } from '../engine/voice-layout';
 
-export { OP, G, opBase } from '../engine/voice-layout';
+export { OP, G, opBase, PARAM_CENTER } from '../engine/voice-layout';
 
 export const CURVES = ['-LIN', '-EXP', '+EXP', '+LIN'];
 export const OSC_MODES = ['RATIO', 'FIXED'];
@@ -45,6 +45,12 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 
 export function formatTranspose(value: number): string {
   return `${NOTE_NAMES[value % 12]}${Math.floor(value / 12) + 1}`;
+}
+
+/** Signed semitone offset from middle C (stored 24 = 0). */
+export function formatTransposeSemitones(value: number): string {
+  const d = value - 24;
+  return d > 0 ? `+${d}` : `${d}`;
 }
 
 export function formatDetune(value: number): string {

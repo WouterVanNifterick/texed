@@ -23,6 +23,8 @@ interface TopBarProps {
   onPolyphony: (n: number) => void;
   volume: number;
   onVolume: (v: number) => void;
+  masterTuneCents: number;
+  onMasterTune: (cents: number) => void;
   cutoff: number;
   reso: number;
   onFx: (cutoff: number, reso: number) => void;
@@ -32,7 +34,7 @@ interface TopBarProps {
 export function TopBar({
   synth, program, onSelectProgram, loadMsg, onLoadFiles, onSaveVoice, onSaveBank,
   engineName, onEngine, onShowParts, polyphony, onPolyphony,
-  volume, onVolume, cutoff, reso, onFx, midiInputs,
+  volume, onVolume, masterTuneCents, onMasterTune, cutoff, reso, onFx, midiInputs,
 }: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -169,6 +171,17 @@ export function TopBar({
           size={28}
           onChange={onVolume}
           help="Master output volume (0–99), with a perceptual taper."
+        />
+        <Knob
+          label="TUNE"
+          value={Math.round(masterTuneCents)}
+          min={-50}
+          max={50}
+          center={0}
+          size={28}
+          format={(t) => (t > 0 ? `+${t}¢` : `${t}¢`)}
+          onChange={onMasterTune}
+          help="Master tune (−50…+50 cents) — global pitch offset from 8973S system setup."
         />
         <Knob
           label="CUTOFF"

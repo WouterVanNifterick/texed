@@ -3,7 +3,7 @@
 
 import { memo, useState } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { G, LFO_WAVES, formatTranspose } from '../state/params';
+import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '../state/params';
 import * as Sup from '../state/supplement';
 import { helpProps } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
@@ -85,9 +85,10 @@ export const GlobalPanel = memo(function GlobalPanel({
             label="TRANSP"
             value={voice[G.transpose]}
             max={48}
-            format={formatTranspose}
+            center={PARAM_CENTER.transpose}
+            format={formatTransposeSemitones}
             onChange={set(G.transpose)}
-            help="Key transpose — shifts the whole voice in semitones, C1–C5 (middle C = C3)."
+            help="Key transpose (−24…+24 semitones) — shifts the whole voice; 0 is no transpose."
           />
           <Toggle
             label="KEY SYNC"
@@ -170,6 +171,7 @@ export const GlobalPanel = memo(function GlobalPanel({
               label={`L${i + 1}`}
               value={voice[G.pitchEgLevel(i)]}
               max={99}
+              center={PARAM_CENTER.pitchEgLevel}
               onChange={set(G.pitchEgLevel(i))}
               help={`Pitch EG level ${i + 1} (0–99) — the pitch this envelope segment settles at; 50 is no pitch change.`}
             />
@@ -199,114 +201,133 @@ export const GlobalPanel = memo(function GlobalPanel({
             CTRL
           </button>
         </div>
-        <div className="ctl-row">
-          <Toggle
-            label="MONO"
-            on={Sup.getMono(supplement)}
-            onChange={(on) => setSup(Sup.setMono(supplement, on))}
-            help="Mono mode — plays one note at a time with last-note priority instead of polyphonically."
-          />
-          <Toggle
-            label="UNISON"
-            on={Sup.getUnison(supplement)}
-            onChange={(on) => setSup(Sup.setUnison(supplement, on))}
-            help="Unison — stacks several detuned voices on every note for a fatter sound, at the cost of polyphony."
-          />
-          <Knob
-            label="UNI DET"
-            value={Sup.getUnisonDetune(supplement)}
-            max={7}
-            size={24}
-            onChange={(v) => setSup(Sup.setUnisonDetune(supplement, v))}
-            help="Unison detune (0–7) — pitch spread between the stacked unison voices."
-          />
-          <Knob
-            label="RND PT"
-            value={Sup.getRandomPitchDepth(supplement)}
-            max={7}
-            size={24}
-            onChange={(v) => setSup(Sup.setRandomPitchDepth(supplement, v))}
-            help="Random pitch (0–7) — random per-note pitch drift, like a slightly unstable analog oscillator."
-          />
-          <Toggle
-            label="M.LFO"
-            on={Sup.getLfoKeyTrigger(supplement)}
-            onChange={(on) => setSup(Sup.setLfoKeyTrigger(supplement, on))}
-            help="Multi LFO — every note gets its own LFO restarted at key-down, instead of one LFO shared by all notes."
-          />
-        </div>
-        <div className="ctl-row">
-          <Knob
-            label="PB RNG"
-            value={Sup.getPitchBendRange(supplement)}
-            max={12}
-            size={24}
-            onChange={(v) => setSup(Sup.setPitchBendRange(supplement, v))}
-            help="Pitch bend range (0–12) — bend wheel range in semitones, up to one octave."
-          />
-          <Knob
-            label="PB STEP"
-            value={Sup.getPitchBendStep(supplement)}
-            max={12}
-            size={24}
-            onChange={(v) => setSup(Sup.setPitchBendStep(supplement, v))}
-            help="Pitch bend step (0–12) — quantizes the bend into semitone steps; 0 bends smoothly."
-          />
-          <Cycle
-            label="PB MODE"
-            value={Sup.getPitchBendMode(supplement)}
-            options={Sup.PB_MODES}
-            onChange={(v) => setSup(Sup.setPitchBendMode(supplement, v))}
-            help="Pitch bend mode — bend all notes, only the lowest or highest note, or only physically held keys (K.ON)."
-          />
-        </div>
-        <div className="ctl-row">
-          <Knob
-            label="PORTA"
-            value={Sup.getPortaTime(supplement)}
-            max={99}
-            size={24}
-            onChange={(v) => setSup(Sup.setPortaTime(supplement, v))}
-            help="Portamento time (0–99) — glide time from the previous note to the new one; 0 is instant."
-          />
-          <Cycle
-            label="P MODE"
-            value={Sup.getPortaMode(supplement)}
-            options={Sup.PORTA_MODES}
-            onChange={(v) => setSup(Sup.setPortaMode(supplement, v))}
-            help="Portamento mode — RETAIN/FOLLOW in poly mode; FINGERED (legato only) or FULL TIME in mono mode."
-          />
-          <Knob
-            label="P STEP"
-            value={Sup.getPortaStep(supplement)}
-            max={12}
-            size={24}
-            onChange={(v) => setSup(Sup.setPortaStep(supplement, v))}
-            help="Portamento step (0–12) — glissando in quantized semitone steps instead of a smooth glide; 0 is smooth."
-          />
-        </div>
-        <div className="ctl-row">
-          <Cycle
-            label="PEG RNG"
-            value={Sup.getPitchEgRange(supplement)}
-            options={Sup.PEG_RANGES}
-            onChange={(v) => setSup(Sup.setPitchEgRange(supplement, v))}
-            help="Pitch EG range — maximum pitch envelope excursion: 8 or 4 octaves, 1 octave, or a half octave."
-          />
-          <Knob
-            label="PEG RS"
-            value={Sup.getPitchEgScaleRate(supplement)}
-            max={7}
-            size={24}
-            onChange={(v) => setSup(Sup.setPitchEgScaleRate(supplement, v))}
-            help="Pitch EG rate scaling (0–7) — the pitch envelope runs faster for higher notes."
-          />
-          <Toggle
-            label="PEG VEL"
-            on={Sup.getPitchEgVelSens(supplement)}
-            onChange={(on) => setSup(Sup.setPitchEgVelSens(supplement, on))}
-            help="Pitch EG velocity — key velocity scales the depth of the pitch envelope."
-          />
+        <div className="dx7ii-groups">
+          <div className="ctl-group">
+            <div className="ctl-group-label">VOICE</div>
+            <div className="ctl-row">
+              <Toggle
+                label="MONO"
+                on={Sup.getMono(supplement)}
+                onChange={(on) => setSup(Sup.setMono(supplement, on))}
+                help="Mono mode — plays one note at a time with last-note priority instead of polyphonically."
+              />
+              <Toggle
+                label="UNISON"
+                on={Sup.getUnison(supplement)}
+                onChange={(on) => setSup(Sup.setUnison(supplement, on))}
+                help="Unison — stacks several detuned voices on every note for a fatter sound, at the cost of polyphony."
+              />
+              <Knob
+                label="UNI DET"
+                value={Sup.getUnisonDetune(supplement)}
+                max={7}
+                size={24}
+                onChange={(v) => setSup(Sup.setUnisonDetune(supplement, v))}
+                help="Unison detune (0–7) — pitch spread between the stacked unison voices."
+              />
+              <Knob
+                label="RND PT"
+                value={Sup.getRandomPitchDepth(supplement)}
+                max={7}
+                size={24}
+                onChange={(v) => setSup(Sup.setRandomPitchDepth(supplement, v))}
+                help="Random pitch (0–7) — random per-note pitch drift, like a slightly unstable analog oscillator."
+              />
+            </div>
+          </div>
+          <div className="ctl-group">
+            <div className="ctl-group-label">LFO</div>
+            <div className="ctl-row">
+              <Toggle
+                label="M.LFO"
+                on={Sup.getLfoKeyTrigger(supplement)}
+                onChange={(on) => setSup(Sup.setLfoKeyTrigger(supplement, on))}
+                help="Multi LFO — every note gets its own LFO restarted at key-down, instead of one LFO shared by all notes."
+              />
+            </div>
+          </div>
+          <div className="ctl-group">
+            <div className="ctl-group-label">PITCH BEND</div>
+            <div className="ctl-row">
+              <Knob
+                label="PB RNG"
+                value={Sup.getPitchBendRange(supplement)}
+                max={12}
+                size={24}
+                onChange={(v) => setSup(Sup.setPitchBendRange(supplement, v))}
+                help="Pitch bend range (0–12) — bend wheel range in semitones, up to one octave."
+              />
+              <Knob
+                label="PB STEP"
+                value={Sup.getPitchBendStep(supplement)}
+                max={12}
+                size={24}
+                onChange={(v) => setSup(Sup.setPitchBendStep(supplement, v))}
+                help="Pitch bend step (0–12) — quantizes the bend into semitone steps; 0 bends smoothly."
+              />
+              <Cycle
+                label="PB MODE"
+                value={Sup.getPitchBendMode(supplement)}
+                options={Sup.PB_MODES}
+                onChange={(v) => setSup(Sup.setPitchBendMode(supplement, v))}
+                help="Pitch bend mode — bend all notes, only the lowest or highest note, or only physically held keys (K.ON)."
+              />
+            </div>
+          </div>
+          <div className="ctl-group">
+            <div className="ctl-group-label">PORTAMENTO</div>
+            <div className="ctl-row">
+              <Knob
+                label="PORTA"
+                value={Sup.getPortaTime(supplement)}
+                max={99}
+                size={24}
+                onChange={(v) => setSup(Sup.setPortaTime(supplement, v))}
+                help="Portamento time (0–99) — glide time from the previous note to the new one; 0 is instant."
+              />
+              <Cycle
+                label="P MODE"
+                value={Sup.getPortaMode(supplement)}
+                options={Sup.PORTA_MODES}
+                onChange={(v) => setSup(Sup.setPortaMode(supplement, v))}
+                help="Portamento mode — RETAIN/FOLLOW in poly mode; FINGERED (legato only) or FULL TIME in mono mode."
+              />
+              <Knob
+                label="P STEP"
+                value={Sup.getPortaStep(supplement)}
+                max={12}
+                size={24}
+                onChange={(v) => setSup(Sup.setPortaStep(supplement, v))}
+                help="Portamento step (0–12) — glissando in quantized semitone steps instead of a smooth glide; 0 is smooth."
+              />
+            </div>
+          </div>
+          <div className="ctl-group">
+            <div className="ctl-group-label">PITCH EG</div>
+            <div className="ctl-row">
+              <Cycle
+                label="PEG RNG"
+                value={Sup.getPitchEgRange(supplement)}
+                options={Sup.PEG_RANGES}
+                onChange={(v) => setSup(Sup.setPitchEgRange(supplement, v))}
+                help="Pitch EG range — maximum pitch envelope excursion: 8 or 4 octaves, 1 octave, or a half octave."
+              />
+              <Knob
+                label="PEG RS"
+                value={Sup.getPitchEgScaleRate(supplement)}
+                max={7}
+                size={24}
+                onChange={(v) => setSup(Sup.setPitchEgScaleRate(supplement, v))}
+                help="Pitch EG rate scaling (0–7) — the pitch envelope runs faster for higher notes."
+              />
+              <Toggle
+                label="PEG VEL"
+                on={Sup.getPitchEgVelSens(supplement)}
+                onChange={(on) => setSup(Sup.setPitchEgVelSens(supplement, on))}
+                help="Pitch EG velocity — key velocity scales the depth of the pitch envelope."
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -369,12 +390,13 @@ function ControllerPanel({
   setSup: (edit: Sup.ByteEdit) => void;
   onClose: () => void;
 }) {
-  const knob = (row: CtrlRowSpec, dest: number, label: string, format?: (v: number) => string) => (
+  const knob = (row: CtrlRowSpec, dest: number, label: string, format?: (v: number) => string, center?: number) => (
     <Knob
       label={label}
       value={Sup.getCtrlRange(supplement, row.ctrl, dest)}
       max={99}
       size={20}
+      center={center}
       format={format}
       onChange={(v) => setSup(Sup.setCtrlRange(supplement, row.ctrl, dest, v))}
       help={DEST_HELP[label](row.name)}
@@ -396,7 +418,7 @@ function ControllerPanel({
           {knob(row, 1, 'AMP')}
           {knob(row, 2, 'EG')}
           {row.fourth === 'vol' && knob(row, 3, 'VOL')}
-          {row.fourth === 'bias' && knob(row, 3, 'BIAS', Sup.formatPitchBias)}
+          {row.fourth === 'bias' && knob(row, 3, 'BIAS', Sup.formatPitchBias, Sup.PITCH_BIAS_CENTER)}
           {row.fourth === null && <span />}
           {row.ctrl === 'foot' ? (
             <Toggle

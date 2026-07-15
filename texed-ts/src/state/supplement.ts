@@ -123,9 +123,12 @@ export const setCtrlRange = (_a: Uint8Array, ctrl: CtrlName, dest: number, value
   value: value & 0x7f,
 });
 
+/** Neutral stored value for pitch bias (0–99 range). */
+export const PITCH_BIAS_CENTER = 50;
+
 /** Format a 0–99 pitch bias (50 = center) as −50..+49. */
 export const formatPitchBias = (value: number): string => {
-  const d = value - 50;
+  const d = value - PITCH_BIAS_CENTER;
   return d > 0 ? `+${d}` : `${d}`;
 };
 

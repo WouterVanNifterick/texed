@@ -215,6 +215,8 @@ export default function App() {
           }}
           volume={volume}
           onVolume={onVolume}
+          masterTuneCents={synth.masterTuneCents}
+          onMasterTune={synth.setMasterTune}
           cutoff={cutoff}
           reso={reso}
           onFx={onFx}
@@ -259,8 +261,6 @@ export default function App() {
           performanceNames={synth.performanceNames}
           performanceIndex={synth.performanceIndex}
           onSelectPerformance={synth.selectPerformance}
-          masterTuneCents={synth.masterTuneCents}
-          onMasterTune={synth.setMasterTune}
           onSelect={synth.selectPart}
           onSetPart={synth.setPart}
           onSetVoiceRef={synth.setVoiceRef}

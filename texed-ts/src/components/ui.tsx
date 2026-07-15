@@ -17,6 +17,8 @@ interface KnobProps {
   layout?: 'stacked' | 'inline';
   /** Description shown in the help bar while hovered. */
   help?: string;
+  /** Neutral value on the arc; fill grows from here to the current value. */
+  center?: number;
 }
 
 const ARC = 270; // degrees of travel, gap at the bottom
@@ -33,7 +35,7 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help }: KnobProps) {
+export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help, center }: KnobProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
@@ -113,9 +115,25 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
   const c = size / 2;
   const r = c - 3;
   const start = -ARC / 2;
-  const frac = (value - min) / (max - min || 1);
-  const angle = start + frac * ARC;
+  const span = max - min || 1;
+  const valueFrac = (value - min) / span;
+  const angle = start + valueFrac * ARC;
   const [px, py] = polar(c, c, r - 3, angle);
+
+  let fillFrom = start;
+  let fillTo = angle;
+  let showFill = valueFrac > 0.004;
+  let centerAngle: number | null = null;
+  if (center !== undefined) {
+    centerAngle = start + ((center - min) / span) * ARC;
+    if (Math.abs(value - center) / span > 0.004) {
+      fillFrom = Math.min(centerAngle, angle);
+      fillTo = Math.max(centerAngle, angle);
+      showFill = true;
+    } else {
+      showFill = false;
+    }
+  }
 
   const display = format ? format(value) : String(value);
 
@@ -146,8 +164,13 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       >
         <circle cx={c} cy={c} r={r} className="knob-body" />
         <path d={arcPath(c, c, r, start, start + ARC)} className="knob-track" />
-        {frac > 0.004 && (
-          <path d={arcPath(c, c, r, start, angle)} className="knob-fill" style={accent ? { stroke: accent } : undefined} />
+        {centerAngle !== null && (() => {
+          const [tx1, ty1] = polar(c, c, r - 2.5, centerAngle);
+          const [tx2, ty2] = polar(c, c, r + 2.5, centerAngle);
+          return <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} className="knob-center-tick" />;
+        })()}
+        {showFill && (
+          <path d={arcPath(c, c, r, fillFrom, fillTo)} className="knob-fill" style={accent ? { stroke: accent } : undefined} />
         )}
         <line x1={c} y1={c} x2={px} y2={py} className="knob-pointer" />
       </svg>

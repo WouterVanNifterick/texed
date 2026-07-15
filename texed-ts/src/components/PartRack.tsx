@@ -16,8 +16,6 @@ interface PartRackProps {
   performanceNames: string[];
   performanceIndex: number;
   onSelectPerformance: (index: number) => void;
-  masterTuneCents: number;
-  onMasterTune: (cents: number) => void;
   onSelect: (index: number) => void;
   onSetPart: (index: number, config: Partial<PartConfig>) => void;
   onSetVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
@@ -27,7 +25,7 @@ interface PartRackProps {
 
 export function PartRack({
   configs, selectedPart, programOptions, performanceNames, performanceIndex,
-  onSelectPerformance, masterTuneCents, onMasterTune,
+  onSelectPerformance,
   onSelect, onSetPart, onSetVoiceRef, subscribeStatus, onClose,
 }: PartRackProps) {
   const [activity, setActivity] = useState<number[]>([]);
@@ -54,19 +52,6 @@ export function PartRack({
               </select>
             </label>
           )}
-          <label className="partrack-tune" title="Master tune (cents), from 8973S system setup">
-            Tune&nbsp;
-            <Knob
-              value={Math.round(masterTuneCents)}
-              min={-50}
-              max={50}
-              size={24}
-              layout="inline"
-              label=""
-              format={(t) => (t > 0 ? `+${t}¢` : `${t}¢`)}
-              onChange={onMasterTune}
-            />
-          </label>
           <button type="button" className="partrack-btn" onClick={onClose}>CLOSE</button>
         </div>
 
@@ -174,6 +159,7 @@ export function PartRack({
                         value={cfg.noteShift}
                         min={-24}
                         max={24}
+                        center={0}
                         size={28}
                         layout="inline"
                         label=""
@@ -191,6 +177,7 @@ export function PartRack({
                         value={cfg.detune}
                         min={-7}
                         max={7}
+                        center={0}
                         size={28}
                         layout="inline"
                         label=""

@@ -4,7 +4,7 @@
 
 import { memo } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { OP, G, opBase, formatOpFreq, formatDetune, OSC_MODES } from '../state/params';
+import { OP, G, opBase, formatOpFreq, formatDetune, OSC_MODES, PARAM_CENTER } from '../state/params';
 import { getAms, setAms, getScalingMode, setScalingMode } from '../state/supplement';
 import { algoGraph } from '../state/algo';
 import { helpProps } from '../state/help';
@@ -136,7 +136,7 @@ export const OperatorPanel = memo(function OperatorPanel({
         <Cycle label="MODE" value={v(OP.oscMode)} options={OSC_MODES} onChange={set(OP.oscMode)} help={HELP.mode} />
         <Knob label="COARSE" value={v(OP.freqCoarse)} max={31} onChange={set(OP.freqCoarse)} help={HELP.coarse} />
         <Knob label="FINE" value={v(OP.freqFine)} max={99} onChange={set(OP.freqFine)} help={HELP.fine} />
-        <Knob label="DETUNE" value={v(OP.detune)} max={14} format={formatDetune} onChange={set(OP.detune)} help={HELP.detune} />
+        <Knob label="DETUNE" value={v(OP.detune)} max={14} center={PARAM_CENTER.detune} format={formatDetune} onChange={set(OP.detune)} help={HELP.detune} />
         <Knob label="LEVEL" value={v(OP.outputLevel)} max={99} accent="var(--green)" onChange={set(OP.outputLevel)} help={HELP.level} />
         <Knob label="VEL" value={v(OP.velocitySens)} max={7} onChange={set(OP.velocitySens)} help={HELP.vel} />
       </div>

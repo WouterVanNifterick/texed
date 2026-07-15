@@ -31,7 +31,6 @@ export interface DexedSynth {
   setSupplementParam: (offset: number, value: number) => void;
   setMasterTune: (cents: number) => void;
   setVoice: (voice: Uint8Array) => void;
-  setFx: (cutoff: number, reso: number, gain: number) => void;
   setMasterGain: (gain: number) => void;
   panic: () => void;
   partConfigs: PartConfig[];
@@ -195,10 +194,6 @@ export function useDexedSynth(): DexedSynth {
     [post],
   );
 
-  const setFx = useCallback(
-    (cutoff: number, reso: number, gain: number) => post({ type: MsgType.SetFx, cutoff, reso, gain }),
-    [post],
-  );
   const setMasterGain = useCallback((gain: number) => post({ type: MsgType.SetMasterGain, gain }), [post]);
   const panic = useCallback(() => post({ type: MsgType.Panic }), [post]);
 
@@ -250,7 +245,6 @@ export function useDexedSynth(): DexedSynth {
       setSupplementParam,
       setMasterTune,
       setVoice,
-      setFx,
       setMasterGain,
       panic,
       partConfigs,
@@ -284,7 +278,6 @@ export function useDexedSynth(): DexedSynth {
       setSupplementParam,
       setMasterTune,
       setVoice,
-      setFx,
       setMasterGain,
       panic,
       partConfigs,

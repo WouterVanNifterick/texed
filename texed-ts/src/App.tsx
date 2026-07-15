@@ -25,8 +25,6 @@ export default function App() {
   const [started, setStarted] = useState(false);
   const [engine, setEngine] = useState(1); // Mark I default
   const [volume, setVolume] = useState(80);
-  const [cutoff, setCutoff] = useState(99);
-  const [reso, setReso] = useState(0);
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
@@ -121,15 +119,6 @@ export default function App() {
     [synth],
   );
 
-  const onFx = useCallback(
-    (c: number, r: number) => {
-      setCutoff(c);
-      setReso(r);
-      synth.setFx(c / 99, r / 99, 1);
-    },
-    [synth],
-  );
-
   const onSelectProgram = useCallback(
     (idx: number) => {
       synth.setProgram(idx);
@@ -217,9 +206,6 @@ export default function App() {
           onVolume={onVolume}
           masterTuneCents={synth.masterTuneCents}
           onMasterTune={synth.setMasterTune}
-          cutoff={cutoff}
-          reso={reso}
-          onFx={onFx}
           midiInputs={midiInputs}
         />
 

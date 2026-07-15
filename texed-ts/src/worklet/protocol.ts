@@ -16,7 +16,6 @@ export const MsgType = {
   LoadCart: 'loadCart',
   SetVoiceRef: 'setVoiceRef',
   SetEngine: 'setEngine',
-  SetFx: 'setFx',
   SetMasterGain: 'setMasterGain',
   SetParam: 'setParam',
   SetSupplementParam: 'setSupplementParam',
@@ -90,12 +89,6 @@ export interface SetEngineMsg {
   type: typeof MsgType.SetEngine;
   engine: number; // EngineType
 }
-export interface SetFxMsg {
-  type: typeof MsgType.SetFx;
-  cutoff: number;
-  reso: number;
-  gain: number;
-}
 export interface SetMasterGainMsg {
   type: typeof MsgType.SetMasterGain;
   gain: number;
@@ -132,7 +125,6 @@ export type ToWorkletMessage =
   | LoadCartMsg
   | SetVoiceRefMsg
   | SetEngineMsg
-  | SetFxMsg
   | SetMasterGainMsg
   | SetParamMsg
   | SetSupplementParamMsg

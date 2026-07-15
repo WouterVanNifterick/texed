@@ -153,9 +153,6 @@ class DexedProcessor extends AudioWorkletProcessor {
       case MsgType.SetEngine:
         this.rack.setEngineType(msg.engine as 0 | 1 | 2);
         break;
-      case MsgType.SetFx:
-        this.rack.setFx(msg.cutoff, msg.reso, msg.gain);
-        break;
       case MsgType.SetMasterGain:
         this.rack.setMasterGain(msg.gain);
         break;

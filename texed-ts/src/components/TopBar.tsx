@@ -25,16 +25,13 @@ interface TopBarProps {
   onVolume: (v: number) => void;
   masterTuneCents: number;
   onMasterTune: (cents: number) => void;
-  cutoff: number;
-  reso: number;
-  onFx: (cutoff: number, reso: number) => void;
   midiInputs: string[];
 }
 
 export function TopBar({
   synth, program, onSelectProgram, loadMsg, onLoadFiles, onSaveVoice, onSaveBank,
   engineName, onEngine, onShowParts, polyphony, onPolyphony,
-  volume, onVolume, masterTuneCents, onMasterTune, cutoff, reso, onFx, midiInputs,
+  volume, onVolume, masterTuneCents, onMasterTune, midiInputs,
 }: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -182,22 +179,6 @@ export function TopBar({
           format={(t) => (t > 0 ? `+${t}¢` : `${t}¢`)}
           onChange={onMasterTune}
           help="Master tune (−50…+50 cents) — global pitch offset from 8973S system setup."
-        />
-        <Knob
-          label="CUTOFF"
-          value={cutoff}
-          max={99}
-          size={28}
-          onChange={(c) => onFx(c, reso)}
-          help="Low-pass filter cutoff (0–99) — a Dexed extension, not on the original DX7; 99 is fully open."
-        />
-        <Knob
-          label="RESO"
-          value={reso}
-          max={99}
-          size={28}
-          onChange={(r) => onFx(cutoff, r)}
-          help="Filter resonance (0–99) — emphasis at the cutoff frequency (Dexed extension)."
         />
       </div>
 

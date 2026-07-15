@@ -121,14 +121,6 @@ export class SynthRack {
     this.masterGain = gain;
   }
 
-  setFx(cutoff: number, reso: number, gain: number): void {
-    for (const fx of [this.fxL, this.fxR]) {
-      fx.uiCutoff = cutoff;
-      fx.uiReso = reso;
-      fx.uiGain = gain;
-    }
-  }
-
   selectPart(index: number): void {
     if (index >= 0 && index < NUM_PARTS) this.selected = index;
   }

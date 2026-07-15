@@ -6,6 +6,11 @@ import { LG_N, N } from './synth';
 import { sar64 } from './fixedpoint';
 
 let srMultiplier = 1 << 24;
+let sampleRate = 44100;
+
+// TX802 EG Forced Damp: a stolen voice fades to silence over this window before
+// its slot is reclaimed, avoiding the click of an instantaneous cut.
+const DAMP_MS = 6;
 
 const levellut = [0, 5, 9, 13, 17, 20, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 42, 43, 45, 46];
 
@@ -40,12 +45,20 @@ export class Env {
   private inc = 0;
   private staticcount = 0;
   private down = true;
+  private damping = false;
 
-  static initSr(sampleRate: number): void {
-    srMultiplier = (44100.0 / sampleRate) * (1 << 24);
+  static initSr(sr: number): void {
+    sampleRate = sr;
+    srMultiplier = (44100.0 / sr) * (1 << 24);
   }
 
-  init(r: ArrayLike<number>, l: ArrayLike<number>, ol: number, rateScaling: number): void {
+  init(
+    r: ArrayLike<number>,
+    l: ArrayLike<number>,
+    ol: number,
+    rateScaling: number,
+    continueEnv = false,
+  ): void {
     this.initialised = true;
     for (let i = 0; i < 4; i++) {
       this.rates[i] = r[i];
@@ -53,8 +66,12 @@ export class Env {
     }
     this.outlevel = ol;
     this.rateScaling = rateScaling;
-    this.level = 0;
+    // Forced Damp OFF (continueEnv): keep the current level so the new note's
+    // attack continues from where the stolen note left off (the part of the
+    // attack below that level is not reproduced). ON: restart from zero.
+    if (!continueEnv) this.level = 0;
     this.down = true;
+    this.damping = false;
     this.advance(0);
   }
 
@@ -97,6 +114,22 @@ export class Env {
       this.down = d;
       this.advance(d ? 0 : 3);
     }
+  }
+
+  /**
+   * TX802 forced damp: ramp quickly to silence (~DAMP_MS) instead of the note's
+   * own release, so a stolen voice can be reclaimed without a click. Drives the
+   * existing !rising descent branch toward targetlevel 0, then advance(4).
+   */
+  forceDamp(): void {
+    this.down = false;
+    this.rising = false;
+    this.damping = true;
+    this.staticcount = 0;
+    this.targetlevel = 0;
+    this.ix = 3;
+    const blocks = Math.max(1, ((DAMP_MS / 1000) * sampleRate / N) | 0);
+    this.inc = Math.max(1, (this.level / blocks) | 0);
   }
 
   private advance(newix: number): void {
@@ -166,9 +199,11 @@ export class Env {
     this.down = src.down;
     this.staticcount = src.staticcount;
     this.inc = src.inc;
+    this.damping = src.damping;
   }
 
   isActive(): boolean {
+    if (this.damping && this.ix >= 4) return false;
     return this.initialised && (this.ix < 4 || this.levels[3] > 0);
   }
 }

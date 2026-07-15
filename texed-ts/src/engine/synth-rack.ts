@@ -37,6 +37,12 @@ export interface PartConfig {
   noteHigh: number;
   noteShift: number;
   detune: number;
+  /** TX802 EG Forced Damp (per instrument). ON = stolen voice restarts its
+   * envelope; OFF = new note continues the stolen note's envelope. */
+  forcedDamp: boolean;
+  /** TX802 Linked Tone Generator: when true, this part is a slave chained to the
+   * nearest non-linked part above it, extending that instrument's polyphony. */
+  link: boolean;
   voice: VoiceRef;
   /** Resolved display name when voice is set (from loaded banks). */
   voiceLabel?: string;
@@ -52,6 +58,8 @@ function defaultPartConfig(enabled: boolean): PartConfig {
     noteHigh: 127,
     noteShift: 0,
     detune: 0,
+    forcedDamp: true,
+    link: false,
     voice: defaultVoiceRef(),
   };
 }
@@ -157,7 +165,11 @@ export class SynthRack {
     }
     if (patch.noteShift !== undefined) this.parts[index].extraTranspose = cfg.noteShift;
     if (patch.detune !== undefined) this.parts[index].extraDetune = cfg.detune;
+    if (patch.forcedDamp !== undefined) this.parts[index].forcedDamp = cfg.forcedDamp;
     if (patch.enabled === false) this.parts[index].panic();
+    // Keep the link group consistent after any change to a member (including a
+    // link toggle, which can move `index` into or out of a group).
+    this.syncLinkedSlaves(this.masterIndexOf(index));
   }
 
   /** Load a full VoiceLibrary from a parsed sysex file (merges with existing data). */
@@ -166,6 +178,9 @@ export class SynthRack {
     this.lastLoadReport = report ?? null;
     for (let i = 0; i < NUM_PARTS; i++) {
       this.applyVoiceToPart(i);
+    }
+    for (let i = 0; i < NUM_PARTS; i++) {
+      if (!this.isSlave(i)) this.syncLinkedSlaves(i);
     }
     if (this.library.performances.length > 0) {
       this.selectPerformance(this.library.performanceIndex);
@@ -182,6 +197,7 @@ export class SynthRack {
     if (index < 0 || index >= NUM_PARTS) return;
     this.configs[index].voice = { bank: ref.bank, program: ref.program & 0x1f };
     this.applyVoiceToPart(index);
+    this.syncLinkedSlaves(this.masterIndexOf(index));
   }
 
   private applyVoiceToPart(index: number): void {
@@ -223,6 +239,11 @@ export class SynthRack {
     for (let i = 0; i < NUM_PARTS; i++) {
       this.setPartConfig(i, { ...defaultPartConfig(false), ...parts[i] });
     }
+    // setPartConfig already syncs per index, but a later master edit can precede
+    // its slaves being marked linked; re-sync every group once all parts are set.
+    for (let i = 0; i < NUM_PARTS; i++) {
+      if (!this.isSlave(i)) this.syncLinkedSlaves(i);
+    }
   }
 
   getPerformanceState(): { names: string[]; index: number } {
@@ -246,6 +267,17 @@ export class SynthRack {
     this.parts[index].setSupplementParam(offset, value);
   }
 
+  /**
+   * Commit the selected part's edit buffer into a bank slot (defaults to the
+   * part's currently-assigned voice ref). Edits are otherwise ephemeral and
+   * lost on the next program change / performance reselect.
+   */
+  storeSelectedVoice(dest?: VoiceRef): void {
+    const part = this.parts[this.selected];
+    const ref = dest ?? this.configs[this.selected].voice;
+    this.library.storeVoice(ref, part.getVoiceData(), part.getSupplementData());
+  }
+
   getVoiceData(index = this.selected): Uint8Array {
     return this.parts[index].getVoiceData();
   }
@@ -254,9 +286,51 @@ export class SynthRack {
     return this.parts[index].getSupplementData();
   }
 
+  /** A part is a linked slave when it (and only it) carries the link flag; part 0
+   * can never be a slave since it has no part above to chain to. */
+  private isSlave(index: number): boolean {
+    return index > 0 && this.configs[index].link;
+  }
+
+  /** The master (non-linked) part that heads `index`'s link chain. */
+  private masterIndexOf(index: number): number {
+    let i = index;
+    while (i > 0 && this.configs[i].link) i--;
+    return i;
+  }
+
+  /** A master's group: itself followed by the contiguous run of linked slaves. */
+  private groupMembers(master: number): number[] {
+    const members = [master];
+    for (let i = master + 1; i < NUM_PARTS && this.configs[i].link; i++) {
+      members.push(i);
+    }
+    return members;
+  }
+
+  /** Copy a master's authoritative config onto its linked slaves so a group acts
+   * as one instrument. Slave rows are never authoritative, preventing drift. */
+  private syncLinkedSlaves(master: number): void {
+    if (this.isSlave(master)) return;
+    const m = this.configs[master];
+    for (let i = master + 1; i < NUM_PARTS && this.configs[i].link; i++) {
+      const s = this.configs[i];
+      const wasEnabled = s.enabled;
+      s.enabled = m.enabled;
+      if (!voiceRefEquals(s.voice, m.voice)) {
+        s.voice = { ...m.voice };
+        this.applyVoiceToPart(i);
+      }
+      this.parts[i].forcedDamp = m.forcedDamp;
+      if (wasEnabled && !s.enabled) this.parts[i].panic();
+    }
+  }
+
   private matches(index: number, channel: number): boolean {
     const cfg = this.configs[index];
     if (!cfg.enabled) return false;
+    // Slaves never match independently; they follow their master's routing.
+    if (this.isSlave(index)) return false;
     return cfg.rxChannel === 0 || cfg.rxChannel === channel;
   }
 
@@ -300,32 +374,48 @@ export class SynthRack {
       const cfg = this.configs[i];
       if (!inNoteRange(pitch, cfg.noteLow, cfg.noteHigh)) continue;
       this.enforceCap(1);
-      this.parts[i].noteOn(pitch, velocity, channel);
+      // Route to the least-busy member of the link group so a linked instrument
+      // fills its combined voice pools (extended polyphony).
+      const members = this.groupMembers(i);
+      let target = i;
+      let fewest = this.parts[i].activeVoiceCount();
+      for (let k = 1; k < members.length; k++) {
+        const n = this.parts[members[k]].activeVoiceCount();
+        if (n < fewest) {
+          fewest = n;
+          target = members[k];
+        }
+      }
+      this.parts[target].noteOn(pitch, velocity, channel);
     }
   }
 
   noteOff(pitch: number, channel = 1): void {
     for (let i = 0; i < NUM_PARTS; i++) {
       if (!this.matches(i, channel)) continue;
-      this.parts[i].noteOff(pitch, channel);
+      // The note may live in any group pool, so release across all members.
+      for (const m of this.groupMembers(i)) this.parts[m].noteOff(pitch, channel);
     }
   }
 
   controlChange(ctrl: number, value: number, channel = 1): void {
     for (let i = 0; i < NUM_PARTS; i++) {
-      if (this.matches(i, channel)) this.parts[i].controlChange(ctrl, value);
+      if (!this.matches(i, channel)) continue;
+      for (const m of this.groupMembers(i)) this.parts[m].controlChange(ctrl, value);
     }
   }
 
   pitchBend(value14: number, channel = 1): void {
     for (let i = 0; i < NUM_PARTS; i++) {
-      if (this.matches(i, channel)) this.parts[i].pitchBend(value14);
+      if (!this.matches(i, channel)) continue;
+      for (const m of this.groupMembers(i)) this.parts[m].pitchBend(value14);
     }
   }
 
   aftertouch(value: number, channel = 1): void {
     for (let i = 0; i < NUM_PARTS; i++) {
-      if (this.matches(i, channel)) this.parts[i].aftertouch(value);
+      if (!this.matches(i, channel)) continue;
+      for (const m of this.groupMembers(i)) this.parts[m].aftertouch(value);
     }
   }
 
@@ -366,7 +456,9 @@ export class SynthRack {
     outR.fill(0, 0, numSamples);
 
     for (let i = 0; i < NUM_PARTS; i++) {
-      const cfg = this.configs[i];
+      // A linked slave is voiced by its master's volume/pan/enabled so the group
+      // mixes as a single instrument.
+      const cfg = this.configs[this.masterIndexOf(i)];
       if (!cfg.enabled) continue;
       this.parts[i].render(scratch, numSamples);
       const th = (cfg.pan + 1) * 0.25 * Math.PI;

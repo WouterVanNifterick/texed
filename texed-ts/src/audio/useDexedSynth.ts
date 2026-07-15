@@ -44,6 +44,8 @@ export interface DexedSynth {
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
   /** Request a bank half as SysEx; cb gets null when the bank is empty. */
   requestBankDump: (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => void;
+  /** Commit the selected part's edit buffer into a voice slot (defaults to its current voice ref). */
+  storeVoice: (dest?: VoiceRef) => void;
 }
 
 export function useStatus<T>(
@@ -217,6 +219,8 @@ export function useDexedSynth(): DexedSynth {
     [post],
   );
 
+  const storeVoice = useCallback((dest?: VoiceRef) => post({ type: MsgType.StoreVoice, dest }), [post]);
+
   const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
     statusSubs.current.add(cb);
     return () => statusSubs.current.delete(cb);
@@ -257,6 +261,7 @@ export function useDexedSynth(): DexedSynth {
       selectPerformance,
       subscribeStatus,
       requestBankDump,
+      storeVoice,
     }),
     [
       start,
@@ -290,6 +295,7 @@ export function useDexedSynth(): DexedSynth {
       selectPerformance,
       subscribeStatus,
       requestBankDump,
+      storeVoice,
     ],
   );
 }

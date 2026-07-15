@@ -194,3 +194,92 @@ describe('SynthRack', () => {
     expect(rack.getStatus().totalActive).toBe(0);
   });
 });
+
+describe('SynthRack — Store to Voice Memory', () => {
+  it('commits the edit buffer into a slot and survives voice reselect', () => {
+    const rack = new SynthRack(44100);
+    loadRom(rack);
+    rack.selectPart(0);
+    const ref = rack.getPartConfig(0).voice;
+
+    rack.setVoiceParamForPart(0, 0, 42); // edit OP6 EG rate 1
+    expect(rack.getVoiceData(0)[0]).toBe(42);
+
+    rack.storeSelectedVoice();
+    expect(rack.voiceLibrary.resolve(ref)?.vmem[0]).toBe(42);
+
+    // Switching program discards the (now-stored) edit buffer, but reselecting
+    // the slot reloads the committed edit rather than the original ROM value.
+    rack.setPartConfig(0, { voice: { bank: 'internalA', program: 5 } });
+    rack.setPartConfig(0, { voice: ref });
+    expect(rack.getVoiceData(0)[0]).toBe(42);
+  });
+
+  it('stores to an explicit destination slot', () => {
+    const rack = new SynthRack(44100);
+    loadRom(rack);
+    rack.selectPart(0);
+    rack.setVoiceParamForPart(0, 1, 37);
+
+    const dest = { bank: 'internalB' as const, program: 7 };
+    rack.storeSelectedVoice(dest);
+    expect(rack.voiceLibrary.resolve(dest)?.vmem[1]).toBe(37);
+  });
+});
+
+describe('SynthRack — Linked Tone Generators', () => {
+  it('a single note reaches only one instrument when linked (slave does not match independently)', () => {
+    const linked = new SynthRack(44100);
+    linked.setPartConfig(0, { enabled: true, rxChannel: 0 });
+    linked.setPartConfig(1, { enabled: true, link: true });
+    linked.noteOn(60, 100, 1);
+    renderPeak(linked, 10);
+    expect(linked.getStatus().totalActive).toBe(1);
+
+    // Same two parts unlinked (both omni) double the note.
+    const unlinked = new SynthRack(44100);
+    unlinked.setPartConfig(0, { enabled: true, rxChannel: 0 });
+    unlinked.setPartConfig(1, { enabled: true, rxChannel: 0 });
+    unlinked.noteOn(60, 100, 1);
+    renderPeak(unlinked, 10);
+    expect(unlinked.getStatus().totalActive).toBe(2);
+  });
+
+  it('distributes notes across the group pools for combined polyphony', () => {
+    const rack = new SynthRack(44100);
+    rack.setPartConfig(0, { enabled: true, rxChannel: 1 });
+    rack.setPartConfig(1, { enabled: true, link: true });
+    for (let n = 60; n < 68; n++) rack.noteOn(n, 100, 1);
+    renderPeak(rack, 10);
+    const act = rack.getStatus().partActivity;
+    expect(act[0]).toBeGreaterThan(0);
+    expect(act[1]).toBeGreaterThan(0);
+    expect(act[0] + act[1]).toBe(8);
+  });
+
+  it('keeps a slave voice synced to its master', () => {
+    const rack = new SynthRack(44100);
+    loadRom(rack);
+    rack.setPartConfig(0, { enabled: true });
+    rack.setPartConfig(1, { enabled: true, link: true });
+
+    rack.setVoiceRefForPart(0, { bank: 'internalA', program: 5 });
+    expect(rack.getVoiceData(1)).toEqual(rack.getVoiceData(0));
+  });
+});
+
+describe('SynthRack — forced damp', () => {
+  it('cross-part steal keeps audio continuous (no instant cut)', () => {
+    const rack = new SynthRack(44100);
+    rack.setPolyphonyCap(2);
+    rack.setPartConfig(0, { enabled: true, rxChannel: 1 });
+    rack.setPartConfig(1, { enabled: true, rxChannel: 2 });
+    rack.noteOn(60, 100, 1);
+    rack.noteOn(64, 100, 1);
+    renderPeak(rack, 20);
+    // A third note forces a steal; audio must not drop to silence on that block.
+    rack.noteOn(67, 100, 2);
+    expect(renderPeak(rack, 2).l).toBeGreaterThan(0);
+    expect(rack.getStatus().totalActive).toBeLessThanOrEqual(2);
+  });
+});

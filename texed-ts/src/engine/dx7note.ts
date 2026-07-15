@@ -46,13 +46,13 @@ const velocityData = [
   252, 253, 254,
 ];
 
-function scaleVelocity(velocity: number, sensitivity: number): number {
+export function scaleVelocity(velocity: number, sensitivity: number): number {
   const clampedVel = Math.max(0, Math.min(127, velocity));
   const velValue = velocityData[clampedVel >> 1] - 239;
   return ((sensitivity * velValue + 7) >> 3) << 4;
 }
 
-function scaleRate(midinote: number, sensitivity: number): number {
+export function scaleRate(midinote: number, sensitivity: number): number {
   const x = Math.min(31, Math.max(0, Math.trunc(midinote / 3) - 7));
   return (sensitivity * x) >> 3;
 }
@@ -184,7 +184,13 @@ export class Dx7Note {
     return logfreq | 0;
   }
 
-  init(patch: Uint8Array, midinote: number, velocity: number, _channel: number): void {
+  init(
+    patch: Uint8Array,
+    midinote: number,
+    velocity: number,
+    _channel: number,
+    continueEnv = false,
+  ): void {
     this.initialised = true;
     this.bendGate = true;
     const rates = new Int32Array(4);
@@ -221,7 +227,7 @@ export class Dx7Note {
       outlevel += scaleVelocity(velocity, patch[off + 15]);
       outlevel = Math.max(0, outlevel);
       const rateScaling = scaleRate(midinote, patch[off + 13]);
-      this.env[op].init(rates, levels, outlevel, rateScaling);
+      this.env[op].init(rates, levels, outlevel, rateScaling, continueEnv);
 
       const mode = patch[off + 17];
       const coarse = patch[off + 18];
@@ -361,6 +367,13 @@ export class Dx7Note {
       this.env[op].keydown(false);
     }
     this.pitchenv.keydown(false);
+  }
+
+  /** TX802 forced damp: ramp all operators quickly to silence (see Env.forceDamp). */
+  forceDamp(): void {
+    for (let op = 0; op < 6; op++) {
+      this.env[op].forceDamp();
+    }
   }
 
   update(patch: Uint8Array, midinote: number, velocity: number, _channel: number): void {

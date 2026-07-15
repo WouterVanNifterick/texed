@@ -38,6 +38,9 @@ interface Voice {
   sustained: boolean;
   live: boolean;
   keydownSeq: number;
+  /** Forced-damp fade in progress: still audible, but no longer counts toward
+   * the polyphony budget and is not a steal candidate (see killOldest). */
+  damping: boolean;
 }
 
 export class Part {
@@ -62,6 +65,11 @@ export class Part {
 
   /** Performance-level detune in cents (−7..+7). Set by SynthRack from PartConfig.detune. */
   extraDetune = 0;
+
+  /** TX802 EG Forced Damp. ON (default): a stolen voice restarts its envelope
+   * from 0 (entire attack reproduced). OFF: the new note continues from the
+   * stolen note's current envelope level. Set by SynthRack from PartConfig. */
+  forcedDamp = true;
 
   private lastLfoValue = 0;
   private lastLfoDelay = 0;
@@ -89,6 +97,7 @@ export class Part {
         sustained: false,
         live: false,
         keydownSeq: -1,
+        damping: false,
       });
     }
 
@@ -179,6 +188,7 @@ export class Part {
       if (!v.live) continue;
       v.keydown = false;
       v.sustained = false;
+      v.damping = false;
       v.dx7Note.keyup();
       v.live = false;
       v.midiNote = -1;
@@ -286,11 +296,15 @@ export class Part {
     v.velocity = velocity;
     v.sustained = this.sustain;
     v.keydown = true;
+    v.damping = false;
     v.keydownSeq = this.nextKeydownSeq++;
 
     const voiceSteal = v.dx7Note.isPlaying();
+    // Forced Damp OFF: a stolen (still-playing) slot continues its envelope into
+    // the new note. ON (or a free slot): restart the envelope from the beginning.
+    const continueEnv = voiceSteal && !this.forcedDamp;
     v.dx7Note.setSupplement(this.supplement);
-    v.dx7Note.init(this.data, this.enginePitch(pitch) + detuneCents / 100, velocity, channel);
+    v.dx7Note.init(this.data, this.enginePitch(pitch) + detuneCents / 100, velocity, channel, continueEnv);
     if (this.data[G.oscKeySync] && !voiceSteal) {
       v.dx7Note.oscSync();
     }
@@ -405,6 +419,7 @@ export class Part {
       this.voices[i].midiNote = -1;
       this.voices[i].keydown = false;
       this.voices[i].sustained = false;
+      this.voices[i].damping = false;
       this.voices[i].live = false;
       this.voices[i].dx7Note.keyup();
       this.voices[i].dx7Note.oscSync();
@@ -413,10 +428,12 @@ export class Part {
 
   // ==== Shared-budget voice stealing (used by SynthRack) ====
 
-  /** Number of voices currently producing sound. */
+  /** Number of voices currently producing sound and counting toward the
+   * polyphony budget. Voices in a forced-damp fade are excluded — they are on
+   * their way out and must not cause further steals. */
   activeVoiceCount(): number {
     let n = 0;
-    for (const v of this.voices) if (v.live && v.dx7Note.isPlaying()) n++;
+    for (const v of this.voices) if (v.live && !v.damping && v.dx7Note.isPlaying()) n++;
     return n;
   }
 
@@ -434,7 +451,7 @@ export class Part {
     let best: { seq: number; released: boolean; idx: number } | null = null;
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       const v = this.voices[i];
-      if (!v.live || !v.dx7Note.isPlaying()) continue;
+      if (!v.live || v.damping || !v.dx7Note.isPlaying()) continue;
       const released = !v.keydown;
       if (
         !best ||
@@ -447,17 +464,18 @@ export class Part {
     return best ? { seq: best.seq, released: best.released } : null;
   }
 
-  /** Immediately silence the oldest matching voice (used for cross-part steal). */
+  /** Free the oldest matching voice for cross-part steal. Starts a short
+   * forced-damp fade (click-free) rather than an instant cut; the slot is
+   * reclaimed by the render-loop reaper once the fade completes. */
   killOldest(): void {
     const cand = this.stealCandidate();
     if (!cand) return;
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       const v = this.voices[i];
-      if (v.live && v.dx7Note.isPlaying() && v.keydownSeq === cand.seq && !v.keydown === cand.released) {
+      if (v.live && !v.damping && v.dx7Note.isPlaying() && v.keydownSeq === cand.seq && !v.keydown === cand.released) {
         v.keydown = false;
-        v.live = false;
-        v.midiNote = -1;
-        v.dx7Note.oscSync();
+        v.damping = true;
+        v.dx7Note.forceDamp();
         return;
       }
     }
@@ -550,6 +568,14 @@ export class Part {
 
         for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
           if (this.voices[note].live) {
+            const vv = this.voices[note];
+            // Reap voices whose forced-damp fade has reached silence.
+            if (vv.damping && !vv.dx7Note.isPlaying()) {
+              vv.live = false;
+              vv.damping = false;
+              vv.midiNote = -1;
+              continue;
+            }
             this.voices[note].dx7Note.compute(audiobuf, lfovalue, lfodelay, this.controllers);
             for (let j = 0; j < N; j++) {
               let val = audiobuf[j];

@@ -26,6 +26,7 @@ export const MsgType = {
   SetPolyphonyCap: 'setPolyphonyCap',
   SelectPerformance: 'selectPerformance',
   RequestBankDump: 'requestBankDump',
+  StoreVoice: 'storeVoice',
 } as const;
 
 export interface NoteOnMsg {
@@ -114,6 +115,11 @@ export interface RequestBankDumpMsg {
   type: typeof MsgType.RequestBankDump;
   bank: VoiceBankId;
 }
+export interface StoreVoiceMsg {
+  type: typeof MsgType.StoreVoice;
+  /** Destination slot; defaults to the selected part's current voice ref. */
+  dest?: VoiceRef;
+}
 
 export type ToWorkletMessage =
   | NoteOnMsg
@@ -134,7 +140,8 @@ export type ToWorkletMessage =
   | SetPartMsg
   | SetPolyphonyCapMsg
   | SelectPerformanceMsg
-  | RequestBankDumpMsg;
+  | RequestBankDumpMsg
+  | StoreVoiceMsg;
 
 export interface ProgramStateMsg {
   type: 'programState';

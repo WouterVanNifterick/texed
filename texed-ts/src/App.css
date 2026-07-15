@@ -12,7 +12,7 @@
   --mono: Consolas, 'SF Mono', monospace;
 }
 
-/* ==== Rack layout: fixed 1440x930 stage, scaled to fit the window ==== */
+/* ==== Rack layout: fixed 1440x1020 stage, scaled to fit the window ==== */
 
 .app-root {
   position: fixed;
@@ -28,7 +28,7 @@
   left: 50%;
   top: 50%;
   width: 1440px;
-  height: 930px;
+  height: 1020px;
   transform: translate(-50%, -50%) scale(var(--stage-scale, 1));
   display: flex;
   flex-direction: column;
@@ -54,7 +54,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr minmax(220px, 250px);
+  grid-template-columns: 1fr 1fr 1fr 310px;
   grid-template-rows: 1fr 1fr;
   gap: 6px;
 }
@@ -62,38 +62,75 @@
 .global-col {
   grid-column: 4;
   grid-row: 1 / 3;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 6px;
   min-height: 0;
 }
 
-.global-col .panel {
-  flex: 1;
+.algo-panel {
+  gap: 3px;
+}
+
+.algo-panel-body {
+  display: flex;
+  gap: 8px;
+  height: 104px;
   min-height: 0;
 }
 
-/* Weighted so the taller pitch EG and the LFO shape graph fit. */
-.global-col .lfo-panel {
-  flex: 1.34;
+.algo-vis-block {
+  flex: 0 0 128px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+  padding: 4px;
+  background: rgb(0 0 0 / 18%);
+  border: 1px solid rgb(255 255 255 / 5%);
+  border-radius: 6px;
 }
 
-.global-col .pitch-panel {
-  flex: 1.58;
+.algo-vis-block .algo-display {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.algo-ctl-block {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+
+.algo-ctl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 6px;
+  width: 100%;
+  align-items: end;
+  justify-items: center;
 }
 
 .global-col .dx7ii-panel {
-  flex: 1.26;
+  min-height: 0;
 }
 
 .dx7ii-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 6px;
+}
+
+.ctl-group.wide {
+  grid-column: 1 / -1;
 }
 
 .ctl-group {
-  padding: 5px 7px 3px;
+  padding: 4px 6px 2px;
   background: rgb(0 0 0 / 16%);
   border: 1px solid rgb(255 255 255 / 5%);
   border-radius: 6px;
@@ -104,47 +141,57 @@
   font-weight: 700;
   letter-spacing: 0.6px;
   color: var(--dim);
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   opacity: 0.9;
 }
 
-/* DX7II controller-modulation popover, anchored over the global column.
-   `.panel.ctrl-mod-panel` so the shadow/border beat the base .panel rule
-   defined later in this file. */
-.panel.ctrl-mod-panel {
-  position: absolute;
-  right: 8px;
-  top: 60px;
-  width: 330px;
-  z-index: 30;
-  border-color: #3d4456;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 6%),
-    0 8px 24px rgb(0 0 0 / 65%),
-    0 28px 70px rgb(0 0 0 / 85%);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* DX7II / CTRL tab strip in the panel head. */
+.panel-tab {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-/* Grid keeps the PITCH / AMP / EG / 4th columns aligned across all rows. */
-.ctrl-mod-row {
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab.on {
+  color: var(--accent);
+  background: rgb(255 180 84 / 8%);
+  border-color: rgb(255 180 84 / 22%);
+}
+
+/* Controller-modulation matrix, shown by the CTRL tab: destinations as
+   rows, the six physical controllers as columns. */
+.ctrl-mod-grid {
   display: grid;
-  grid-template-columns: 52px repeat(4, 1fr) 44px;
-  align-items: end;
+  grid-template-columns: 42px repeat(6, 1fr);
+  gap: 5px 4px;
+  align-items: center;
   justify-items: center;
-  gap: 4px;
-  padding: 3px 0;
-  border-bottom: 1px solid rgb(255 255 255 / 6%);
+  flex: 1;
+  min-height: 0;
 }
 
-.ctrl-mod-row:last-child {
-  border-bottom: none;
-}
-
-.ctrl-mod-id {
+.ctrl-grid-dest {
   justify-self: start;
-  align-self: center;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+}
+
+/* Column header: controller name + live MIDI value + meter. */
+.ctrl-mod-id {
+  align-self: end;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -153,35 +200,39 @@
 
 .ctrl-mod-name {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  font-size: 10px;
+  justify-content: center;
+  font-size: 11px;
   font-weight: 700;
   opacity: 0.8;
 }
 
 .ctrl-live-val {
-  font: 8px var(--mono);
+  font: 9px var(--mono);
   color: var(--lcd);
 }
 
 /* Live MIDI value meter for one physical controller. */
 .ctrl-live {
-  height: 4px;
+  height: 5px;
   background: #0b0d12;
   border: 1px solid #232735;
   border-radius: 2px;
   overflow: hidden;
 }
 
+.ctrl-mod-grid .knob-value {
+  font-size: 10px;
+}
+
+.dx7ii-panel .ctrl-mod-grid .cycle .toggle {
+  font-size: 9px;
+  padding: 4px 6px;
+}
+
 .ctrl-live-fill {
   height: 100%;
   background: linear-gradient(90deg, #2c8a5a, var(--green));
   transition: width 0.05s linear;
-}
-
-.ctrl-mod-btn.on {
-  color: var(--green);
 }
 
 /* ==== Top bar ==== */
@@ -558,22 +609,27 @@
 /* ==== Keyboard level scaling graph ==== */
 
 .scale-row {
+  flex: 1;
+  min-height: 0;
   align-items: flex-end;
   gap: 6px;
 }
 
-/* Help-hover wrapper; keeps the graph filling the leftover row width. */
+/* Help-hover wrapper; keeps the graph filling the leftover row width and
+   stretching into whatever height the panel has left. */
 .scale-graph-wrap {
   flex: 1;
   min-width: 0;
   display: flex;
+  align-self: stretch;
 }
 
 .scale-graph {
   position: relative;
   flex: 1;
   min-width: 0;
-  height: 56px;
+  height: auto;
+  min-height: 56px;
   background: linear-gradient(#0a0c11, #0d1017);
   border: 1px solid #232735;
   border-radius: 6px;
@@ -665,7 +721,7 @@
 
 .env-graph {
   width: 100%;
-  height: 44px;
+  height: 64px;
   flex: none;
   background: linear-gradient(#0a0c11, #0d1017);
   border: 1px solid #232735;
@@ -673,7 +729,7 @@
 }
 
 .env-graph.tall {
-  height: 68px;
+  height: 60px;
 }
 
 /* Gradient area fills between a curve and its "no effect" line. */
@@ -1344,6 +1400,16 @@ button.start:hover {
 
 .partrack .part-led.on {
   background: var(--green);
+}
+
+.partrack .part-linked {
+  color: var(--dim);
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.partrack tr.linked .part-num {
+  opacity: 0.6;
 }
 
 .partrack-note {

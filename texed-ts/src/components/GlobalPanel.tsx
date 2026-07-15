@@ -47,7 +47,7 @@ export const GlobalPanel = memo(function GlobalPanel({
   hoverOp,
   onHoverOp,
 }: GlobalPanelProps) {
-  const [showControllers, setShowControllers] = useState(false);
+  const [tab, setTab] = useState<'dx7ii' | 'ctrl'>('dx7ii');
   const set = (offset: number) => (value: number) => setParam(offset, value);
   const setSup = (edit: Sup.ByteEdit) => setSupplementParam(edit.offset, edit.value);
   const pitchRates = [voice[G.pitchEgRate(0)], voice[G.pitchEgRate(1)], voice[G.pitchEgRate(2)], voice[G.pitchEgRate(3)]];
@@ -60,42 +60,51 @@ export const GlobalPanel = memo(function GlobalPanel({
 
   return (
     <div className="global-col">
-      <section className="panel">
+      <section className="panel algo-panel">
         <div className="panel-head">
           <span className="panel-title">ALGORITHM</span>
         </div>
-        <AlgoDisplay algorithm={voice[G.algorithm]} hoverOp={hoverOp} onHover={onHoverOp} />
-        <div className="ctl-row">
-          <Knob
-            label="ALGO"
-            value={voice[G.algorithm]}
-            max={31}
-            format={(a) => `${a + 1}`}
-            onChange={set(G.algorithm)}
-            help="Algorithm (1–32) — how the six operators are stacked: which are carriers (make sound) and which are modulators (shape timbre)."
-          />
-          <Knob
-            label="F/BACK"
-            value={voice[G.feedback]}
-            max={7}
-            onChange={set(G.feedback)}
-            help="Feedback (0–7) — depth of the algorithm’s feedback loop; adds harmonics, approaching noise at 7."
-          />
-          <Knob
-            label="TRANSP"
-            value={voice[G.transpose]}
-            max={48}
-            center={PARAM_CENTER.transpose}
-            format={formatTransposeSemitones}
-            onChange={set(G.transpose)}
-            help="Key transpose (−24…+24 semitones) — shifts the whole voice; 0 is no transpose."
-          />
-          <Toggle
-            label="KEY SYNC"
-            on={voice[G.oscKeySync] !== 0}
-            onChange={(on) => setParam(G.oscKeySync, on ? 1 : 0)}
-            help="Oscillator key sync — restarts all operator phases on every key-down for a consistent attack."
-          />
+        <div className="algo-panel-body">
+          <div className="algo-vis-block">
+            <AlgoDisplay algorithm={voice[G.algorithm]} hoverOp={hoverOp} onHover={onHoverOp} />
+          </div>
+          <div className="algo-ctl-block">
+            <div className="algo-ctl-grid">
+              <Knob
+                label="ALGO"
+                value={voice[G.algorithm]}
+                max={31}
+                size={28}
+                format={(a) => `${a + 1}`}
+                onChange={set(G.algorithm)}
+                help="Algorithm (1–32) — how the six operators are stacked: which are carriers (make sound) and which are modulators (shape timbre)."
+              />
+              <Knob
+                label="F/BACK"
+                value={voice[G.feedback]}
+                max={7}
+                size={28}
+                onChange={set(G.feedback)}
+                help="Feedback (0–7) — depth of the algorithm’s feedback loop; adds harmonics, approaching noise at 7."
+              />
+              <Knob
+                label="TRANSP"
+                value={voice[G.transpose]}
+                max={48}
+                size={28}
+                center={PARAM_CENTER.transpose}
+                format={formatTransposeSemitones}
+                onChange={set(G.transpose)}
+                help="Key transpose (−24…+24 semitones) — shifts the whole voice; 0 is no transpose."
+              />
+              <Toggle
+                label="KEY SYNC"
+                on={voice[G.oscKeySync] !== 0}
+                onChange={(on) => setParam(G.oscKeySync, on ? 1 : 0)}
+                help="Oscillator key sync — restarts all operator phases on every key-down for a consistent attack."
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -156,6 +165,12 @@ export const GlobalPanel = memo(function GlobalPanel({
             onChange={(on) => setParam(G.lfoKeySync, on ? 1 : 0)}
             help="LFO key sync — restarts the LFO waveform from its peak on every key-down."
           />
+          <Toggle
+            label="M.LFO"
+            on={Sup.getLfoKeyTrigger(supplement)}
+            onChange={(on) => setSup(Sup.setLfoKeyTrigger(supplement, on))}
+            help="Multi LFO — every note gets its own LFO restarted at key-down, instead of one LFO shared by all notes."
+          />
         </div>
       </section>
 
@@ -171,6 +186,7 @@ export const GlobalPanel = memo(function GlobalPanel({
               label={`L${i + 1}`}
               value={voice[G.pitchEgLevel(i)]}
               max={99}
+              size={28}
               center={PARAM_CENTER.pitchEgLevel}
               onChange={set(G.pitchEgLevel(i))}
               help={`Pitch EG level ${i + 1} (0–99) — the pitch this envelope segment settles at; 50 is no pitch change.`}
@@ -182,6 +198,7 @@ export const GlobalPanel = memo(function GlobalPanel({
               label={`R${i + 1}`}
               value={voice[G.pitchEgRate(i)]}
               max={99}
+              size={28}
               onChange={set(G.pitchEgRate(i))}
               help={`Pitch EG rate ${i + 1} (0–99) — how fast the pitch moves to L${i + 1}; higher is faster.`}
             />
@@ -191,18 +208,27 @@ export const GlobalPanel = memo(function GlobalPanel({
 
       <section className="panel dx7ii-panel">
         <div className="panel-head">
-          <span className="panel-title">DX7II</span>
           <button
             type="button"
-            className={`bar-btn ctrl-mod-btn${showControllers ? ' on' : ''}`}
-            onClick={() => setShowControllers((s) => !s)}
-            {...helpProps('CTRL', 'Opens the DX7II controller assignments: modulation ranges and live values for MW, BC, AT, MC, FC1 and FC2.')}
+            className={`panel-tab${tab === 'dx7ii' ? ' on' : ''}`}
+            onClick={() => setTab('dx7ii')}
+            {...helpProps('DX7II', 'DX7II performance parameters: voice mode, pitch bend, portamento and pitch EG options.')}
+          >
+            DX7II
+          </button>
+          <button
+            type="button"
+            className={`panel-tab${tab === 'ctrl' ? ' on' : ''}`}
+            onClick={() => setTab('ctrl')}
+            {...helpProps('CTRL', 'DX7II controller assignments: modulation ranges and live values for MW, BC, AT, MC, FC1 and FC2.')}
           >
             CTRL
           </button>
         </div>
+        {tab === 'ctrl' && <ControllerRows supplement={supplement} setSup={setSup} />}
+        {tab === 'dx7ii' && (
         <div className="dx7ii-groups">
-          <div className="ctl-group">
+          <div className="ctl-group wide">
             <div className="ctl-group-label">VOICE</div>
             <div className="ctl-row">
               <Toggle
@@ -232,17 +258,6 @@ export const GlobalPanel = memo(function GlobalPanel({
                 size={24}
                 onChange={(v) => setSup(Sup.setRandomPitchDepth(supplement, v))}
                 help="Random pitch (0–7) — random per-note pitch drift, like a slightly unstable analog oscillator."
-              />
-            </div>
-          </div>
-          <div className="ctl-group">
-            <div className="ctl-group-label">LFO</div>
-            <div className="ctl-row">
-              <Toggle
-                label="M.LFO"
-                on={Sup.getLfoKeyTrigger(supplement)}
-                onChange={(on) => setSup(Sup.setLfoKeyTrigger(supplement, on))}
-                help="Multi LFO — every note gets its own LFO restarted at key-down, instead of one LFO shared by all notes."
               />
             </div>
           </div>
@@ -302,7 +317,7 @@ export const GlobalPanel = memo(function GlobalPanel({
               />
             </div>
           </div>
-          <div className="ctl-group">
+          <div className="ctl-group wide">
             <div className="ctl-group-label">PITCH EG</div>
             <div className="ctl-row">
               <Cycle
@@ -329,18 +344,15 @@ export const GlobalPanel = memo(function GlobalPanel({
             </div>
           </div>
         </div>
+        )}
       </section>
-
-      {showControllers && (
-        <ControllerPanel supplement={supplement} setSup={setSup} onClose={() => setShowControllers(false)} />
-      )}
     </div>
   );
 });
 
-// One controller strip: pitch / amp / EG bias ranges plus the 4th destination
+// One controller column: pitch / amp / EG bias ranges plus the 4th destination
 // (volume for FC1/FC2/MC, pitch bias for BC/AT) and the FC1 CS1 switch.
-// Foot controllers sit at the bottom of the popup.
+// Foot controllers sit at the right edge of the matrix.
 interface CtrlRowSpec {
   ctrl: Sup.CtrlName;
   label: string;
@@ -371,8 +383,7 @@ function CtrlId({ ctrl, label, name }: { ctrl: Sup.CtrlName; label: string; name
   return (
     <div className="ctrl-mod-id" {...helpProps(label, `${name} — the meter shows the last received MIDI value (${value}).`)}>
       <span className="ctrl-mod-name">
-        {label}
-        <span className="ctrl-live-val">{value}</span>
+        {label}        
       </span>
       <div className="ctrl-live">
         <div className="ctrl-live-fill" style={{ width: `${(value / 127) * 100}%` }} />
@@ -381,57 +392,56 @@ function CtrlId({ ctrl, label, name }: { ctrl: Sup.CtrlName; label: string; name
   );
 }
 
-function ControllerPanel({
+function ControllerRows({
   supplement,
   setSup,
-  onClose,
 }: {
   supplement: Uint8Array;
   setSup: (edit: Sup.ByteEdit) => void;
-  onClose: () => void;
 }) {
-  const knob = (row: CtrlRowSpec, dest: number, label: string, format?: (v: number) => string, center?: number) => (
+  const cell = (row: CtrlRowSpec, dest: number, destLabel: string, format?: (v: number) => string, center?: number) => (
     <Knob
-      label={label}
+      key={row.ctrl}
+      label=""
+      helpLabel={`${row.label} ${destLabel}`}
       value={Sup.getCtrlRange(supplement, row.ctrl, dest)}
       max={99}
-      size={20}
+      size={24}
       center={center}
       format={format}
       onChange={(v) => setSup(Sup.setCtrlRange(supplement, row.ctrl, dest, v))}
-      help={DEST_HELP[label](row.name)}
+      help={DEST_HELP[destLabel](row.name)}
     />
   );
 
   return (
-    <section className="panel ctrl-mod-panel">
-      <div className="panel-head">
-        <span className="panel-title">CONTROLLERS</span>
-        <button type="button" className="bar-btn" onClick={onClose}>
-          ✕
-        </button>
-      </div>
+    <div className="ctrl-mod-grid">
+      <span />
       {CTRL_ROWS.map((row) => (
-        <div className="ctrl-mod-row" key={row.ctrl}>
-          <CtrlId ctrl={row.ctrl} label={row.label} name={row.name} />
-          {knob(row, 0, 'PITCH')}
-          {knob(row, 1, 'AMP')}
-          {knob(row, 2, 'EG')}
-          {row.fourth === 'vol' && knob(row, 3, 'VOL')}
-          {row.fourth === 'bias' && knob(row, 3, 'BIAS', Sup.formatPitchBias, Sup.PITCH_BIAS_CENTER)}
-          {row.fourth === null && <span />}
-          {row.ctrl === 'foot' ? (
-            <Toggle
-              label="CS1"
-              on={Sup.getFc1AsCs1(supplement)}
-              onChange={(on) => setSup(Sup.setFc1AsCs1(supplement, on))}
-              help="Use FC1 as the CS1 continuous slider (direct data entry) instead of a modulation source."
-            />
-          ) : (
-            <span />
-          )}
-        </div>
+        <CtrlId key={row.ctrl} ctrl={row.ctrl} label={row.label} name={row.name} />
       ))}
-    </section>
+      <span className="ctrl-grid-dest">PITCH     </span>{CTRL_ROWS.map((row) => cell(row, 0, 'PITCH'))}
+      <span className="ctrl-grid-dest">AMP       </span>{CTRL_ROWS.map((row) => cell(row, 1, 'AMP'))}
+      <span className="ctrl-grid-dest">EG        </span>{CTRL_ROWS.map((row) => cell(row, 2, 'EG'))}
+      <span className="ctrl-grid-dest">VOL / BIAS</span>{CTRL_ROWS.map((row) => {
+        if (row.fourth === 'vol') return cell(row, 3, 'VOL');
+        if (row.fourth === 'bias') return cell(row, 3, 'BIAS', Sup.formatPitchBias, Sup.PITCH_BIAS_CENTER);
+        return <span key={row.ctrl} />;
+      })}
+      <span />
+      {CTRL_ROWS.map((row) =>
+        row.ctrl === 'foot' ? (
+          <Toggle
+            key={row.ctrl}
+            label="CS1"
+            on={Sup.getFc1AsCs1(supplement)}
+            onChange={(on) => setSup(Sup.setFc1AsCs1(supplement, on))}
+            help="Use FC1 as the CS1 continuous slider (direct data entry) instead of a modulation source."
+          />
+        ) : (
+          <span key={row.ctrl} />
+        ),
+      )}
+    </div>
   );
 }

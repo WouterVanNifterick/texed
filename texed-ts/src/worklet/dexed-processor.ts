@@ -188,6 +188,12 @@ class DexedProcessor extends AudioWorkletProcessor {
         this.postPerformances();
         this.postVoice();
         break;
+      case MsgType.StoreVoice:
+        this.rack.storeSelectedVoice(msg.dest);
+        // Re-emit program state so the updated slot name shows in the UI.
+        this.postProgramState();
+        this.postParts();
+        break;
     }
   }
 

@@ -166,6 +166,18 @@ export class VoiceLibrary {
     return bank[idx] ?? null;
   }
 
+  /**
+   * Store an edited voice buffer (156-byte VMEM + AMEM supplement) into a bank
+   * slot — the "Store into Internal/Cartridge Voice Memory" operation. Creates
+   * the destination bank if it isn't populated yet.
+   */
+  storeVoice(ref: VoiceRef, vmem: Uint8Array, amem: Uint8Array): void {
+    const slots = this.ensureBank(ref.bank);
+    const slot = slots[ref.program & 0x1f];
+    slot.vmem.set(vmem.subarray(0, 156));
+    slot.amem.set(amem.subarray(0, AMEM_SLOT_SIZE));
+  }
+
   programNames(bank: VoiceBankId): string[] {
     const slots = this.slots[bank];
     if (!slots) return [];

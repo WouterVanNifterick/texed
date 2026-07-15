@@ -33,7 +33,7 @@ export default function App() {
   const midiRef = useRef<MidiConnection | null>(null);
   const [loadMsg, showLoadMsg] = useTransientMessage();
 
-  useStageScale(1440, 930);
+  useStageScale(1440, 1020);
 
   useEffect(() => {
     if (!synth.loadReport) return;
@@ -173,6 +173,12 @@ export default function App() {
     });
   }, [synth, showLoadMsg]);
 
+  const onStoreVoice = useCallback(() => {
+    const label = synth.partConfigs[synth.selectedPart]?.voiceLabel ?? 'current slot';
+    synth.storeVoice();
+    showLoadMsg(`Stored voice into ${label}`);
+  }, [synth, showLoadMsg]);
+
   const onSaveVoice = useCallback(() => {
     const syx = voiceToSysex(synth.voice);
     const url = URL.createObjectURL(new Blob([syx.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }));
@@ -193,6 +199,7 @@ export default function App() {
           loadMsg={loadMsg}
           onLoadFiles={onLoadFiles}
           onSaveVoice={onSaveVoice}
+          onStoreVoice={onStoreVoice}
           onSaveBank={onSaveBank}
           engineName={ENGINES[engine]}
           onEngine={onEngine}

@@ -6,14 +6,24 @@ import { SynthUnit } from '../synth-unit';
 import { N } from '../synth';
 
 describe('DSP tables', () => {
-  it('Sin.lookup is bounded and roughly sinusoidal', () => {
+  it('Sin.lookup matches golden Q24 samples', () => {
     Sin.init();
-    // phase is Q24 (full cycle = 1<<24); the table stores a Q24 sine.
-    const zero = Sin.lookup(0);
-    const quarter = Sin.lookup(1 << 22); // quarter cycle -> peak ~ +1.0 (2^24)
-    expect(Math.abs(zero)).toBeLessThan(1 << 20);
-    expect(quarter).toBeGreaterThan(1 << 23);
-    expect(quarter).toBeLessThanOrEqual(1 << 24);
+    const cases: Array<[number, number]> = [
+      [0, 0],
+      [1 << 22, 16777216],
+      [1 << 23, 0],
+      [3 << 22, -16777216],
+      [1 << 24, 0],
+      [(1 << 22) + (1 << 13), 16777058],
+      [(-1 << 22) | 0, -16777216],
+      [(0x80000000 + (1 << 22)) | 0, 16777216],
+    ];
+    for (const [phase, expected] of cases) {
+      expect(Sin.lookup(phase)).toBe(expected);
+    }
+    // init is idempotent
+    Sin.init();
+    expect(Sin.lookup(1 << 22)).toBe(16777216);
   });
 
   it('Exp2.lookup is monotonically increasing within range', () => {

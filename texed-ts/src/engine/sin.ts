@@ -3,19 +3,28 @@
 //
 // Phase is Q24 (a full cycle = 1 << 24). Output is Q24 in the range
 // approximately [-(1<<24), (1<<24)].
+//
+// MkI/OPL engines (engine-mki.ts, engine-opl.ts) use separate log/exp sine
+// tables; do not unify with this MSFA LUT.
 
 const SIN_LG_N_SAMPLES = 10;
 const SIN_N_SAMPLES = 1 << SIN_LG_N_SAMPLES; // 1024
 
+const SHIFT = 24 - SIN_LG_N_SAMPLES; // 14
+const LOWBITS_MASK = (1 << SHIFT) - 1;
+const PHASE_INDEX_MASK = (SIN_N_SAMPLES - 1) << 1;
+
 // Delta-encoded table: sintab[2k] = delta, sintab[2k+1] = y0. Length 2048.
 const sintab = new Int32Array(SIN_N_SAMPLES << 1);
+let initialized = false;
 
 /**
  * Build the sine table using the exact integer recurrence from sin.cc.
  * The recurrence multiplies two Q30 values (products up to 2^60), so BigInt is
- * used for the intermediate math. Runs once at startup.
+ * used for the intermediate math. Safe to call more than once.
  */
 function init(): void {
+  if (initialized) return;
   const dphase = (2 * Math.PI) / SIN_N_SAMPLES;
   const c = Math.floor(Math.cos(dphase) * (1 << 30) + 0.5);
   const s = Math.floor(Math.sin(dphase) * (1 << 30) + 0.5);
@@ -38,16 +47,18 @@ function init(): void {
     sintab[i << 1] = sintab[(i << 1) + 3] - sintab[(i << 1) + 1];
   }
   sintab[(SIN_N_SAMPLES << 1) - 2] = -sintab[(SIN_N_SAMPLES << 1) - 1];
+  initialized = true;
 }
 
 /**
  * Q24 phase in, Q24 amplitude out. Mirrors the inline SIN_DELTA lookup.
- * The `dy * lowbits` product stays below 2^31 so a plain shift is exact.
+ *
+ * Unlike exp2/freqlut, |dy * lowbits| stays below 2^31 here, so a plain >> is
+ * exact and avoids sar64's Math.floor on the audio hot path.
  */
 function lookup(phase: number): number {
-  const SHIFT = 24 - SIN_LG_N_SAMPLES; // 14
-  const lowbits = phase & ((1 << SHIFT) - 1);
-  const phaseInt = (phase >> (SHIFT - 1)) & ((SIN_N_SAMPLES - 1) << 1);
+  const lowbits = phase & LOWBITS_MASK;
+  const phaseInt = (phase >> (SHIFT - 1)) & PHASE_INDEX_MASK;
   const dy = sintab[phaseInt];
   const y0 = sintab[phaseInt + 1];
   return y0 + ((dy * lowbits) >> SHIFT);

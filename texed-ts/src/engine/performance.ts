@@ -61,6 +61,9 @@ function disabledParts(): Partial<PartConfig>[] {
 
 /** Parse one 84-byte TX802 TPMEM block into per-part config + performance name. */
 export function parseTx802PmemBlock(block: Uint8Array): ParsedPerformance {
+  // TODO(TX802): parse the EG Forced Damp and Linked Tone Generator performance
+  // bytes (offsets unknown); for now parts inherit the defaults
+  // (forcedDamp: true, link: false) via selectPerformance.
   const parts: Partial<PartConfig>[] = [];
   for (let i = 0; i < NUM_PARTS; i++) {
     const outAssign = block[32 + i] & 0x03;

@@ -32,11 +32,19 @@ export function PartRack({
 
   useEffect(() => subscribeStatus((s) => setActivity(s.partActivity ?? [])), [subscribeStatus]);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
     <div className="partrack-overlay" onClick={onClose}>
       <div className="partrack" onClick={(e) => e.stopPropagation()}>
         <div className="partrack-header">
-          <span className="partrack-title">PART RACK · TX802 / TX816</span>
+          <span className="partrack-title">PART RACK</span>
           {performanceNames.length > 0 && (
             <label>
               Performance&nbsp;
@@ -58,7 +66,7 @@ export function PartRack({
         <table>
           <thead>
             <tr>
-              {['#', 'On', 'Ch', 'Program', 'Vol', 'Pan', 'Range', 'Shift', 'Detune', 'Act'].map((h) => (
+              {['#', 'Link', 'On', 'Ch', 'Program', 'Vol', 'Pan', 'Range', 'Shift', 'Detune', 'Damp', 'Act'].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
@@ -69,13 +77,37 @@ export function PartRack({
               const progIdx = programIndexForVoice(programOptions, cfg.voice);
               const voiceLabel = cfg.voiceLabel ?? programOptions[progIdx]?.label ?? 'INIT VOICE';
               const selectValue = progIdx >= 0 ? progIdx : 'unresolved';
+              const isSlave = i > 0 && cfg.link;
+              let masterIdx = i;
+              while (masterIdx > 0 && configs[masterIdx].link) masterIdx--;
+              const masterEnabled = configs[masterIdx].enabled;
               return (
                 <tr
                   key={i}
                   onClick={() => onSelect(i)}
-                  className={`${selected ? 'selected' : ''}${cfg.enabled ? '' : ' off'}`}
+                  className={`${selected ? 'selected' : ''}${(isSlave ? masterEnabled : cfg.enabled) ? '' : ' off'}${isSlave ? ' linked' : ''}`}
                 >
                   <td className="part-num">{i + 1}</td>
+                  <td>
+                    {i > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={cfg.link}
+                        title="Link to the instrument above (combine polyphony)"
+                        onChange={(e) => onSetPart(i, { link: e.target.checked })}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                  </td>
+                  {isSlave ? (
+                    <>
+                      <td>
+                        <input type="checkbox" checked={masterEnabled} disabled />
+                      </td>
+                      <td colSpan={8} className="part-linked">← linked to part {masterIdx + 1}</td>
+                    </>
+                  ) : (
+                  <>
                   <td>
                     <input
                       type="checkbox"
@@ -186,6 +218,17 @@ export function PartRack({
                       />
                     </div>
                   </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={cfg.forcedDamp}
+                      title="EG Forced Damp"
+                      onChange={(e) => onSetPart(i, { forcedDamp: e.target.checked })}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </td>
+                  </>
+                  )}
                   <td className="td-act">
                     <span className={`part-led${(activity[i] ?? 0) > 0 ? ' on' : ''}`} />
                   </td>

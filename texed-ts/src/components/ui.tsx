@@ -17,6 +17,8 @@ interface KnobProps {
   layout?: 'stacked' | 'inline';
   /** Description shown in the help bar while hovered. */
   help?: string;
+  /** Help-bar title when the visible label is empty (matrix cells). */
+  helpLabel?: string;
   /** Neutral value on the arc; fill grows from here to the current value. */
   center?: number;
 }
@@ -35,7 +37,7 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help, center }: KnobProps) {
+export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help, helpLabel, center }: KnobProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
@@ -148,9 +150,9 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       aria-valuemax={max}
       aria-valuenow={value}
       aria-valuetext={display}
-      aria-label={label || undefined}
+      aria-label={helpLabel || label || undefined}
       onKeyDown={onKeyDown}
-      {...(help ? helpProps(label || 'Value', help) : undefined)}
+      {...(help ? helpProps(helpLabel || label || 'Value', help) : undefined)}
     >
       {layout === 'stacked' && label ? <div className="ctl-label">{label}</div> : null}
       <svg

@@ -15,6 +15,7 @@ interface TopBarProps {
   loadMsg: string | null;
   onLoadFiles: (files: File[]) => void;
   onSaveVoice: () => void;
+  onStoreVoice: () => void;
   onSaveBank: () => void;
   engineName: string;
   onEngine: () => void;
@@ -29,7 +30,7 @@ interface TopBarProps {
 }
 
 export function TopBar({
-  synth, program, onSelectProgram, loadMsg, onLoadFiles, onSaveVoice, onSaveBank,
+  synth, program, onSelectProgram, loadMsg, onLoadFiles, onSaveVoice, onStoreVoice, onSaveBank,
   engineName, onEngine, onShowParts, polyphony, onPolyphony,
   volume, onVolume, masterTuneCents, onMasterTune, midiInputs,
 }: TopBarProps) {
@@ -120,6 +121,14 @@ export function TopBar({
         {...helpProps('SAVE', 'Saves the current voice as a single-voice VCED .syx file.')}
       >
         SAVE
+      </button>
+      <button
+        type="button"
+        className="bar-btn"
+        onClick={onStoreVoice}
+        {...helpProps('STORE', `Stores the current edit buffer into voice memory (${synth.partConfigs[synth.selectedPart]?.voiceLabel ?? 'current slot'}), overwriting that slot.`)}
+      >
+        STORE
       </button>
       <button
         type="button"

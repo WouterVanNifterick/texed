@@ -1,5 +1,6 @@
 // App-level UI hooks: transient status message, QWERTY note input,
-// window-wide file drag-and-drop, and the fixed-stage scale factor.
+// part-select digit keys, window-wide file drag-and-drop, and the
+// fixed-stage scale factor.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -49,6 +50,13 @@ const QWERTY_MAP: Record<string, number> = {
 
 const OCTAVE_BASE = 60;
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
 /** Plays notes from the QWERTY row (A–K etc.) while `enabled`. */
 export function useQwertyKeyboard(
   enabled: boolean,
@@ -61,7 +69,7 @@ export function useQwertyKeyboard(
     if (!enabled) return;
     const down = (e: KeyboardEvent) => {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if (isEditableTarget(e.target)) return;
       const semi = QWERTY_MAP[e.key.toLowerCase()];
       if (semi === undefined || heldKeys.current.has(e.key)) return;
       heldKeys.current.add(e.key);
@@ -80,6 +88,26 @@ export function useQwertyKeyboard(
       window.removeEventListener('keyup', up);
     };
   }, [enabled, noteOn, noteOff]);
+}
+
+/** Selects multi-timbral parts 1–8 with the digit keys. */
+export function usePartSelectKeys(
+  enabled: boolean,
+  selectPart: (index: number) => void,
+): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const down = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isEditableTarget(e.target)) return;
+      const n = Number(e.key);
+      if (n < 1 || n > 8) return;
+      e.preventDefault();
+      selectPart(n - 1);
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [enabled, selectPart]);
 }
 
 export function patchFiles(files: FileList | File[]): File[] {

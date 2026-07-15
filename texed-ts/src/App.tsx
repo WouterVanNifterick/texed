@@ -5,7 +5,7 @@ import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
 import { getVoiceName, voiceToSysex } from './state/params';
 import { trackCc, trackAftertouch } from './state/live-ctrl';
-import { useFileDrop, usePersistentState, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
+import { useFileDrop, usePartSelectKeys, usePersistentState, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
 import { OperatorPanel } from './components/OperatorPanel';
@@ -113,6 +113,7 @@ export default function App() {
   }, [synth, engine, volume, noteOn, noteOff]);
 
   useQwertyKeyboard(started, noteOn, noteOff);
+  usePartSelectKeys(started, synth.selectPart);
 
   useEffect(() => {
     return () => midiRef.current?.close();
@@ -342,14 +343,34 @@ export default function App() {
 
       {!started && (
         <div className="start-overlay">
-          <img src={dexedIcon} alt="" className="start-icon" width={72} height={72} />
-          <button type="button" className="start" onClick={handleStart}>
-            START AUDIO
-          </button>
-          <p>
-            Click to initialize the audio engine, or drop .syx / .Dx7Voice files anywhere to load and start.
-            Play with mouse, QWERTY (A–K) or MIDI.
-          </p>
+          <div className="start-card">
+            <header className="start-head">
+              <img src={dexedIcon} alt="" className="start-icon" width={72} height={72} />
+              <div className="start-title">
+                <h1>TEXED</h1>
+                <p className="start-tag">Yamaha DX7/TX802/TX816 FM synthesizer, right in your browser.</p>
+              </div>
+            </header>
+
+            <ul className="start-features">
+              <li>Dexed core</li>
+              <li>128-voice polyphony</li>
+              <li>Loads TX802 / TX816 multi-timbral performances</li>
+              <li>Drag &amp; drop .syx files</li>
+              <li>Live interactive envelope editing</li>              
+              <li>100% free &amp; open source</li>
+            </ul>
+
+            <button type="button" className="start" onClick={handleStart}>
+              LET'S PLAY!
+            </button>
+
+            <footer className="start-credits">
+              <span>
+                Wouter van Nifterick (woutervannifterick&nbsp;at&nbsp;gmail&nbsp;dot&nbsp;com)
+              </span>              
+            </footer>
+          </div>
         </div>
       )}
     </div>

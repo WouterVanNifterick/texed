@@ -21,6 +21,7 @@ interface KnobProps {
   helpLabel?: string;
   /** Neutral value on the arc; fill grows from here to the current value. */
   center?: number;
+  className?: string;
 }
 
 const ARC = 270; // degrees of travel, gap at the bottom
@@ -37,7 +38,7 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help, helpLabel, center }: KnobProps) {
+export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help, helpLabel, center, className }: KnobProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
@@ -142,7 +143,7 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
   return (
     <div
       ref={root}
-      className={`knob${layout === 'inline' ? ' knob-inline' : ''}`}
+      className={`knob${layout === 'inline' ? ' knob-inline' : ''}${className ? ` ${className}` : ''}`}
       style={{ width: layout === 'inline' ? undefined : size + 8 }}
       tabIndex={0}
       role="slider"
@@ -176,7 +177,9 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
         )}
         <line x1={c} y1={c} x2={px} y2={py} className="knob-pointer" />
       </svg>
-      <div className="knob-value">{display}</div>
+      <div className="knob-value" style={accent ? { color: accent } : undefined}>
+        {display}
+      </div>
       {layout === 'inline' && label ? <div className="ctl-label">{label}</div> : null}
     </div>
   );

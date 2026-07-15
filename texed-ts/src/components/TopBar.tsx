@@ -46,7 +46,7 @@ export function TopBar({
       <div className="part-edit-group">
         <div
           className="part-strip"
-          {...helpProps('PART SELECT', 'Chooses which of the 8 multi-timbral parts the editor below is editing.')}
+          {...helpProps('PART SELECT', 'Chooses which of the 8 multi-timbral parts the editor below is editing. Keys 1–8 also select parts.')}
         >
           {Array.from({ length: 8 }, (_, i) => {
             const cfg = synth.partConfigs[i];

@@ -91,13 +91,15 @@ export const OperatorPanel = memo(function OperatorPanel({
   };
 
   const enabled = (voice[G.opEnable] & (1 << opIdx)) !== 0;
+  const outLevel = v(OP.outputLevel);
+  const levelZero = outLevel === 0;
   const carrier = algoGraph(voice[G.algorithm]).nodes.find((n) => n.op === opIdx)?.carrier;
   const rates = [v(0), v(1), v(2), v(3)];
   const levels = [v(4), v(5), v(6), v(7)];
 
   return (
     <section
-      className={`panel op-panel${enabled ? '' : ' disabled'}${hovered ? ' hilite' : ''}${flat ? ' flat' : ''}`}
+      className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${flat ? ' flat' : ''}`}
       style={{ ['--op' as string]: OP_COLORS[opNum - 1] }}
       onPointerEnter={() => onHover(opNum)}
       onPointerLeave={() => onHover(null)}
@@ -149,7 +151,19 @@ export const OperatorPanel = memo(function OperatorPanel({
         <Knob label="COARSE" value={v(OP.freqCoarse)} max={31} onChange={set(OP.freqCoarse)} help={HELP.coarse} />
         <Knob label="FINE" value={v(OP.freqFine)} max={99} onChange={set(OP.freqFine)} help={HELP.fine} />
         <Knob label="DETUNE" value={v(OP.detune)} max={14} center={PARAM_CENTER.detune} format={formatDetune} onChange={set(OP.detune)} help={HELP.detune} />
-        <Knob label="LEVEL" value={v(OP.outputLevel)} max={99} accent="var(--green)" onChange={set(OP.outputLevel)} help={HELP.level} />
+        <Knob
+          label="LEVEL"
+          value={outLevel}
+          max={99}
+          accent={levelZero ? 'var(--red)' : 'var(--green)'}
+          className={levelZero ? 'level-zero' : undefined}
+          onChange={set(OP.outputLevel)}
+          help={
+            levelZero
+              ? 'Output level is 0 — raise LEVEL to hear this operator (or to modulate with it).'
+              : HELP.level
+          }
+        />
         <Knob label="VEL" value={v(OP.velocitySens)} max={7} onChange={set(OP.velocitySens)} help={HELP.vel} />
       </div>
 

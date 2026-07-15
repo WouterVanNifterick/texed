@@ -2,6 +2,7 @@
   --accent: #ffb454;
   --accent-dim: #b97f36;
   --green: #6ee7a0;
+  --red: #ff7a7a;
   --bg: #0b0d12;
   --panel: linear-gradient(172deg, #1d222e, #141821 55%, #12151d);
   --panel-solid: #171a22;
@@ -580,6 +581,76 @@
 
 .op-panel.disabled > :not(.panel-head) {
   opacity: 0.35;
+}
+
+/* LEVEL at 0 (OP still on): keep the LEVEL knob full-bright inside the dimmed row. */
+.op-panel.level-cue > .ctl-row:has(.level-zero) {
+  opacity: 1;
+}
+
+.op-panel.level-cue > .ctl-row:has(.level-zero) > :not(.level-zero) {
+  opacity: 0.35;
+}
+
+.op-panel.level-cue .knob.level-zero {
+  position: relative;
+  z-index: 1;
+  padding: 2px 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 70%, transparent),
+    0 0 12px rgb(255 122 122 / 55%);
+  animation: level-cue-pulse 1.5s ease-in-out infinite;
+}
+
+.op-panel.level-cue .knob.level-zero .ctl-label {
+  color: var(--red);
+  font-weight: 800;
+  letter-spacing: 0.6px;
+}
+
+.op-panel.level-cue .knob.level-zero .knob-body {
+  fill: color-mix(in srgb, var(--red) 28%, #262b38);
+  stroke: var(--red);
+  stroke-width: 1.8;
+}
+
+.op-panel.level-cue .knob.level-zero .knob-track {
+  stroke: color-mix(in srgb, var(--red) 75%, #3a4051);
+}
+
+.op-panel.level-cue .knob.level-zero .knob-pointer {
+  stroke: var(--red);
+  stroke-width: 2.2;
+}
+
+.op-panel.level-cue .knob.level-zero .knob-value {
+  color: var(--red);
+  font-weight: 800;
+}
+
+@keyframes level-cue-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--red) 55%, transparent),
+      0 0 8px rgb(255 122 122 / 40%);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px var(--red),
+      0 0 16px rgb(255 122 122 / 85%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .op-panel.level-cue .knob.level-zero {
+    animation: none;
+    box-shadow:
+      0 0 0 1.5px var(--red),
+      0 0 14px rgb(255 122 122 / 75%);
+  }
 }
 
 .op-panel.hilite {
@@ -1567,28 +1638,84 @@
   inset: 0;
   z-index: 10;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  padding: 24px;
   background: rgb(10 12 17 / 72%);
   backdrop-filter: blur(6px);
 }
 
+.start-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: min(560px, 100%);
+  padding: 28px 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
+  font: 13px system-ui, sans-serif;
+}
+
+.start-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
 .start-icon {
   display: block;
+  flex: none;
   filter: drop-shadow(0 0 20px rgb(255 180 84 / 35%));
 }
 
-.start-overlay p {
-  color: var(--dim);
-  font-size: 13px;
+.start-title h1 {
   margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  color: var(--text);
+}
+
+.start-tag {
+  margin: 4px 0 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+.start-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.start-features li {
+  position: relative;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.start-features li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 button.start {
-  padding: 14px 32px;
-  font-size: 15px;
+  align-self: center;
+  padding: 14px 40px;
+  font-size: 16px;
   font-weight: 800;
   letter-spacing: 2px;
   color: #12141a;
@@ -1601,6 +1728,16 @@ button.start {
 
 button.start:hover {
   background: #ffc06e;
+}
+
+.start-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 12px;
 }
 
 /* ==== Part rack overlay (TX802 / TX816) ==== */

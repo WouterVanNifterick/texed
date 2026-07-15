@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadSysexFile } from '../sysex-loader';
 import { identifySysex, SysexKind, voiceFromRawVced } from '../sysex';
-import { performancesFromFrame } from '../performance';
 import { decodeDx7iiVoiceRef } from '../voice-library';
 import { getVoiceName } from '../../state/params';
 

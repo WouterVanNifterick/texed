@@ -6,12 +6,10 @@
 // SynthRack behaves like the single-timbre SynthUnit.
 
 import { PluginFx } from './plugin-fx';
-import { Cartridge } from './cartridge';
 import { Part, EngineType } from './part';
 import { initSynthTables } from './synth-unit';
 import type { ParsedPerformance } from './performance';
 import type { LoadReport } from './sysex-loader';
-import type { SystemSetup } from './system-setup';
 import {
   VoiceLibrary,
   defaultVoiceRef,
@@ -42,8 +40,6 @@ export interface PartConfig {
   voice: VoiceRef;
   /** Resolved display name when voice is set (from loaded banks). */
   voiceLabel?: string;
-  /** @deprecated Use voice.program — kept for protocol compat during migration. */
-  voiceNumber?: number;
 }
 
 function defaultPartConfig(enabled: boolean): PartConfig {
@@ -162,12 +158,9 @@ export class SynthRack {
     if (index < 0 || index >= NUM_PARTS) return;
     const cfg = this.configs[index];
     if (patch.voice) cfg.voice = { ...patch.voice };
-    if (patch.voiceNumber !== undefined) {
-      cfg.voice = { ...cfg.voice, program: patch.voiceNumber };
-    }
-    const { voice: _v, voiceNumber: _vn, ...rest } = patch;
+    const { voice: _v, ...rest } = patch;
     Object.assign(cfg, rest);
-    if (patch.voice !== undefined || patch.voiceNumber !== undefined) {
+    if (patch.voice !== undefined) {
       this.applyVoiceToPart(index);
     }
     if (patch.noteShift !== undefined) this.parts[index].extraTranspose = cfg.noteShift;
@@ -187,32 +180,10 @@ export class SynthRack {
     }
   }
 
-  /** Legacy: load a single VMEM cartridge into internalA. */
-  loadCartridge(cart: Cartridge): void {
-    this.library.loadLegacyCartridge(cart);
-    for (let i = 0; i < NUM_PARTS; i++) {
-      this.applyVoiceToPart(i);
-    }
-  }
-
-  cartridgeProgramNames(): string[] {
-    return this.programOptions().map((o) => o.label);
-  }
-
   programOptions(): ProgramOption[] {
     const opts = this.library.programOptions();
     if (opts.length > 0) return opts;
     return [{ ref: defaultVoiceRef(), label: 'INIT VOICE' }];
-  }
-
-  setProgramForPart(index: number, program: number, bank?: VoiceBankId): void {
-    if (index < 0 || index >= NUM_PARTS) return;
-    const cfg = this.configs[index];
-    cfg.voice = {
-      bank: bank ?? cfg.voice.bank,
-      program: program & 0x1f,
-    };
-    this.applyVoiceToPart(index);
   }
 
   setVoiceRefForPart(index: number, ref: VoiceRef): void {
@@ -227,7 +198,9 @@ export class SynthRack {
     if (slot) {
       this.parts[index].loadVoiceSlot(slot.vmem, slot.amem);
     } else {
-      this.parts[index].setProgram(ref.program);
+      // Bank not loaded: keep the current voice data but silence held notes,
+      // matching the behavior of a program change.
+      this.parts[index].clearActiveVoices();
     }
   }
 
@@ -238,10 +211,6 @@ export class SynthRack {
 
   get masterTuneCents(): number {
     return this.masterTuneCents_;
-  }
-
-  getSystemSetup(): SystemSetup | null {
-    return this.library.systemSetup;
   }
 
   loadVoiceForPart(index: number, patch: Uint8Array): void {

@@ -3,13 +3,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { SynthRack } from '../synth-rack';
-import { cartridgeFromSyx } from '../sysex';
 import { loadSysexFile } from '../sysex-loader';
 import { N } from '../synth';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const romCart = (): ReturnType<typeof cartridgeFromSyx> =>
-  cartridgeFromSyx(new Uint8Array(readFileSync(join(here, 'fixtures', 'rom1a.syx'))));
+const loadRom = (rack: SynthRack): void => {
+  const result = loadSysexFile(new Uint8Array(readFileSync(join(here, 'fixtures', 'rom1a.syx'))));
+  expect(result.loaded).toBe(true);
+  rack.loadLibrary(result.library);
+};
 
 const peak = (buf: Float32Array): number => {
   let p = 0;
@@ -109,11 +111,9 @@ describe('SynthRack', () => {
     expect(status.totalActive).toBeLessThanOrEqual(4);
   });
 
-  it('loads voice data when voiceNumber is set via setPartConfig', () => {
+  it('loads voice data when a voice ref is set via setPartConfig', () => {
     const rack = new SynthRack(44100);
-    const cart = romCart();
-    expect(cart).not.toBeNull();
-    rack.loadCartridge(cart!);
+    loadRom(rack);
 
     const prog0 = rack.getVoiceData(1);
     rack.setPartConfig(1, { voice: { bank: 'internalA', program: 5 } });
@@ -151,5 +151,46 @@ describe('SynthRack', () => {
     rack.setPartConfig(0, { detune });
     rack.noteOn(60, 100, 1);
     expect(renderPeak(rack, 200).l).toBeGreaterThan(0);
+  });
+
+  it('releases a held note after switching voice via setVoiceRef', () => {
+    const rack = new SynthRack(44100);
+    loadRom(rack);
+
+    rack.noteOn(60, 100, 1);
+    expect(renderPeak(rack, 50).l).toBeGreaterThan(0);
+
+    rack.setVoiceRefForPart(0, { bank: 'internalA', program: 5 });
+    rack.noteOff(60, 1);
+    renderPeak(rack, 4000);
+    expect(rack.getStatus().totalActive).toBe(0);
+    expect(renderPeak(rack, 10).l).toBeLessThan(1e-4);
+  });
+
+  it('silences held notes immediately when switching voice (no explicit note-off)', () => {
+    const rack = new SynthRack(44100);
+    loadRom(rack);
+
+    rack.noteOn(60, 100, 1);
+    const before = renderPeak(rack, 50).l;
+    expect(before).toBeGreaterThan(0);
+
+    rack.setVoiceRefForPart(0, { bank: 'internalA', program: 5 });
+    expect(rack.getStatus().totalActive).toBe(0);
+    const after = renderPeak(rack, 200).l;
+    expect(after).toBeLessThan(before * 0.5);
+  });
+
+  it('clears unison voices when switching voice while held', () => {
+    const rack = new SynthRack(44100);
+    loadRom(rack);
+
+    rack.setSupplementParamForPart(0, 5, 0x08 | 0x02); // unison on
+    rack.noteOn(60, 100, 1);
+    renderPeak(rack, 10);
+    expect(rack.getStatus().totalActive).toBe(2);
+
+    rack.setVoiceRefForPart(0, { bank: 'internalA', program: 3 });
+    expect(rack.getStatus().totalActive).toBe(0);
   });
 });

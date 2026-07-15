@@ -19,11 +19,10 @@ class DexedProcessor extends AudioWorkletProcessor {
     super();
     this.rack = new SynthRack(sampleRate);
     this.port.onmessage = (e: MessageEvent<ToWorkletMessage>) => this.handleMessage(e.data);
-    this.post({ type: 'ready' });
     this.postVoice();
     this.postParts();
     this.postProgramState();
-    this.postSystemSetup();
+    this.postMasterTune();
   }
 
   private post(msg: FromWorkletMessage): void {
@@ -34,12 +33,8 @@ class DexedProcessor extends AudioWorkletProcessor {
     this.post({ type: 'voice', data: this.rack.getVoiceData(), supplement: this.rack.getSupplementData() });
   }
 
-  private postSystemSetup(): void {
-    this.post({
-      type: 'systemSetup',
-      masterTuneCents: this.rack.masterTuneCents,
-      setup: this.rack.getSystemSetup(),
-    });
+  private postMasterTune(): void {
+    this.post({ type: 'masterTune', cents: this.rack.masterTuneCents });
   }
 
   private postParts(): void {
@@ -75,7 +70,7 @@ class DexedProcessor extends AudioWorkletProcessor {
         this.rack.loadVoiceForPart(this.rack.selectedPart, result.singleVoice);
       }
       this.postVoice();
-      this.postSystemSetup();
+      this.postMasterTune();
       return;
     }
 
@@ -92,7 +87,14 @@ class DexedProcessor extends AudioWorkletProcessor {
     if (result.singleVoice) {
       this.rack.loadVoiceForPart(this.rack.selectedPart, result.singleVoice);
       this.postVoice();
+      return;
     }
+
+    // Nothing recognized: surface the report so the UI can say why.
+    if (result.report.skipped.length === 0) {
+      result.report.skipped.push('no sysex data recognized');
+    }
+    this.post({ type: 'loadReport', report: result.report });
   }
 
   private handleMessage(msg: ToWorkletMessage): void {
@@ -120,12 +122,18 @@ class DexedProcessor extends AudioWorkletProcessor {
         this.postVoice();
         break;
       case MsgType.LoadCart:
-        this.handleLoad(new Uint8Array(msg.data));
-        break;
-      case MsgType.SetProgram:
-        this.rack.setProgramForPart(this.rack.selectedPart, msg.index, msg.bank);
-        this.postVoice();
-        this.postParts();
+        try {
+          this.handleLoad(new Uint8Array(msg.data));
+        } catch (err) {
+          this.post({
+            type: 'loadReport',
+            report: {
+              frames: 0,
+              applied: [],
+              skipped: [`load failed: ${err instanceof Error ? err.message : String(err)}`],
+            },
+          });
+        }
         break;
       case MsgType.SetVoiceRef:
         this.rack.setVoiceRefForPart(msg.partIndex ?? this.rack.selectedPart, msg.voice);
@@ -140,7 +148,7 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.SetMasterTune:
         this.rack.applyMasterTuneCents(msg.cents);
-        this.postSystemSetup();
+        this.postMasterTune();
         break;
       case MsgType.SetEngine:
         this.rack.setEngineType(msg.engine as 0 | 1 | 2);
@@ -162,7 +170,7 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.SetPart:
         this.rack.setPartConfig(msg.index, msg.config);
-        if ((msg.config.voice !== undefined || msg.config.voiceNumber !== undefined) && msg.index === this.rack.selectedPart) {
+        if (msg.config.voice !== undefined && msg.index === this.rack.selectedPart) {
           this.postVoice();
         }
         this.postParts();

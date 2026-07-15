@@ -9,11 +9,10 @@ import {
   TX802_PMEM_BLOCK,
   DX7II_PERF_BLOCK,
 } from '../performance';
-import { SysexKind, identifySysex, type SysexFrame } from '../sysex';
+import { identifySysex } from '../sysex';
 import { decodeDx7iiVoiceRef } from '../voice-library';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const fx = (name: string): Uint8Array => new Uint8Array(readFileSync(join(here, 'fixtures', name)));
 const patchPath = (rel: string): Uint8Array =>
   new Uint8Array(readFileSync(join(here, '../../../../patches', rel)));
 
@@ -28,17 +27,6 @@ function makeTx802PmemBlock(name = 'TEST PERFORMANCE NAM '): Uint8Array {
   block[56] = 24;
   for (let i = 0; i < 20; i++) block[64 + i] = name.charCodeAt(i) & 0x7f;
   return block;
-}
-
-function makeDx7iiPerfFrame(blocks: Uint8Array[]): SysexFrame {
-  const dataLen = blocks.length * DX7II_PERF_BLOCK;
-  const raw = new Uint8Array(6 + 10 + dataLen + 2);
-  raw.set([0xf0, 0x43, 0x00, 0x7e, ((10 + dataLen) >> 7) & 0x7f, (10 + dataLen) & 0x7f], 0);
-  raw.set([0x4c, 0x4d, 0x20, 0x20, 0x38, 0x39, 0x37, 0x33, 0x50, 0x4d], 6);
-  for (let i = 0; i < blocks.length; i++) raw.set(blocks[i], 16 + i * DX7II_PERF_BLOCK);
-  raw[16 + dataLen] = 0;
-  raw[16 + dataLen + 1] = 0xf7;
-  return { kind: SysexKind.Dx7iiPerformance, raw, channel: 0, format: 0x7e, formatId: 'LM  8973PM' };
 }
 
 describe('parseTx802PmemBlock', () => {

@@ -3,7 +3,6 @@
 import type { PartConfig, ProgramOption } from '../engine/synth-rack';
 import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
 import type { LoadReport } from '../engine/sysex-loader';
-import type { SystemSetup } from '../engine/system-setup';
 
 export type { VoiceRef, VoiceBankId };
 
@@ -15,7 +14,6 @@ export const MsgType = {
   Aftertouch: 'aftertouch',
   LoadVoice: 'loadVoice',
   LoadCart: 'loadCart',
-  SetProgram: 'setProgram',
   SetVoiceRef: 'setVoiceRef',
   SetEngine: 'setEngine',
   SetFx: 'setFx',
@@ -64,11 +62,6 @@ export interface LoadVoiceMsg {
 export interface LoadCartMsg {
   type: typeof MsgType.LoadCart;
   data: ArrayBuffer; // raw .syx bytes
-}
-export interface SetProgramMsg {
-  type: typeof MsgType.SetProgram;
-  index: number;
-  bank?: VoiceBankId;
 }
 export interface SetVoiceRefMsg {
   type: typeof MsgType.SetVoiceRef;
@@ -132,7 +125,6 @@ export type ToWorkletMessage =
   | AftertouchMsg
   | LoadVoiceMsg
   | LoadCartMsg
-  | SetProgramMsg
   | SetVoiceRefMsg
   | SetEngineMsg
   | SetFxMsg
@@ -146,13 +138,6 @@ export type ToWorkletMessage =
   | SetPolyphonyCapMsg
   | SelectPerformanceMsg;
 
-export interface ReadyMsg {
-  type: 'ready';
-}
-export interface ProgramNamesMsg {
-  type: 'programNames';
-  names: string[];
-}
 export interface ProgramStateMsg {
   type: 'programState';
   options: ProgramOption[];
@@ -168,11 +153,10 @@ export interface VoiceMsg {
   data: Uint8Array; // 156 bytes
   supplement: Uint8Array; // 35-byte DX7II AMEM supplement
 }
-/** System setup (8973S) + current master tune, sent after loads/tune changes. */
-export interface SystemSetupMsg {
-  type: 'systemSetup';
-  masterTuneCents: number;
-  setup: SystemSetup | null;
+/** Current master tune (from a loaded 8973S setup or the UI), sent after loads/tune changes. */
+export interface MasterTuneMsg {
+  type: 'masterTune';
+  cents: number;
 }
 /** Periodic realtime status for UI meters (~30 Hz). */
 export interface StatusMsg {
@@ -200,12 +184,10 @@ export interface PerformancesMsg {
 }
 
 export type FromWorkletMessage =
-  | ReadyMsg
-  | ProgramNamesMsg
   | ProgramStateMsg
   | LoadReportMsg
   | VoiceMsg
-  | SystemSetupMsg
+  | MasterTuneMsg
   | StatusMsg
   | PartsMsg
   | PerformancesMsg;

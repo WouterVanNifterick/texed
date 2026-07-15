@@ -6,11 +6,11 @@ export interface MidiHandlers {
   controlChange: (controller: number, value: number, channel: number) => void;
   pitchBend: (value: number, channel: number) => void;
   aftertouch: (value: number, channel: number) => void;
+  /** Called with the current input names on connect and whenever devices are (un)plugged. */
+  inputsChanged?: (names: string[]) => void;
 }
 
 export interface MidiConnection {
-  access: MIDIAccess;
-  inputNames: string[];
   close: () => void;
 }
 
@@ -43,25 +43,23 @@ export async function initMidi(handlers: MidiHandlers): Promise<MidiConnection |
     return null;
   }
   const access = await navigator.requestMIDIAccess({ sysex: false });
-  const inputNames: string[] = [];
 
   const listener = (e: MIDIMessageEvent) => {
     if (e.data) handleMessage(new Uint8Array(e.data), handlers);
   };
 
   const attach = () => {
-    inputNames.length = 0;
+    const names: string[] = [];
     access.inputs.forEach((input) => {
-      inputNames.push(input.name ?? 'MIDI Input');
+      names.push(input.name ?? 'MIDI Input');
       input.onmidimessage = listener;
     });
+    handlers.inputsChanged?.(names);
   };
   attach();
   access.onstatechange = attach;
 
   return {
-    access,
-    inputNames,
     close: () => {
       access.inputs.forEach((input) => {
         input.onmidimessage = null;

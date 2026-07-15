@@ -451,15 +451,6 @@
   filter: drop-shadow(0 0 2px rgb(255 180 84 / 40%));
 }
 
-/* Raw parameter curve where it exceeds what the op's LEVEL leaves room for. */
-.scale-curve-raw {
-  fill: none;
-  stroke: #5a6175;
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-  vector-effect: non-scaling-stroke;
-}
-
 .scale-bp-hit {
   fill: transparent;
   cursor: ew-resize;
@@ -524,6 +515,12 @@
 
 .env-graph.tall {
   height: 68px;
+}
+
+/* Gradient area fills between a curve and its "no effect" line. */
+.graph-fill {
+  stroke: none;
+  pointer-events: none;
 }
 
 .env-shape {
@@ -1056,4 +1053,141 @@ button.start {
 
 button.start:hover {
   background: #ffc06e;
+}
+
+/* ==== Part rack overlay (TX802 / TX816) ==== */
+
+.partrack-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 60%);
+}
+
+.partrack {
+  background: var(--panel-solid);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  width: max-content;
+  max-width: 96vw;
+  max-height: 92vh;
+  overflow: auto;
+  font: 12px system-ui, sans-serif;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
+}
+
+.partrack-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.partrack-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.partrack-tune {
+  margin-left: auto;
+}
+
+.partrack table {
+  border-collapse: collapse;
+}
+
+.partrack th {
+  text-align: left;
+  padding: 3px 4px;
+  color: var(--dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.partrack td {
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.partrack td.td-slider {
+  width: 72px;
+}
+
+.partrack td.td-range {
+  width: 110px;
+}
+
+.partrack td.td-act {
+  text-align: center;
+}
+
+.partrack select {
+  background: #24272c;
+  color: var(--text);
+  border: 1px solid #3a3f46;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.partrack select.prog {
+  width: 180px;
+}
+
+.partrack-btn {
+  background: #2b2f36;
+  color: var(--text);
+  border: 1px solid #3a3f46;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.partrack tbody tr {
+  cursor: pointer;
+}
+
+.partrack tbody tr:nth-child(even) {
+  background: #1e2126;
+}
+
+.partrack tbody tr.selected {
+  background: #2c3a4a;
+}
+
+.partrack tbody tr.off {
+  opacity: 0.5;
+}
+
+.partrack .part-num {
+  font-weight: 700;
+}
+
+.partrack tr.selected .part-num {
+  color: #7fc4ff;
+}
+
+.partrack .part-led {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3a3f46;
+}
+
+.partrack .part-led.on {
+  background: var(--green);
+}
+
+.partrack-note {
+  color: var(--dim);
+  margin-top: 8px;
+  max-width: 720px;
+  line-height: 1.4;
+  white-space: normal;
 }

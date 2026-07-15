@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
 import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
 import type { PartConfig, ProgramOption } from '../engine/synth-rack';
@@ -6,21 +6,17 @@ import type { VoiceRef } from '../engine/voice-library';
 import type { LoadReport } from '../engine/sysex-loader';
 import { initVoice } from '../engine/cartridge';
 import { createDefaultAmem } from '../engine/amem';
-import type { SystemSetup } from '../engine/system-setup';
 import { voiceRefEquals } from '../engine/synth-rack';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
 
 export interface DexedSynth {
   start: () => Promise<void>;
-  ready: boolean;
   programOptions: ProgramOption[];
-  programNames: string[];
   loadReport: LoadReport | null;
   voice: Uint8Array;
   /** 35-byte DX7II AMEM supplement for the selected part's voice. */
   supplement: Uint8Array;
-  systemSetup: SystemSetup | null;
   masterTuneCents: number;
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
@@ -65,12 +61,10 @@ export function useDexedSynth(): DexedSynth {
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
-  const [ready, setReady] = useState(false);
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
   const [loadReport, setLoadReport] = useState<LoadReport | null>(null);
   const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
   const [supplement, setSupplementState] = useState<Uint8Array>(() => createDefaultAmem());
-  const [systemSetup, setSystemSetup] = useState<SystemSetup | null>(null);
   const [masterTuneCents, setMasterTuneCents] = useState(0);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
   const [selectedPart, setSelectedPart] = useState(0);
@@ -95,19 +89,15 @@ export function useDexedSynth(): DexedSynth {
     });
     node.port.onmessage = (e: MessageEvent<FromWorkletMessage>) => {
       const m = e.data;
-      if (m.type === 'ready') setReady(true);
-      else if (m.type === 'programNames') {
-        setProgramOptions(m.names.map((label, i) => ({ ref: { bank: 'internalA', program: i }, label })));
-      } else if (m.type === 'programState') {
+      if (m.type === 'programState') {
         setProgramOptions(m.options);
       } else if (m.type === 'loadReport') {
         setLoadReport(m.report);
       } else if (m.type === 'voice') {
         setVoiceState(new Uint8Array(m.data));
         setSupplementState(new Uint8Array(m.supplement));
-      } else if (m.type === 'systemSetup') {
-        setSystemSetup(m.setup);
-        setMasterTuneCents(m.masterTuneCents);
+      } else if (m.type === 'masterTune') {
+        setMasterTuneCents(m.cents);
       } else if (m.type === 'parts') {
         setPartConfigs(m.configs);
         setSelectedPart(m.selectedPart);
@@ -145,14 +135,13 @@ export function useDexedSynth(): DexedSynth {
     [post],
   );
   const setEngine = useCallback((engine: number) => post({ type: MsgType.SetEngine, engine }), [post]);
-  const setProgram = useCallback((index: number) => {
-    const opt = programOptions[index];
-    if (opt) {
-      post({ type: MsgType.SetVoiceRef, voice: opt.ref });
-    } else {
-      post({ type: MsgType.SetProgram, index });
-    }
-  }, [post, programOptions]);
+  const setProgram = useCallback(
+    (index: number) => {
+      const opt = programOptions[index];
+      if (opt) post({ type: MsgType.SetVoiceRef, voice: opt.ref });
+    },
+    [post, programOptions],
+  );
   const setVoiceRef = useCallback(
     (ref: VoiceRef, partIndex?: number) => post({ type: MsgType.SetVoiceRef, voice: ref, partIndex }),
     [post],
@@ -224,44 +213,76 @@ export function useDexedSynth(): DexedSynth {
     return () => statusSubs.current.delete(cb);
   }, []);
 
-  const programNames = programOptions.map((o) => o.label);
-
-  return {
-    start,
-    ready,
-    programOptions,
-    programNames,
-    loadReport,
-    voice,
-    supplement,
-    systemSetup,
-    masterTuneCents,
-    noteOn,
-    noteOff,
-    controlChange,
-    pitchBend,
-    aftertouch,
-    setEngine,
-    setProgram,
-    setVoiceRef,
-    loadCart,
-    setParam,
-    setSupplementParam,
-    setMasterTune,
-    setVoice,
-    setFx,
-    setMasterGain,
-    panic,
-    partConfigs,
-    selectedPart,
-    selectPart,
-    setPart,
-    setPolyphonyCap,
-    performanceNames,
-    performanceIndex,
-    selectPerformance,
-    subscribeStatus,
-  };
+  // Stable identity between synth-state changes, so consumers can depend on
+  // the object (or its methods) without re-running effects every render.
+  return useMemo<DexedSynth>(
+    () => ({
+      start,
+      programOptions,
+      loadReport,
+      voice,
+      supplement,
+      masterTuneCents,
+      noteOn,
+      noteOff,
+      controlChange,
+      pitchBend,
+      aftertouch,
+      setEngine,
+      setProgram,
+      setVoiceRef,
+      loadCart,
+      setParam,
+      setSupplementParam,
+      setMasterTune,
+      setVoice,
+      setFx,
+      setMasterGain,
+      panic,
+      partConfigs,
+      selectedPart,
+      selectPart,
+      setPart,
+      setPolyphonyCap,
+      performanceNames,
+      performanceIndex,
+      selectPerformance,
+      subscribeStatus,
+    }),
+    [
+      start,
+      programOptions,
+      loadReport,
+      voice,
+      supplement,
+      masterTuneCents,
+      noteOn,
+      noteOff,
+      controlChange,
+      pitchBend,
+      aftertouch,
+      setEngine,
+      setProgram,
+      setVoiceRef,
+      loadCart,
+      setParam,
+      setSupplementParam,
+      setMasterTune,
+      setVoice,
+      setFx,
+      setMasterGain,
+      panic,
+      partConfigs,
+      selectedPart,
+      selectPart,
+      setPart,
+      setPolyphonyCap,
+      performanceNames,
+      performanceIndex,
+      selectPerformance,
+      subscribeStatus,
+    ],
+  );
 }
 
 export function programIndexForVoice(options: ProgramOption[], voice: VoiceRef): number {

@@ -1,7 +1,6 @@
 // Multi-timbral part rack (TX802 / TX816). Eight parts, each with an on/off,
 // MIDI receive channel, program, volume, pan, note range and transpose. Clicking
-// a part selects it as the target for the voice editor. Self-contained styling
-// so it can overlay the fixed synth rack without disturbing its layout.
+// a part selects it as the target for the voice editor.
 
 import { useEffect, useState } from 'react';
 import type { PartConfig, ProgramOption } from '../engine/synth-rack';
@@ -26,27 +25,6 @@ interface PartRackProps {
   onClose: () => void;
 }
 
-const c = {
-  overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  } as const,
-  panel: {
-    background: '#1a1c20', color: '#d8dce0', border: '1px solid #333',
-    borderRadius: 8, padding: '12px 14px', width: 'max-content', maxWidth: '96vw',
-    maxHeight: '92vh', overflow: 'auto', font: '12px system-ui, sans-serif',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-  } as const,
-  header: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 } as const,
-  title: { fontSize: 14, fontWeight: 700, letterSpacing: 1 } as const,
-  th: { textAlign: 'left', padding: '3px 4px', color: '#8a9098', fontWeight: 600, whiteSpace: 'nowrap' } as const,
-  td: { padding: '2px 4px', whiteSpace: 'nowrap' } as const,
-  sliderTd: { padding: '2px 4px', whiteSpace: 'nowrap', width: 72 } as const,
-  rangeTd: { padding: '2px 4px', whiteSpace: 'nowrap', width: 110 } as const,
-  select: { background: '#24272c', color: '#d8dce0', border: '1px solid #3a3f46', borderRadius: 4, padding: '2px 4px' } as const,
-  btn: { background: '#2b2f36', color: '#d8dce0', border: '1px solid #3a3f46', borderRadius: 4, padding: '4px 10px', cursor: 'pointer' } as const,
-};
-
 export function PartRack({
   configs, selectedPart, programOptions, performanceNames, performanceIndex,
   onSelectPerformance, masterTuneCents, onMasterTune,
@@ -57,15 +35,14 @@ export function PartRack({
   useEffect(() => subscribeStatus((s) => setActivity(s.partActivity ?? [])), [subscribeStatus]);
 
   return (
-    <div style={c.overlay} onClick={onClose}>
-      <div style={c.panel} onClick={(e) => e.stopPropagation()}>
-        <div style={c.header}>
-          <span style={c.title}>PART RACK · TX802 / TX816</span>
+    <div className="partrack-overlay" onClick={onClose}>
+      <div className="partrack" onClick={(e) => e.stopPropagation()}>
+        <div className="partrack-header">
+          <span className="partrack-title">PART RACK · TX802 / TX816</span>
           {performanceNames.length > 0 && (
             <label>
               Performance&nbsp;
               <select
-                style={c.select}
                 value={performanceIndex}
                 onChange={(e) => onSelectPerformance(Number(e.target.value))}
               >
@@ -77,7 +54,7 @@ export function PartRack({
               </select>
             </label>
           )}
-          <label style={{ marginLeft: 'auto' }} title="Master tune (cents), from 8973S system setup">
+          <label className="partrack-tune" title="Master tune (cents), from 8973S system setup">
             Tune&nbsp;
             <Knob
               value={Math.round(masterTuneCents)}
@@ -90,14 +67,14 @@ export function PartRack({
               onChange={onMasterTune}
             />
           </label>
-          <button type="button" style={c.btn} onClick={onClose}>CLOSE</button>
+          <button type="button" className="partrack-btn" onClick={onClose}>CLOSE</button>
         </div>
 
-        <table style={{ borderCollapse: 'collapse' }}>
+        <table>
           <thead>
             <tr>
               {['#', 'On', 'Ch', 'Program', 'Vol', 'Pan', 'Range', 'Shift', 'Detune', 'Act'].map((h) => (
-                <th key={h} style={c.th}>{h}</th>
+                <th key={h}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -111,13 +88,10 @@ export function PartRack({
                 <tr
                   key={i}
                   onClick={() => onSelect(i)}
-                  style={{
-                    background: selected ? '#2c3a4a' : i % 2 ? '#1e2126' : 'transparent',
-                    cursor: 'pointer', opacity: cfg.enabled ? 1 : 0.5,
-                  }}
+                  className={`${selected ? 'selected' : ''}${cfg.enabled ? '' : ' off'}`}
                 >
-                  <td style={{ ...c.td, fontWeight: 700, color: selected ? '#7fc4ff' : '#d8dce0' }}>{i + 1}</td>
-                  <td style={c.td}>
+                  <td className="part-num">{i + 1}</td>
+                  <td>
                     <input
                       type="checkbox"
                       checked={cfg.enabled}
@@ -125,9 +99,8 @@ export function PartRack({
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
-                  <td style={c.td}>
+                  <td>
                     <select
-                      style={c.select}
                       value={cfg.rxChannel}
                       onChange={(e) => onSetPart(i, { rxChannel: Number(e.target.value) })}
                       onClick={(e) => e.stopPropagation()}
@@ -136,9 +109,9 @@ export function PartRack({
                       {Array.from({ length: 16 }, (_, ch) => <option key={ch} value={ch + 1}>{ch + 1}</option>)}
                     </select>
                   </td>
-                  <td style={c.td}>
+                  <td>
                     <select
-                      style={{ ...c.select, width: 180 }}
+                      className="prog"
                       value={selectValue}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -163,7 +136,7 @@ export function PartRack({
                         )}
                     </select>
                   </td>
-                  <td style={c.sliderTd}>
+                  <td className="td-slider">
                     <PartSlider
                       label={`Part ${i + 1} volume`}
                       min={0}
@@ -173,7 +146,7 @@ export function PartRack({
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
-                  <td style={c.sliderTd}>
+                  <td className="td-slider">
                     <PartSlider
                       label={`Part ${i + 1} pan`}
                       center
@@ -184,7 +157,7 @@ export function PartRack({
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
-                  <td style={c.rangeTd}>
+                  <td className="td-range">
                     <NoteRange
                       low={cfg.noteLow}
                       high={cfg.noteHigh}
@@ -192,7 +165,7 @@ export function PartRack({
                       onChange={(noteLow, noteHigh) => onSetPart(i, { noteLow, noteHigh })}
                     />
                   </td>
-                  <td style={c.td}>
+                  <td>
                     <div
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
@@ -209,7 +182,7 @@ export function PartRack({
                       />
                     </div>
                   </td>
-                  <td style={c.td}>
+                  <td>
                     <div
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
@@ -226,18 +199,15 @@ export function PartRack({
                       />
                     </div>
                   </td>
-                  <td style={{ ...c.td, textAlign: 'center' }}>
-                    <span style={{
-                      display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-                      background: (activity[i] ?? 0) > 0 ? '#4ade80' : '#3a3f46',
-                    }} />
+                  <td className="td-act">
+                    <span className={`part-led${(activity[i] ?? 0) > 0 ? ' on' : ''}`} />
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <p style={{ color: '#8a9098', marginTop: 8, maxWidth: 720, lineHeight: 1.4, whiteSpace: 'normal' }}>
+        <p className="partrack-note">
           Click a row to edit that part's voice in the main editor. Drop or LOAD .syx
           or .Dx7Voice files (e.g. TX802 factory A1–B2 + P, or FS1R voice banks) to import banks, AMEM supplements,
           performances, and system setup.
@@ -246,4 +216,3 @@ export function PartRack({
     </div>
   );
 }
-

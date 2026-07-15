@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 interface KeyboardProps {
   startNote?: number;
@@ -16,6 +16,7 @@ function isBlack(semitone: number): boolean {
 
 export function Keyboard({ startNote = 48, octaves = 4, onNoteOn, onNoteOff, activeNotes }: KeyboardProps) {
   const pressed = useRef<number | null>(null);
+  const dragging = useRef(false);
 
   const notes: number[] = [];
   for (let i = 0; i < octaves * 12; i++) notes.push(startNote + i);
@@ -37,6 +38,47 @@ export function Keyboard({ startNote = 48, octaves = 4, onNoteOn, onNoteOff, act
     [onNoteOff],
   );
 
+  // Release the held key when the pointer goes up anywhere or focus leaves
+  // the window (e.g. program dropdown).
+  useEffect(() => {
+    const releaseHeld = () => {
+      dragging.current = false;
+      const note = pressed.current;
+      if (note !== null) release(note);
+    };
+    window.addEventListener('blur', releaseHeld);
+    document.addEventListener('pointerup', releaseHeld);
+    return () => {
+      window.removeEventListener('blur', releaseHeld);
+      document.removeEventListener('pointerup', releaseHeld);
+    };
+  }, [release]);
+
+  // No pointer capture, so a drag glides across keys (glissando); touch
+  // captures implicitly, so release it explicitly.
+  const keyHandlers = (note: number) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      dragging.current = true;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      press(note);
+    },
+    onPointerEnter: () => {
+      if (!dragging.current || pressed.current === note) return;
+      if (pressed.current !== null) release(pressed.current);
+      press(note);
+    },
+    onPointerUp: () => {
+      dragging.current = false;
+      release(note);
+    },
+    onPointerCancel: () => {
+      dragging.current = false;
+      release(note);
+    },
+  });
+
   const whiteWidth = 100 / whiteNotes.length;
 
   return (
@@ -48,13 +90,8 @@ export function Keyboard({ startNote = 48, octaves = 4, onNoteOn, onNoteOff, act
           type="button"
           className={`key white${activeNotes.has(note) ? ' active' : ''}`}
           style={{ left: `${idx * whiteWidth}%`, width: `${whiteWidth}%` }}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            press(note);
-          }}
-          onPointerUp={() => release(note)}
-          onPointerCancel={() => release(note)}
           aria-label={`Note ${note}`}
+          {...keyHandlers(note)}
         />
       ))}
       {/* Black keys */}
@@ -70,13 +107,8 @@ export function Keyboard({ startNote = 48, octaves = 4, onNoteOn, onNoteOff, act
               type="button"
               className={`key black${activeNotes.has(note) ? ' active' : ''}`}
               style={{ left: `${left}%`, width: `${whiteWidth * 0.6}%` }}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                press(note);
-              }}
-              onPointerUp={() => release(note)}
-              onPointerCancel={() => release(note)}
               aria-label={`Note ${note}`}
+              {...keyHandlers(note)}
             />
           );
         })}

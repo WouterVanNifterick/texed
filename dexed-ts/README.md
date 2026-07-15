@@ -17,7 +17,7 @@ Three layers, strictly one-directional (`ui → state → engine`):
 
 | Layer | Where | What |
 |---|---|---|
-| **Engine** | `src/engine/` | Pure DSP, bit-exact port of msfa: operators, envelopes, LFO, the 32-algorithm FM core, voice allocation (`SynthUnit`). No DOM, no React. |
+| **Engine** | `src/engine/` | Pure DSP, bit-exact port of msfa: operators, envelopes, LFO, the 32-algorithm FM core, voice allocation (`Part` / `SynthRack`). No DOM, no React. |
 | **State** | `src/state/` | The 156-byte unpacked DX7 voice: parameter offsets & ranges (`params.ts`), display formatting, single-voice SysEx export, and the algorithm graph derivation used by the UI (`algo.ts`). Pure data. |
 | **Bridge** | `src/worklet/`, `src/audio/` | The engine runs inside an `AudioWorklet` (`dexed-processor.ts`). `protocol.ts` defines the message types; `useDexedSynth.ts` mirrors the current voice into React state, sends single-byte `setParam` edits to the worklet, and fans out a ~30 Hz realtime status stream (per-op envelope level & stage, LFO level) to the meters. |
 | **UI** | `src/components/` | The editor: 6 operator panels + global panel (algorithm, LFO, pitch EG), knobs/cycle buttons/toggles, envelope graphs and the on-screen keyboard. Everything fits one screen — no scrolling, no popups. |

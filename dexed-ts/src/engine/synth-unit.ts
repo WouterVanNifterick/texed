@@ -1,7 +1,7 @@
 // Single-timbre synth: one Part plus the global Dexed FX filter and the
-// block render loop. This is a thin wrapper around Part (which owns all voice
-// management and the mono render), kept for backwards compatibility with the
-// existing worklet host and tests. Multi-timbral hosting lives in SynthRack.
+// block render loop. A thin wrapper around Part (which owns all voice
+// management and the mono render), used by the engine tests as a simple
+// harness. Production hosting lives in SynthRack.
 
 import { Freqlut } from './freqlut';
 import { Lfo } from './lfo';
@@ -11,7 +11,6 @@ import { Porta } from './porta';
 import { Sin } from './sin';
 import { Exp2, Tanh } from './exp2';
 import { PluginFx } from './plugin-fx';
-import { Cartridge } from './cartridge';
 import { Part, MAX_ACTIVE_NOTES, EngineType } from './part';
 
 export { MAX_ACTIVE_NOTES, EngineType };
@@ -58,10 +57,6 @@ export class SynthUnit {
     this.part.setEngineType(type);
   }
 
-  get fxParams(): PluginFx {
-    return this.fx;
-  }
-
   loadVoice(patch: Uint8Array): void {
     this.part.loadVoice(patch);
   }
@@ -72,18 +67,6 @@ export class SynthUnit {
 
   getVoiceData(): Uint8Array {
     return this.part.getVoiceData();
-  }
-
-  loadCartridge(cart: Cartridge): void {
-    this.part.loadCartridge(cart);
-  }
-
-  cartridgeProgramNames(): string[] {
-    return this.part.cartridgeProgramNames();
-  }
-
-  setProgram(idx: number): void {
-    this.part.setProgram(idx);
   }
 
   noteOn(pitch: number, velocity: number, channel = 1): void {

@@ -20,7 +20,8 @@ import {
 } from './controllers';
 import { Dx7Note, type VoiceStatus } from './dx7note';
 import { createStandardTuning, type TuningState } from './tuning';
-import { Cartridge, initVoice } from './cartridge';
+import { initVoice } from './cartridge';
+import { G } from './voice-layout';
 import { VoiceSupplement, createDefaultAmem, AMEM_SLOT_SIZE } from './amem';
 
 export const MAX_ACTIVE_NOTES = 16;
@@ -47,7 +48,6 @@ export class Part {
 
   private voices: Voice[] = [];
   private data = initVoice();
-  private cartridge: Cartridge | null = null;
   private supplement = new VoiceSupplement(createDefaultAmem());
   private monoMode = false;
 
@@ -105,7 +105,7 @@ export class Part {
     this.controllers.at.amp = true;
     this.controllers.refresh();
 
-    this.lfo.reset(this.data.subarray(137));
+    this.lfo.reset(this.data.subarray(G.lfoSpeed));
   }
 
   setEngineType(type: EngineType): void {
@@ -113,6 +113,7 @@ export class Part {
   }
 
   loadVoice(patch: Uint8Array): void {
+    this.clearActiveVoices();
     this.data.set(patch.subarray(0, 156));
     // A bare voice (VCED) leaves the DX7II supplement untouched, matching
     // hardware behavior where a voice edit keeps the current ACED buffer.
@@ -123,6 +124,7 @@ export class Part {
 
   /** Load VMEM + AMEM together (DX7II bank slot). */
   loadVoiceSlot(vmem: Uint8Array, amem: Uint8Array): void {
+    this.clearActiveVoices();
     this.data.set(vmem.subarray(0, 156));
     this.supplement = new VoiceSupplement(amem);
     this.monoMode = this.supplement.mono;
@@ -172,26 +174,23 @@ export class Part {
     return this.data.slice();
   }
 
-  loadCartridge(cart: Cartridge): void {
-    this.cartridge = cart;
-  }
-
-  cartridgeProgramNames(): string[] {
-    return this.cartridge ? this.cartridge.programNames() : [];
-  }
-
-  setProgram(idx: number): void {
-    if (this.cartridge) {
-      const patch = this.cartridge.unpackProgram(idx);
-      this.data.set(patch);
+  /** Silence all active voices before a full program/voice swap (matches desktop Dexed). */
+  clearActiveVoices(): void {
+    for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
+      const v = this.voices[i];
+      if (!v.live) continue;
+      v.keydown = false;
+      v.sustained = false;
+      v.dx7Note.keyup();
+      v.live = false;
+      v.midiNote = -1;
     }
-    this.refreshVoices();
   }
 
   private refreshVoices(): void {
     let sw = '';
     for (let op = 0; op < 6; op++) {
-      sw += this.data[155] & (1 << op) ? '1' : '0';
+      sw += this.data[G.opEnable] & (1 << op) ? '1' : '0';
     }
     this.controllers.opSwitch = sw;
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
@@ -205,7 +204,7 @@ export class Part {
         );
       }
     }
-    this.lfo.reset(this.data.subarray(137));
+    this.lfo.reset(this.data.subarray(G.lfoSpeed));
   }
 
   // ==== MIDI handling ====
@@ -232,7 +231,7 @@ export class Part {
   }
 
   private transpositionShift(): number {
-    return this.data[144] - 24 + this.extraTranspose;
+    return this.data[G.transpose] - 24 + this.extraTranspose;
   }
 
   private enginePitch(midiNote: number): number {
@@ -287,7 +286,7 @@ export class Part {
     const voiceSteal = v.dx7Note.isPlaying();
     v.dx7Note.setSupplement(this.supplement);
     v.dx7Note.init(this.data, this.enginePitch(pitch) + detuneCents / 100, velocity, channel);
-    if (this.data[136] && !voiceSteal) {
+    if (this.data[G.oscKeySync] && !voiceSteal) {
       v.dx7Note.oscSync();
     }
     if (
@@ -298,7 +297,7 @@ export class Part {
       v.dx7Note.initPortamento(this.voices[this.lastActiveVoice].dx7Note);
     }
 
-    if (!this.data[136]) {
+    if (!this.data[G.oscKeySync]) {
       for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
         if (i !== note && this.voices[i].dx7Note.isPlaying() && this.voices[i].midiNote === pitch) {
           v.dx7Note.transferPhase(this.voices[i].dx7Note);
@@ -331,7 +330,6 @@ export class Part {
         v.keydown = false;
         if (this.sustain) v.sustained = true;
         else v.dx7Note.keyup();
-        return;
       }
     }
   }
@@ -391,7 +389,9 @@ export class Part {
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       this.voices[i].midiNote = -1;
       this.voices[i].keydown = false;
+      this.voices[i].sustained = false;
       this.voices[i].live = false;
+      this.voices[i].dx7Note.keyup();
       this.voices[i].dx7Note.oscSync();
     }
   }

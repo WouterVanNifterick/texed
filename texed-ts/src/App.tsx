@@ -4,8 +4,10 @@ import dexedIcon from './assets/dexed-icon.svg';
 import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
 import { getVoiceName, voiceToSysex } from './state/params';
+import { trackCc, trackAftertouch } from './state/live-ctrl';
 import { useFileDrop, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
 import { Keyboard } from './components/Keyboard';
+import { HelpBar } from './components/HelpBar';
 import { OperatorPanel } from './components/OperatorPanel';
 import { GlobalPanel } from './components/GlobalPanel';
 import { PartRack } from './components/PartRack';
@@ -86,9 +88,15 @@ export default function App() {
     midiRef.current = await initMidi({
       noteOn,
       noteOff,
-      controlChange: synth.controlChange,
+      controlChange: (controller, value, channel) => {
+        trackCc(controller, value);
+        synth.controlChange(controller, value, channel);
+      },
       pitchBend: synth.pitchBend,
-      aftertouch: synth.aftertouch,
+      aftertouch: (value, channel) => {
+        trackAftertouch(value);
+        synth.aftertouch(value, channel);
+      },
       inputsChanged: setMidiInputs,
     });
   }, [synth, engine, volume, noteOn, noteOff]);
@@ -160,6 +168,22 @@ export default function App() {
     : 0;
   const program = programIdx >= 0 ? programIdx : 0;
 
+  const onSaveBank = useCallback(() => {
+    const bank = synth.partConfigs[synth.selectedPart]?.voice.bank ?? 'internalA';
+    synth.requestBankDump(bank, (data) => {
+      if (!data) {
+        showLoadMsg(`Bank ${bank} is empty — nothing to save`);
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([data.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${bank}.syx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }, [synth, showLoadMsg]);
+
   const onSaveVoice = useCallback(() => {
     const syx = voiceToSysex(synth.voice);
     const url = URL.createObjectURL(new Blob([syx.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }));
@@ -171,7 +195,7 @@ export default function App() {
   }, [synth]);
 
   return (
-    <div className="app-root">
+    <div className="app-root" onContextMenu={(e) => e.preventDefault()}>
       <div className="rack">
         <TopBar
           synth={synth}
@@ -180,6 +204,7 @@ export default function App() {
           loadMsg={loadMsg}
           onLoadFiles={onLoadFiles}
           onSaveVoice={onSaveVoice}
+          onSaveBank={onSaveBank}
           engineName={ENGINES[engine]}
           onEngine={onEngine}
           onShowParts={() => setShowParts(true)}
@@ -222,6 +247,8 @@ export default function App() {
         </main>
 
         <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
+
+        <HelpBar />
       </div>
 
       {showParts && (

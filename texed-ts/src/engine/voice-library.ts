@@ -1,7 +1,8 @@
 // DX7II bank-aware voice storage: up to four 32-voice VMEM halves plus AMEM supplements.
 
-import { Cartridge, initVoice } from './cartridge';
-import { createDefaultAmem, AMEM_SLOT_SIZE } from './amem';
+import { Cartridge, initVoice, sysexChecksum } from './cartridge';
+import { createDefaultAmem, AMEM_SLOT_SIZE, AMEM_BULK_SIZE } from './amem';
+import { cartridgeFromVoices } from './sysex';
 import type { ParsedPerformance } from './performance';
 import type { SystemSetup } from './system-setup';
 
@@ -80,6 +81,12 @@ export function encodeDx7iiVoiceRef(ref: VoiceRef): number {
       break;
   }
   return base;
+}
+
+/** Pack 32 editable voices into a 4104-byte VMEM bulk dump (header + checksum). */
+function packVmemBank(voices: Uint8Array[]): Uint8Array {
+  const cart = cartridgeFromVoices(voices);
+  return cart.voiceData;
 }
 
 function createEmptySlot(): VoiceSlot {
@@ -194,6 +201,33 @@ export class VoiceLibrary {
     if (!slot) return `${prefix} ${slotNum} (bank not loaded)`;
     const name = voiceNameFromVmem(slot.vmem);
     return `${prefix} ${slotNum} ${name}`;
+  }
+
+  /**
+   * Serialize one bank half as SysEx: an AMEM bulk (format 0x06) followed by a
+   * VMEM 32-voice bulk (format 0x09), the same pairing a DX7II transmits.
+   * Returns null when the bank is not populated.
+   */
+  dumpBankSysex(bank: VoiceBankId): Uint8Array | null {
+    const slots = this.slots[bank];
+    if (!slots) return null;
+
+    // AMEM bulk: F0 43 0n 06 08 60 <1120 bytes> cksum F7.
+    const amem = new Uint8Array(6 + AMEM_BULK_SIZE + 2);
+    amem.set([0xf0, 0x43, 0x00, 0x06, 0x08, 0x60], 0);
+    for (let i = 0; i < 32; i++) {
+      amem.set(slots[i].amem.subarray(0, AMEM_SLOT_SIZE), 6 + i * AMEM_SLOT_SIZE);
+    }
+    amem[6 + AMEM_BULK_SIZE] = sysexChecksum(amem, 6, AMEM_BULK_SIZE);
+    amem[6 + AMEM_BULK_SIZE + 1] = 0xf7;
+
+    // VMEM bulk: pack the 32 unpacked voices back into a 4104-byte dump.
+    const vmem = packVmemBank(slots.map((s) => s.vmem));
+
+    const out = new Uint8Array(amem.length + vmem.length);
+    out.set(amem, 0);
+    out.set(vmem, amem.length);
+    return out;
   }
 
   /** Merge another loaded library into this one (banks, performances, setup). */

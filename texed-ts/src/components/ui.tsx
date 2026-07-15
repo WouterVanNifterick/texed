@@ -1,6 +1,7 @@
 // Small reusable VST-style controls: rotary knob, cycle button, LED toggle.
 
 import { useCallback, useRef } from 'react';
+import { helpProps } from '../state/help';
 
 interface KnobProps {
   label: string;
@@ -12,8 +13,10 @@ interface KnobProps {
   format?: (value: number) => string;
   size?: number;
   accent?: string;
-  /** `stacked` (default): value under dial. `inline`: value beside dial. */
+  /** `stacked` (default): label above dial, value below. `inline`: value beside dial. */
   layout?: 'stacked' | 'inline';
+  /** Description shown in the help bar while hovered. */
+  help?: string;
 }
 
 const ARC = 270; // degrees of travel, gap at the bottom
@@ -30,7 +33,7 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked' }: KnobProps) {
+export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help }: KnobProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
@@ -129,7 +132,9 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       aria-valuetext={display}
       aria-label={label || undefined}
       onKeyDown={onKeyDown}
+      {...(help ? helpProps(label || 'Value', help) : undefined)}
     >
+      {layout === 'stacked' && label ? <div className="ctl-label">{label}</div> : null}
       <svg
         width={size}
         height={size}
@@ -147,7 +152,7 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
         <line x1={c} y1={c} x2={px} y2={py} className="knob-pointer" />
       </svg>
       <div className="knob-value">{display}</div>
-      {label ? <div className="ctl-label">{label}</div> : null}
+      {layout === 'inline' && label ? <div className="ctl-label">{label}</div> : null}
     </div>
   );
 }
@@ -363,12 +368,15 @@ interface CycleProps {
   value: number;
   options: string[];
   onChange: (value: number) => void;
+  /** Description shown in the help bar while hovered. */
+  help?: string;
 }
 
 /** Compact enumerated selector: click cycles forward, wheel steps both ways. */
-export function Cycle({ label, value, options, onChange }: CycleProps) {
+export function Cycle({ label, value, options, onChange, help }: CycleProps) {
   return (
-    <div className="cycle">
+    <div className="cycle" {...(help ? helpProps(label, help) : undefined)}>
+      <div className="ctl-label">{label}</div>
       <button
         type="button"
         onClick={() => onChange((value + 1) % options.length)}
@@ -376,7 +384,6 @@ export function Cycle({ label, value, options, onChange }: CycleProps) {
       >
         {options[value] ?? '?'}
       </button>
-      <div className="ctl-label">{label}</div>
     </div>
   );
 }
@@ -385,11 +392,13 @@ interface ToggleProps {
   label: string;
   on: boolean;
   onChange: (on: boolean) => void;
+  /** Description shown in the help bar while hovered. */
+  help?: string;
 }
 
-export function Toggle({ label, on, onChange }: ToggleProps) {
+export function Toggle({ label, on, onChange, help }: ToggleProps) {
   return (
-    <div className="cycle">
+    <div className="cycle" {...(help ? helpProps(label, help) : undefined)}>
       <button type="button" className={`toggle${on ? ' on' : ''}`} onClick={() => onChange(!on)}>
         <span className="led" />
         {label}

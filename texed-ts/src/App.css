@@ -36,6 +36,20 @@
   padding: 8px;
 }
 
+/* Instrument-style cursors: no text-select I-beam on labels and readouts;
+   real text inputs opt back in. */
+.rack,
+.partrack-overlay {
+  user-select: none;
+  cursor: default;
+}
+
+.rack input:not([type='range']),
+.partrack input:not([type='range']) {
+  user-select: text;
+  cursor: text;
+}
+
 .editor {
   flex: 1;
   min-height: 0;
@@ -70,6 +84,82 @@
 
 .global-col .dx7ii-panel {
   flex: 1.26;
+}
+
+/* DX7II controller-modulation popover, anchored over the global column.
+   `.panel.ctrl-mod-panel` so the shadow/border beat the base .panel rule
+   defined later in this file. */
+.panel.ctrl-mod-panel {
+  position: absolute;
+  right: 8px;
+  top: 60px;
+  width: 330px;
+  z-index: 30;
+  border-color: #3d4456;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    0 8px 24px rgb(0 0 0 / 65%),
+    0 28px 70px rgb(0 0 0 / 85%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Grid keeps the PITCH / AMP / EG / 4th columns aligned across all rows. */
+.ctrl-mod-row {
+  display: grid;
+  grid-template-columns: 52px repeat(4, 1fr) 44px;
+  align-items: end;
+  justify-items: center;
+  gap: 4px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.ctrl-mod-row:last-child {
+  border-bottom: none;
+}
+
+.ctrl-mod-id {
+  justify-self: start;
+  align-self: center;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ctrl-mod-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.ctrl-live-val {
+  font: 8px var(--mono);
+  color: var(--lcd);
+}
+
+/* Live MIDI value meter for one physical controller. */
+.ctrl-live {
+  height: 4px;
+  background: #0b0d12;
+  border: 1px solid #232735;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ctrl-live-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2c8a5a, var(--green));
+  transition: width 0.05s linear;
+}
+
+.ctrl-mod-btn.on {
+  color: var(--green);
 }
 
 /* ==== Top bar ==== */
@@ -256,6 +346,46 @@
   box-shadow: 0 0 6px var(--green);
 }
 
+/* ==== Help bar ==== */
+
+.help-bar {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 25px;
+  padding: 5px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.help-title {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+.help-text {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-idle {
+  font-style: italic;
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ==== Panels ==== */
 
 .panel {
@@ -408,6 +538,13 @@
 .scale-row {
   align-items: flex-end;
   gap: 6px;
+}
+
+/* Help-hover wrapper; keeps the graph filling the leftover row width. */
+.scale-graph-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
 }
 
 .scale-graph {

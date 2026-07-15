@@ -178,6 +178,13 @@ class DexedProcessor extends AudioWorkletProcessor {
       case MsgType.SetPolyphonyCap:
         this.rack.setPolyphonyCap(msg.cap);
         break;
+      case MsgType.RequestBankDump:
+        this.post({
+          type: 'bankDump',
+          bank: msg.bank,
+          data: this.rack.voiceLibrary.dumpBankSysex(msg.bank),
+        });
+        break;
       case MsgType.SelectPerformance:
         this.rack.selectPerformance(msg.index);
         this.postParts();

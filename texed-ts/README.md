@@ -1,4 +1,4 @@
-# Dexed Web
+# Texed
 
 A DX7 FM synthesizer in the browser — a TypeScript port of the
 [Dexed](https://github.com/asb2m10/dexed) / msfa engine with a full

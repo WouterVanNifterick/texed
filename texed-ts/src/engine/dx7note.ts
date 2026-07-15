@@ -26,12 +26,16 @@ const coarsemul = [
   81503396, 82323963, 83117622,
 ];
 
-function logfreqRound2semi(freq: number): number {
+/** Quantize a Q24 log-frequency to `semis`-semitone steps (DX7II portamento step). */
+function logfreqRoundSemi(freq: number, semis: number): number {
   const base = 50857777;
-  const step = Math.trunc((1 << 24) / 12);
+  const step = Math.trunc(((1 << 24) / 12) * semis);
   const rem = (freq - base) % step;
   return freq - rem;
 }
+
+// Random pitch fluctuation depth 0-7 → max deviation in cents (DX7II: off, 5c…41c).
+const randomPitchCents = [0, 5, 11, 17, 23, 29, 35, 41];
 
 // prettier-ignore
 const velocityData = [
@@ -126,6 +130,9 @@ export class Dx7Note {
   private initialised = false;
   private mpePitchBend = 8192;
 
+  /** Pitch-bend gate for DX7II bend modes (LOW/HIGH/K.ON); set by the Part. */
+  bendGate = true;
+
   constructor(tuningState: TuningState) {
     this.tuningState = tuningState;
     for (let op = 0; op < 6; op++) {
@@ -179,15 +186,17 @@ export class Dx7Note {
 
   init(patch: Uint8Array, midinote: number, velocity: number, _channel: number): void {
     this.initialised = true;
+    this.bendGate = true;
     const rates = new Int32Array(4);
     const levels = new Int32Array(4);
 
     const sup = this.supplement;
     this.pegShift = sup ? pegRangeShift[sup.pitchEgRange & 3] : 0;
     this.pegVelScale = sup?.pitchEgVelSens ? Math.max(1, velocity) / 127 : 1;
-    // Random pitch fluctuation: up to ±8 cents per note-on.
-    this.randPitchOffset = sup?.randomPitch
-      ? Math.trunc((Math.random() * 2 - 1) * (((1 << 24) / 12) * 0.08))
+    // Random pitch fluctuation: depth-scaled cents offset per note-on.
+    const rndCents = randomPitchCents[sup ? sup.randomPitchDepth & 7 : 0];
+    this.randPitchOffset = rndCents
+      ? Math.trunc((Math.random() * 2 - 1) * (((1 << 24) / 1200) * rndCents))
       : 0;
 
     for (let op = 0; op < 6; op++) {
@@ -261,7 +270,8 @@ export class Dx7Note {
 
     // ---- PITCH BEND ----
     const pitchbend = ctrls.values_[kControllerPitch];
-    let pb = pitchbend - 0x2000;
+    // DX7II bend modes: the Part gates which notes respond (LOW/HIGH/K.ON).
+    let pb = this.bendGate ? pitchbend - 0x2000 : 0;
     if (pb !== 0) {
       if (ctrls.values_[kControllerPitchStep] === 0) {
         if (pb >= 0) {
@@ -281,7 +291,8 @@ export class Dx7Note {
       pb += d;
     }
 
-    const pitchBase = (pb + ctrls.masterTune) | 0;
+    // BC/AT pitch bias shifts pitch like a bend (applies to fixed ops too).
+    const pitchBase = (pb + ctrls.masterTune + ctrls.pitchBiasMod) | 0;
     pitchMod += pitchBase;
 
     // ==== AMP MOD ====
@@ -317,7 +328,9 @@ export class Dx7Note {
         } else {
           if (this.portaCurpitch[op] !== this.basepitch[op]) {
             basepitch = this.portaCurpitch[op];
-            if (ctrls.portamentoGlissCc) basepitch = logfreqRound2semi(basepitch);
+            if (ctrls.portamentoGlissCc) {
+              basepitch = logfreqRoundSemi(basepitch, Math.max(1, ctrls.portamentoStepCc));
+            }
 
             const cur = this.portaCurpitch[op];
             const dst = this.basepitch[op];

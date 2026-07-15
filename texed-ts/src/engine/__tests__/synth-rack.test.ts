@@ -188,7 +188,7 @@ describe('SynthRack', () => {
     rack.setSupplementParamForPart(0, 5, 0x08 | 0x02); // unison on
     rack.noteOn(60, 100, 1);
     renderPeak(rack, 10);
-    expect(rack.getStatus().totalActive).toBe(2);
+    expect(rack.getStatus().totalActive).toBe(4);
 
     rack.setVoiceRefForPart(0, { bank: 'internalA', program: 3 });
     expect(rack.getStatus().totalActive).toBe(0);

@@ -26,6 +26,7 @@ export const MsgType = {
   SetPart: 'setPart',
   SetPolyphonyCap: 'setPolyphonyCap',
   SelectPerformance: 'selectPerformance',
+  RequestBankDump: 'requestBankDump',
 } as const;
 
 export interface NoteOnMsg {
@@ -116,6 +117,10 @@ export interface SetMasterTuneMsg {
 export interface PanicMsg {
   type: typeof MsgType.Panic;
 }
+export interface RequestBankDumpMsg {
+  type: typeof MsgType.RequestBankDump;
+  bank: VoiceBankId;
+}
 
 export type ToWorkletMessage =
   | NoteOnMsg
@@ -136,7 +141,8 @@ export type ToWorkletMessage =
   | SelectPartMsg
   | SetPartMsg
   | SetPolyphonyCapMsg
-  | SelectPerformanceMsg;
+  | SelectPerformanceMsg
+  | RequestBankDumpMsg;
 
 export interface ProgramStateMsg {
   type: 'programState';
@@ -183,6 +189,14 @@ export interface PerformancesMsg {
   index: number;
 }
 
+/** Serialized AMEM + VMEM SysEx for one bank half (response to RequestBankDump). */
+export interface BankDumpMsg {
+  type: 'bankDump';
+  bank: VoiceBankId;
+  /** Concatenated AMEM (0x06) + VMEM (0x09) frames, or null if bank empty. */
+  data: Uint8Array | null;
+}
+
 export type FromWorkletMessage =
   | ProgramStateMsg
   | LoadReportMsg
@@ -190,4 +204,5 @@ export type FromWorkletMessage =
   | MasterTuneMsg
   | StatusMsg
   | PartsMsg
-  | PerformancesMsg;
+  | PerformancesMsg
+  | BankDumpMsg;

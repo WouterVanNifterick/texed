@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: dexed-ts
+        working-directory: texed-ts
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: dexed-ts/pnpm-lock.yaml
+          cache-dependency-path: texed-ts/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm test

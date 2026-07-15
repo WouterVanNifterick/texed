@@ -99,10 +99,8 @@ export class Part {
     this.controllers.masterTune = 0;
     // Canonical DX7 default mod routing (see SynthUnit history): mod wheel adds
     // pitch-LFO (vibrato), aftertouch adds amplitude-LFO.
-    this.controllers.wheel.range = 99;
-    this.controllers.wheel.pitch = true;
-    this.controllers.at.range = 99;
-    this.controllers.at.amp = true;
+    this.controllers.wheel.pitchRange = 99;
+    this.controllers.at.ampRange = 99;
     this.controllers.refresh();
 
     this.lfo.reset(this.data.subarray(G.lfoSpeed));
@@ -253,20 +251,27 @@ export class Part {
       }
     }
 
-    let triggerLfo = true;
-    for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
-      if (this.voices[i].keydown) {
-        triggerLfo = false;
-        break;
+    // LFO key trigger: "single" restarts only on the first key down; "multi"
+    // (AMEM LTRG) retriggers on every note-on.
+    let triggerLfo = this.supplement.lfoKeyTrigger;
+    if (!triggerLfo) {
+      triggerLfo = true;
+      for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
+        if (this.voices[i].keydown) {
+          triggerLfo = false;
+          break;
+        }
       }
     }
     if (triggerLfo) this.lfo.keydown();
 
-    // DX7II unison: stack a second, detuned voice per note.
+    // DX7II unison poly: stack four detuned voices per note (hardware plays
+    // 4 notes of the 16-voice pool per key in single mode).
     if (this.supplement.unison) {
       const spreadCents = (this.supplement.unisonDetune + 1) * 5;
-      this.triggerVoice(pitch, velocity, channel, -spreadCents);
-      this.triggerVoice(pitch, velocity, channel, spreadCents);
+      for (const k of [-1.5, -0.5, 0.5, 1.5]) {
+        this.triggerVoice(pitch, velocity, channel, k * spreadCents);
+      }
     } else {
       this.triggerVoice(pitch, velocity, channel, 0);
     }
@@ -350,6 +355,16 @@ export class Part {
         break;
       case 5:
         this.controllers.portamentoCc = value;
+        break;
+      case 11:
+        // Foot controller 2 (mapped to CC 11 / expression in this implementation).
+        this.controllers.foot2Cc = value;
+        this.controllers.refresh();
+        break;
+      case 13:
+        // "MIDI IN controller" (DX7II assignable CC; fixed to CC 13 here).
+        this.controllers.midiCsCc = value;
+        this.controllers.refresh();
         break;
       case 64:
         this.setSustain(value > 63);
@@ -478,10 +493,38 @@ export class Part {
     return { amps, steps, pitchStep, lfo: 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp };
   }
 
+  /**
+   * DX7II pitch bend modes (AMEM PBM): gate which live voices respond to the
+   * bend wheel. NORMAL = all; LOW/HIGH = lowest/highest held note only;
+   * K.ON = physically held keys only (not footswitch-sustained sound).
+   */
+  private updateBendGates(): void {
+    const mode = this.supplement.pitchBendMode;
+    if (mode === 0) {
+      for (const v of this.voices) v.dx7Note.bendGate = true;
+      return;
+    }
+    if (mode === 3) {
+      for (const v of this.voices) v.dx7Note.bendGate = v.keydown;
+      return;
+    }
+    let extreme = -1;
+    for (const v of this.voices) {
+      if (!v.live || !v.keydown || v.midiNote < 0) continue;
+      if (extreme === -1 || (mode === 1 ? v.midiNote < extreme : v.midiNote > extreme)) {
+        extreme = v.midiNote;
+      }
+    }
+    for (const v of this.voices) {
+      v.dx7Note.bendGate = v.keydown && v.midiNote === extreme;
+    }
+  }
+
   // ==== Render (mono, no FX) ====
 
   /** Render `numSamples` mono samples into `channelData` (overwrites). */
   render(channelData: Float32Array, numSamples: number): void {
+    this.updateBendGates();
     let i = 0;
 
     for (i = 0; i < numSamples && i < this.extraBufSize; i++) {
@@ -519,6 +562,12 @@ export class Part {
               audiobuf[j] = 0;
             }
           }
+        }
+
+        // DX7II controller volume (FC1/FC2/MIDI-ctrl volume ranges).
+        const vol = this.controllers.volMod;
+        if (vol !== 1) {
+          for (let j = 0; j < N; j++) sumbuf[j] *= vol;
         }
 
         const jmax = numSamples - i;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
 import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
 import type { PartConfig, ProgramOption } from '../engine/synth-rack';
-import type { VoiceRef } from '../engine/voice-library';
+import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
 import type { LoadReport } from '../engine/sysex-loader';
 import { initVoice } from '../engine/cartridge';
 import { createDefaultAmem } from '../engine/amem';
@@ -43,6 +43,8 @@ export interface DexedSynth {
   performanceIndex: number;
   selectPerformance: (index: number) => void;
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
+  /** Request a bank half as SysEx; cb gets null when the bank is empty. */
+  requestBankDump: (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => void;
 }
 
 export function useStatus<T>(
@@ -61,6 +63,7 @@ export function useDexedSynth(): DexedSynth {
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
+  const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
   const [loadReport, setLoadReport] = useState<LoadReport | null>(null);
   const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
@@ -104,6 +107,9 @@ export function useDexedSynth(): DexedSynth {
       } else if (m.type === 'performances') {
         setPerformanceNames(m.names);
         setPerformanceIndex(m.index);
+      } else if (m.type === 'bankDump') {
+        bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
+        bankDumpCb.current = null;
       } else if (m.type === 'status') {
         for (const cb of statusSubs.current) cb(m);
       }
@@ -208,6 +214,14 @@ export function useDexedSynth(): DexedSynth {
     [post],
   );
 
+  const requestBankDump = useCallback(
+    (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => {
+      bankDumpCb.current = cb;
+      post({ type: MsgType.RequestBankDump, bank });
+    },
+    [post],
+  );
+
   const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
     statusSubs.current.add(cb);
     return () => statusSubs.current.delete(cb);
@@ -248,6 +262,7 @@ export function useDexedSynth(): DexedSynth {
       performanceIndex,
       selectPerformance,
       subscribeStatus,
+      requestBankDump,
     }),
     [
       start,
@@ -281,6 +296,7 @@ export function useDexedSynth(): DexedSynth {
       performanceIndex,
       selectPerformance,
       subscribeStatus,
+      requestBankDump,
     ],
   );
 }

@@ -72,6 +72,31 @@ describe('loadSysexFile — tx802 regression', () => {
   });
 });
 
+describe('dumpBankSysex — AMEM + VMEM round-trip', () => {
+  it('re-loading a dumped bank reproduces every voice and supplement byte', () => {
+    const original = loadSysexFile(fx('tx802-prg1.syx')).library;
+    const dump = original.dumpBankSysex('internalA');
+    expect(dump).not.toBeNull();
+
+    const frames = identifySysex(dump!);
+    expect(frames.map((f) => f.kind)).toEqual([SysexKind.Amem, SysexKind.Cartridge]);
+    expect(frames.every((f) => f.checksumOk)).toBe(true);
+
+    const reloaded = loadSysexFile(dump!).library;
+    for (let i = 0; i < 32; i++) {
+      const a = original.resolve({ bank: 'internalA', program: i })!;
+      const b = reloaded.resolve({ bank: 'internalA', program: i })!;
+      expect(Array.from(b.vmem)).toEqual(Array.from(a.vmem));
+      expect(Array.from(b.amem)).toEqual(Array.from(a.amem));
+    }
+  });
+
+  it('returns null for an unpopulated bank', () => {
+    const lib = loadSysexFile(fx('tx802-prg1.syx')).library;
+    expect(lib.dumpBankSysex('cartridgeB')).toBeNull();
+  });
+});
+
 describe('loadSysexFile — raw VCED (.Dx7Voice)', () => {
   const fs1r = (name: string) =>
     new Uint8Array(

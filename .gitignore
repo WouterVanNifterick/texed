@@ -50,3 +50,6 @@ out/
 
 # JUCE reference tree (separate repo, kept locally only)
 dexed-juce/
+
+# Local tooling / data (not part of the project)
+tools/

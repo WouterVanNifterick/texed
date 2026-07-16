@@ -42,3 +42,11 @@ out/
 .yarn/unplugged
 .yarn/install-state.gz
 .pnp.*
+
+# Editor / tooling config (not part of the project)
+.claude/
+.cursor/
+.vscode/
+
+# JUCE reference tree (separate repo, kept locally only)
+dexed-juce/

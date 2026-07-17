@@ -14,7 +14,7 @@ function isBlack(semitone: number): boolean {
   return BLACK_SEMITONES.includes(semitone % 12);
 }
 
-export function Keyboard({ startNote = 48, octaves = 4, onNoteOn, onNoteOff, activeNotes }: KeyboardProps) {
+export function Keyboard({ startNote = 36, octaves = 5, onNoteOn, onNoteOff, activeNotes }: KeyboardProps) {
   const pressed = useRef<number | null>(null);
   const dragging = useRef(false);
 

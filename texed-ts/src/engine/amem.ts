@@ -204,6 +204,9 @@ export class VoiceSupplement {
     if (this.portamentoTime > 0) {
       ctrls.portamentoCc = this.portamentoTime;
       ctrls.portamentoEnableCc = true;
+    } else {
+      ctrls.portamentoCc = 0;
+      ctrls.portamentoEnableCc = false;
     }
 
     // Pitch bend range / step / mode from AMEM

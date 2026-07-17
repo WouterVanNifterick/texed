@@ -111,6 +111,19 @@ describe('VoiceSupplement.applyToControllers', () => {
     expect(ctrls.portamentoStepCc).toBe(3);
   });
 
+  it('disables portamento when time is 0, clearing stale enabled state', () => {
+    const amem = createDefaultAmem();
+    amem[8] = 0; // porta time 0
+    const sup = new VoiceSupplement(amem);
+    const ctrls = new Controllers();
+    // Simulate a previously-enabled portamento state (sticky bug repro).
+    ctrls.portamentoEnableCc = true;
+    ctrls.portamentoCc = 50;
+    sup.applyToControllers(ctrls);
+    expect(ctrls.portamentoEnableCc).toBe(false);
+    expect(ctrls.portamentoCc).toBe(0);
+  });
+
   it('routes controller ranges into per-destination modulation', () => {
     const amem = createDefaultAmem();
     amem.set([99, 0, 0], 9); // MW pitch 99

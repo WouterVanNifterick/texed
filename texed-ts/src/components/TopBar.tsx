@@ -20,6 +20,7 @@ interface TopBarProps {
   engineName: string;
   onEngine: () => void;
   onShowParts: () => void;
+  onShowLibrary: () => void;
   polyphony: number;
   onPolyphony: (n: number) => void;
   volume: number;
@@ -31,7 +32,7 @@ interface TopBarProps {
 
 export function TopBar({
   synth, program, onSelectProgram, loadMsg, onLoadFiles, onSaveVoice, onStoreVoice, onSaveBank,
-  engineName, onEngine, onShowParts, polyphony, onPolyphony,
+  engineName, onEngine, onShowParts, onShowLibrary, polyphony, onPolyphony,
   volume, onVolume, masterTuneCents, onMasterTune, midiInputs,
 }: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -153,6 +154,14 @@ export function TopBar({
         {...helpProps('PARTS', 'Opens the multi-timbral part rack: 8 parts with their own voice, channel, volume, pan and note range.')}
       >
         PARTS
+      </button>
+      <button
+        type="button"
+        className="bar-btn"
+        onClick={onShowLibrary}
+        {...helpProps('LIBRARY', 'Browse the built-in voice and performance library (FS1R, TX802, DX7II factory sets and more) plus everything you have loaded.')}
+      >
+        LIBRARY
       </button>
 
       <label

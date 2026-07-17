@@ -117,10 +117,16 @@ class DexedProcessor extends AudioWorkletProcessor {
         if (msg.channel === undefined) this.rack.aftertouchSelected(msg.value);
         else this.rack.aftertouch(msg.value, msg.channel);
         break;
-      case MsgType.LoadVoice:
-        this.rack.loadVoiceForPart(this.rack.selectedPart, new Uint8Array(msg.data));
-        this.postVoice();
+      case MsgType.LoadVoice: {
+        const target = msg.partIndex ?? this.rack.selectedPart;
+        this.rack.loadVoiceForPart(
+          target,
+          new Uint8Array(msg.data),
+          msg.supplement ? new Uint8Array(msg.supplement) : undefined,
+        );
+        if (target === this.rack.selectedPart) this.postVoice();
         break;
+      }
       case MsgType.LoadCart:
         try {
           this.handleLoad(new Uint8Array(msg.data));
@@ -193,6 +199,48 @@ class DexedProcessor extends AudioWorkletProcessor {
         // Re-emit program state so the updated slot name shows in the UI.
         this.postProgramState();
         this.postParts();
+        break;
+      case MsgType.LoadBankInto: {
+        const raw = new Uint8Array(msg.voices);
+        const voices: Uint8Array[] = [];
+        for (let i = 0; i + 156 <= raw.length && voices.length < 32; i += 156) {
+          voices.push(raw.subarray(i, i + 156));
+        }
+        let amems: Uint8Array[] | undefined;
+        if (msg.supplements) {
+          const rawA = new Uint8Array(msg.supplements);
+          amems = [];
+          for (let i = 0; i + 35 <= rawA.length && amems.length < 32; i += 35) {
+            amems.push(rawA.subarray(i, i + 35));
+          }
+        }
+        this.rack.loadBankInto(msg.bank, voices, amems);
+        this.postProgramState();
+        this.postParts();
+        this.postVoice();
+        break;
+      }
+      case MsgType.GetFullState:
+        this.post({ type: 'fullState', state: this.rack.getFullState() });
+        break;
+      case MsgType.SetFullState:
+        try {
+          this.rack.restoreFullState(msg.state);
+          this.postProgramState();
+          this.postParts();
+          this.postPerformances();
+          this.postVoice();
+          this.postMasterTune();
+        } catch (err) {
+          this.post({
+            type: 'loadReport',
+            report: {
+              frames: 0,
+              applied: [],
+              skipped: [`session restore failed: ${err instanceof Error ? err.message : String(err)}`],
+            },
+          });
+        }
         break;
     }
   }

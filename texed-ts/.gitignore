@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Generated built-in patch library (pnpm build:library)
+/public/library/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

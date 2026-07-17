@@ -3,8 +3,9 @@
 import type { PartConfig, ProgramOption } from '../engine/synth-rack';
 import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
 import type { LoadReport } from '../engine/sysex-loader';
+import type { RackState } from '../engine/rack-state';
 
-export type { VoiceRef, VoiceBankId };
+export type { VoiceRef, VoiceBankId, RackState };
 
 export const MsgType = {
   NoteOn: 'noteOn',
@@ -27,6 +28,9 @@ export const MsgType = {
   SelectPerformance: 'selectPerformance',
   RequestBankDump: 'requestBankDump',
   StoreVoice: 'storeVoice',
+  LoadBankInto: 'loadBankInto',
+  GetFullState: 'getFullState',
+  SetFullState: 'setFullState',
 } as const;
 
 export interface NoteOnMsg {
@@ -59,6 +63,10 @@ export interface AftertouchMsg {
 export interface LoadVoiceMsg {
   type: typeof MsgType.LoadVoice;
   data: ArrayBuffer; // 156 bytes
+  /** Optional 35-byte DX7II AMEM supplement to load with the voice. */
+  supplement?: ArrayBuffer;
+  /** Target part; defaults to the selected part. */
+  partIndex?: number;
 }
 export interface LoadCartMsg {
   type: typeof MsgType.LoadCart;
@@ -120,6 +128,21 @@ export interface StoreVoiceMsg {
   /** Destination slot; defaults to the selected part's current voice ref. */
   dest?: VoiceRef;
 }
+export interface LoadBankIntoMsg {
+  type: typeof MsgType.LoadBankInto;
+  bank: VoiceBankId;
+  /** Up to 32 × 156-byte unpacked voices, concatenated; short data is init-padded. */
+  voices: ArrayBuffer;
+  /** Optional matching 35-byte AMEM supplements, concatenated. */
+  supplements?: ArrayBuffer;
+}
+export interface GetFullStateMsg {
+  type: typeof MsgType.GetFullState;
+}
+export interface SetFullStateMsg {
+  type: typeof MsgType.SetFullState;
+  state: RackState;
+}
 
 export type ToWorkletMessage =
   | NoteOnMsg
@@ -141,7 +164,10 @@ export type ToWorkletMessage =
   | SetPolyphonyCapMsg
   | SelectPerformanceMsg
   | RequestBankDumpMsg
-  | StoreVoiceMsg;
+  | StoreVoiceMsg
+  | LoadBankIntoMsg
+  | GetFullStateMsg
+  | SetFullStateMsg;
 
 export interface ProgramStateMsg {
   type: 'programState';
@@ -196,6 +222,12 @@ export interface BankDumpMsg {
   data: Uint8Array | null;
 }
 
+/** Whole-rack snapshot (response to GetFullState). */
+export interface FullStateMsg {
+  type: 'fullState';
+  state: RackState;
+}
+
 export type FromWorkletMessage =
   | ProgramStateMsg
   | LoadReportMsg
@@ -204,4 +236,5 @@ export type FromWorkletMessage =
   | StatusMsg
   | PartsMsg
   | PerformancesMsg
-  | BankDumpMsg;
+  | BankDumpMsg
+  | FullStateMsg;

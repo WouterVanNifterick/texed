@@ -1883,3 +1883,231 @@ button.start:hover {
   line-height: 1.4;
   white-space: normal;
 }
+
+/* ==== Library browser overlay ==== */
+
+.libbrowser-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 60%);
+}
+
+.libbrowser {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-solid);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  width: min(860px, 96vw);
+  height: min(640px, 92vh);
+  font: 12px system-ui, sans-serif;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
+}
+
+.libbrowser-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.libbrowser-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.libbrowser-search {
+  flex: 1;
+  min-width: 120px;
+  background: #24272c;
+  color: var(--text);
+  border: 1px solid #3a3f46;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.libbrowser-audition {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dim);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.libbrowser-part {
+  color: #7fc4ff;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.libbrowser-btn {
+  background: #2b2f36;
+  color: var(--text);
+  border: 1px solid #3a3f46;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.libbrowser-btn:hover {
+  background: #343a42;
+}
+
+.libbrowser-columns {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  outline: none;
+}
+
+.libbrowser-col {
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.libbrowser-col-collections {
+  flex: 0 0 190px;
+}
+
+.libbrowser-col-banks {
+  flex: 0 0 220px;
+}
+
+.libbrowser-col-voices {
+  flex: 1;
+}
+
+.libbrowser-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.libbrowser-row {
+  display: block;
+  width: 100%;
+  flex: 0 0 auto;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  padding: 3px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.libbrowser-row:hover {
+  background: #262a30;
+}
+
+.libbrowser-row.selected {
+  background: #2c3a4a;
+}
+
+.libbrowser-colhead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  background: var(--panel-solid);
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.libbrowser-num {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.libbrowser-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #35506b;
+  color: #a9d4ff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  vertical-align: baseline;
+}
+
+.libbrowser-count {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.libbrowser-crumb {
+  color: var(--dim);
+}
+
+.libbrowser-bankinfo {
+  padding: 4px 6px;
+  color: var(--dim);
+  line-height: 1.7;
+}
+
+.libbrowser-bankrow.empty {
+  opacity: 0.5;
+}
+
+.libbrowser-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.libbrowser-footer select {
+  background: #24272c;
+  color: var(--text);
+  border: 1px solid #3a3f46;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.libbrowser-empty {
+  color: var(--dim);
+  padding: 8px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.libbrowser-note {
+  color: var(--dim);
+  margin-top: 8px;
+  line-height: 1.4;
+  white-space: normal;
+}

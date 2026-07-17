@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "pnpm build:library && vite",
+    "build": "pnpm build:library && tsc -b && vite build",
+    "build:library": "tsx scripts/build-patch-library.mts",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run"
@@ -20,6 +21,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "tsx": "^4.23.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^4.1.10"

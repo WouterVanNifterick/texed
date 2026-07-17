@@ -159,6 +159,20 @@ export class VoiceLibrary {
     this.loadVmemBank('internalA', cart);
   }
 
+  /**
+   * Replace one half-bank with up to 32 unpacked 156-byte voices (plus optional
+   * 35-byte AMEM supplements). Slots beyond the supplied voices reset to init.
+   */
+  loadVoicesInto(bank: VoiceBankId, voices: Uint8Array[], amems?: Uint8Array[]): void {
+    const slots = this.ensureBank(bank);
+    for (let i = 0; i < 32; i++) {
+      const v = voices[i];
+      slots[i].vmem.set(v ? v.subarray(0, 156) : initVoice());
+      const a = amems?.[i];
+      slots[i].amem.set(a ? a.subarray(0, AMEM_SLOT_SIZE) : createDefaultAmem());
+    }
+  }
+
   resolve(ref: VoiceRef): VoiceSlot | null {
     const bank = this.slots[ref.bank];
     if (!bank) return null;

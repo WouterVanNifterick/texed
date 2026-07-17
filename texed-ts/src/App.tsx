@@ -6,6 +6,7 @@ import { initMidi, type MidiConnection } from './audio/midi';
 import { getVoiceName, voiceToSysex } from './state/params';
 import { trackCc, trackAftertouch } from './state/live-ctrl';
 import { useFileDrop, usePartSelectKeys, usePersistentState, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
+import { loadSession, saveSession, SESSION_SCHEMA } from './state/persistence';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
 import { OperatorPanel } from './components/OperatorPanel';
@@ -15,6 +16,7 @@ import { useEnvTimeScale, type TimeMode } from './components/env-time';
 import { type YMode } from './components/env-draw';
 import { Segmented } from './components/ui';
 import { PartRack } from './components/PartRack';
+import { LibraryBrowser } from './components/LibraryBrowser';
 import { TopBar } from './components/TopBar';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
@@ -38,6 +40,7 @@ export default function App() {
   const [yMode, setYMode] = usePersistentState<YMode>('envYMode', 'db');
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
   const [showParts, setShowParts] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [polyphony, setPolyphony] = useState(32);
   const midiRef = useRef<MidiConnection | null>(null);
   const [loadMsg, showLoadMsg] = useTransientMessage();
@@ -96,6 +99,19 @@ export default function App() {
     setStarted(true);
     synth.setEngine(engine);
     synth.setMasterGain(masterGain(volume));
+
+    const saved = await loadSession();
+    if (saved) {
+      synth.setFullState(saved.rack);
+      setVolume(saved.ui.volume);
+      synth.setMasterGain(masterGain(saved.ui.volume));
+      setEngine(saved.ui.engine);
+      synth.setEngine(saved.ui.engine);
+      setPolyphony(saved.ui.polyphony);
+      synth.setPolyphonyCap(saved.ui.polyphony);
+      showLoadMsg('Session restored');
+    }
+
     midiRef.current = await initMidi({
       noteOn,
       noteOff,
@@ -110,7 +126,24 @@ export default function App() {
       },
       inputsChanged: setMidiInputs,
     });
-  }, [synth, engine, volume, noteOn, noteOff]);
+  }, [synth, engine, volume, noteOn, noteOff, showLoadMsg]);
+
+  // Persist the session (debounced): every rack mutation flows through the
+  // synth's mirrored state, so the synth object identity is the change signal.
+  useEffect(() => {
+    if (!started) return;
+    const t = window.setTimeout(() => {
+      synth.getFullState((rack) => {
+        void saveSession({
+          schema: SESSION_SCHEMA,
+          savedAt: Date.now(),
+          rack,
+          ui: { volume, engine, polyphony },
+        });
+      });
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [started, synth, volume, engine, polyphony]);
 
   useQwertyKeyboard(started, noteOn, noteOff);
   usePartSelectKeys(started, synth.selectPart);
@@ -218,6 +251,7 @@ export default function App() {
           engineName={ENGINES[engine]}
           onEngine={onEngine}
           onShowParts={() => setShowParts(true)}
+          onShowLibrary={() => setShowLibrary(true)}
           polyphony={polyphony}
           onPolyphony={(n) => {
             setPolyphony(n);
@@ -332,6 +366,14 @@ export default function App() {
           onSetVoiceRef={synth.setVoiceRef}
           subscribeStatus={synth.subscribeStatus}
           onClose={() => setShowParts(false)}
+        />
+      )}
+
+      {showLibrary && (
+        <LibraryBrowser
+          synth={synth}
+          showMsg={showLoadMsg}
+          onClose={() => setShowLibrary(false)}
         />
       )}
 

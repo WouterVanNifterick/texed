@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import workletUrl from '../worklet/dexed-processor.ts?worker&url';
-import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg } from '../worklet/protocol';
+import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg, type RackState } from '../worklet/protocol';
 import type { PartConfig, ProgramOption } from '../engine/synth-rack';
 import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
 import type { LoadReport } from '../engine/sysex-loader';
@@ -10,9 +10,17 @@ import { voiceRefEquals } from '../engine/synth-rack';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
 
+export interface BankInfo {
+  id: VoiceBankId;
+  label: string;
+  populated: boolean;
+}
+
 export interface DexedSynth {
   start: () => Promise<void>;
   programOptions: ProgramOption[];
+  /** The four half-banks with populated flags (mirrors the worklet library). */
+  banks: BankInfo[];
   loadReport: LoadReport | null;
   voice: Uint8Array;
   /** 35-byte DX7II AMEM supplement for the selected part's voice. */
@@ -30,7 +38,7 @@ export interface DexedSynth {
   setParam: (offset: number, value: number) => void;
   setSupplementParam: (offset: number, value: number) => void;
   setMasterTune: (cents: number) => void;
-  setVoice: (voice: Uint8Array) => void;
+  setVoice: (voice: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => void;
   setMasterGain: (gain: number) => void;
   panic: () => void;
   partConfigs: PartConfig[];
@@ -46,6 +54,12 @@ export interface DexedSynth {
   requestBankDump: (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => void;
   /** Commit the selected part's edit buffer into a voice slot (defaults to its current voice ref). */
   storeVoice: (dest?: VoiceRef) => void;
+  /** Replace one half-bank with concatenated 156-byte voices (+ optional 35-byte AMEMs). */
+  loadBankInto: (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => void;
+  /** Snapshot the whole rack (banks, performances, parts, edit buffers). */
+  getFullState: (cb: (state: RackState) => void) => void;
+  /** Restore a getFullState snapshot. */
+  setFullState: (state: RackState) => void;
 }
 
 export function useStatus<T>(
@@ -65,7 +79,9 @@ export function useDexedSynth(): DexedSynth {
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
   const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
+  const fullStateCb = useRef<((state: RackState) => void) | null>(null);
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
+  const [banks, setBanks] = useState<BankInfo[]>([]);
   const [loadReport, setLoadReport] = useState<LoadReport | null>(null);
   const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
   const [supplement, setSupplementState] = useState<Uint8Array>(() => createDefaultAmem());
@@ -95,6 +111,7 @@ export function useDexedSynth(): DexedSynth {
       const m = e.data;
       if (m.type === 'programState') {
         setProgramOptions(m.options);
+        setBanks(m.banks);
       } else if (m.type === 'loadReport') {
         setLoadReport(m.report);
       } else if (m.type === 'voice') {
@@ -111,6 +128,9 @@ export function useDexedSynth(): DexedSynth {
       } else if (m.type === 'bankDump') {
         bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
         bankDumpCb.current = null;
+      } else if (m.type === 'fullState') {
+        fullStateCb.current?.(m.state);
+        fullStateCb.current = null;
       } else if (m.type === 'status') {
         for (const cb of statusSubs.current) cb(m);
       }
@@ -188,10 +208,20 @@ export function useDexedSynth(): DexedSynth {
   );
 
   const setVoice = useCallback(
-    (v: Uint8Array) => {
-      setVoiceState(v);
+    (v: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => {
+      // Only mirror into the editor state when the target is the edited part.
+      if (opts?.partIndex === undefined) {
+        setVoiceState(v);
+        if (opts?.supplement) setSupplementState(opts.supplement);
+      }
       const buf = v.slice().buffer as ArrayBuffer;
-      post({ type: MsgType.LoadVoice, data: buf }, [buf]);
+      const transfer: Transferable[] = [buf];
+      let supplement: ArrayBuffer | undefined;
+      if (opts?.supplement) {
+        supplement = opts.supplement.slice().buffer as ArrayBuffer;
+        transfer.push(supplement);
+      }
+      post({ type: MsgType.LoadVoice, data: buf, supplement, partIndex: opts?.partIndex }, transfer);
     },
     [post],
   );
@@ -221,6 +251,33 @@ export function useDexedSynth(): DexedSynth {
 
   const storeVoice = useCallback((dest?: VoiceRef) => post({ type: MsgType.StoreVoice, dest }), [post]);
 
+  const loadBankInto = useCallback(
+    (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => {
+      const vbuf = voices.slice().buffer as ArrayBuffer;
+      const transfer: Transferable[] = [vbuf];
+      let sbuf: ArrayBuffer | undefined;
+      if (supplements) {
+        sbuf = supplements.slice().buffer as ArrayBuffer;
+        transfer.push(sbuf);
+      }
+      post({ type: MsgType.LoadBankInto, bank, voices: vbuf, supplements: sbuf }, transfer);
+    },
+    [post],
+  );
+
+  const getFullState = useCallback(
+    (cb: (state: RackState) => void) => {
+      fullStateCb.current = cb;
+      post({ type: MsgType.GetFullState });
+    },
+    [post],
+  );
+
+  const setFullState = useCallback(
+    (state: RackState) => post({ type: MsgType.SetFullState, state }),
+    [post],
+  );
+
   const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
     statusSubs.current.add(cb);
     return () => statusSubs.current.delete(cb);
@@ -232,6 +289,7 @@ export function useDexedSynth(): DexedSynth {
     () => ({
       start,
       programOptions,
+      banks,
       loadReport,
       voice,
       supplement,
@@ -262,10 +320,14 @@ export function useDexedSynth(): DexedSynth {
       subscribeStatus,
       requestBankDump,
       storeVoice,
+      loadBankInto,
+      getFullState,
+      setFullState,
     }),
     [
       start,
       programOptions,
+      banks,
       loadReport,
       voice,
       supplement,
@@ -296,6 +358,9 @@ export function useDexedSynth(): DexedSynth {
       subscribeStatus,
       requestBankDump,
       storeVoice,
+      loadBankInto,
+      getFullState,
+      setFullState,
     ],
   );
 }

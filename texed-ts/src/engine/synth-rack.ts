@@ -10,6 +10,10 @@ import { Part, EngineType } from './part';
 import { initSynthTables } from './synth-unit';
 import type { ParsedPerformance } from './performance';
 import type { LoadReport } from './sysex-loader';
+import type { RackState } from './rack-state';
+import { RACK_STATE_SCHEMA } from './rack-state';
+import { identifySysex, SysexKind, cartridgeFromSyx } from './sysex';
+import { amemPayloadFromFrame } from './amem';
 import {
   VoiceLibrary,
   defaultVoiceRef,
@@ -62,6 +66,17 @@ function defaultPartConfig(enabled: boolean): PartConfig {
     link: false,
     voice: defaultVoiceRef(),
   };
+}
+
+/** Deep-copy parsed performances so snapshots never alias live library state. */
+function copyPerformances(perfs: ParsedPerformance[]): ParsedPerformance[] {
+  return perfs.map((p) => ({
+    name: p.name,
+    parts: p.parts.map((part) => ({
+      ...part,
+      ...(part.voice ? { voice: { ...part.voice } } : {}),
+    })),
+  }));
 }
 
 export interface RackStatus {
@@ -221,9 +236,82 @@ export class SynthRack {
     return this.masterTuneCents_;
   }
 
-  loadVoiceForPart(index: number, patch: Uint8Array): void {
+  loadVoiceForPart(index: number, patch: Uint8Array, supplement?: Uint8Array): void {
     if (index < 0 || index >= NUM_PARTS) return;
-    this.parts[index].loadVoice(patch);
+    if (supplement) this.parts[index].loadVoiceSlot(patch, supplement);
+    else this.parts[index].loadVoice(patch);
+  }
+
+  /** Replace one half-bank with unpacked voices and re-apply parts using it. */
+  loadBankInto(bank: VoiceBankId, voices: Uint8Array[], amems?: Uint8Array[]): void {
+    this.library.loadVoicesInto(bank, voices, amems);
+    for (let i = 0; i < NUM_PARTS; i++) {
+      if (this.configs[i].voice.bank === bank) this.applyVoiceToPart(i);
+    }
+    for (let i = 0; i < NUM_PARTS; i++) {
+      if (!this.isSlave(i)) this.syncLinkedSlaves(i);
+    }
+  }
+
+  /** Snapshot the whole rack for persistence (banks as SysEx dumps). */
+  getFullState(): RackState {
+    const banks: RackState['banks'] = [];
+    for (const id of this.library.populatedBanks()) {
+      const data = this.library.dumpBankSysex(id);
+      if (data) banks.push({ id, data });
+    }
+    return {
+      schema: RACK_STATE_SCHEMA,
+      banks,
+      performances: copyPerformances(this.library.performances),
+      performanceIndex: this.library.performanceIndex,
+      parts: this.configs.map((c) => ({ ...c, voice: { ...c.voice } })),
+      selectedPart: this.selected,
+      masterTuneCents: this.masterTuneCents_,
+      editBuffers: this.parts.map((p) => ({
+        voice: p.getVoiceData(),
+        supplement: p.getSupplementData(),
+      })),
+    };
+  }
+
+  /** Restore a getFullState snapshot. Throws on schema mismatch or bad data. */
+  restoreFullState(state: RackState): void {
+    if (!state || state.schema !== RACK_STATE_SCHEMA) {
+      throw new Error('unsupported rack state schema');
+    }
+    this.library.clear();
+    for (const b of state.banks) {
+      for (const frame of identifySysex(b.data)) {
+        if (frame.kind === SysexKind.Amem) {
+          const packed = amemPayloadFromFrame(frame.raw);
+          if (packed) this.library.loadAmemBank(b.id, packed);
+        } else if (frame.kind === SysexKind.Cartridge) {
+          const cart = cartridgeFromSyx(frame.raw);
+          if (cart) this.library.loadVmemBank(b.id, cart);
+        }
+      }
+    }
+    this.library.performances = copyPerformances(state.performances);
+    this.library.performanceIndex = Math.max(
+      0,
+      Math.min(state.performances.length - 1, state.performanceIndex),
+    );
+    for (let i = 0; i < NUM_PARTS; i++) {
+      const src = state.parts[i];
+      const { voiceLabel: _label, ...cfg } = src ?? defaultPartConfig(i === 0);
+      this.setPartConfig(i, cfg);
+    }
+    if (state.selectedPart >= 0 && state.selectedPart < NUM_PARTS) {
+      this.selected = state.selectedPart;
+    }
+    this.applyMasterTuneCents(state.masterTuneCents);
+    // Edit buffers last so unsaved edits win over the bank slot contents.
+    state.editBuffers?.forEach((eb, i) => {
+      if (i < NUM_PARTS && eb?.voice?.length >= 156 && eb?.supplement?.length >= 35) {
+        this.parts[i].loadVoiceSlot(eb.voice, eb.supplement);
+      }
+    });
   }
 
   loadPerformances(perfs: ParsedPerformance[]): void {

@@ -80,6 +80,36 @@
   grid-row: 1 / 7;
 }
 
+/* Combined view: the envelope overlay sits above the operator columns only,
+   while the right pane (algorithm / LFO / pitch EG / DX7II) keeps the full
+   height of the editor, exactly as in the separate view. */
+.editor.combined {
+  grid-template-rows: minmax(140px, 0.75fr) 1fr 1fr;
+}
+
+.editor.combined .env-overlay-panel {
+  grid-column: 1 / 4;
+  grid-row: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+.editor.combined .global-col {
+  grid-row: 1 / 4;
+}
+
+.editor.stack.combined {
+  grid-template-rows: minmax(150px, auto) repeat(6, 1fr);
+}
+
+.editor.stack.combined .env-overlay-panel {
+  grid-column: 1;
+}
+
+.editor.stack.combined .global-col {
+  grid-row: 1 / 8;
+}
+
 /* ==== Mode bar (envelope view / layout / axis switches) ==== */
 
 .mode-bar {
@@ -94,8 +124,17 @@
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
 }
 
-.mode-bar-spacer {
-  flex: 1;
+.mode-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-bar-viz {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .segmented {
@@ -345,10 +384,22 @@
   font-weight: 400;
 }
 
-.part-edit-group {
+.bar-group {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar-group-right {
+  margin-left: auto;
+}
+
+.bar-divider {
+  flex: none;
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 0;
+  background: var(--line);
 }
 
 .part-strip {
@@ -357,6 +408,7 @@
 }
 
 .part-btn {
+  position: relative;
   width: 22px;
   height: 18px;
   padding: 0;
@@ -385,17 +437,16 @@
   opacity: 0.45;
 }
 
-.voice-name {
-  width: 130px;
-  padding: 5px 8px;
-  font: 14px var(--mono);
-  letter-spacing: 2px;
-  color: var(--lcd);
-  background: #100e07;
-  border: 1px solid #3a3320;
-  border-radius: 4px;
-  box-shadow: inset 0 2px 6px rgb(0 0 0 / 60%);
-  text-transform: uppercase;
+.part-btn.active::after {
+  content: '';
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green);
 }
 
 .program-select {
@@ -405,7 +456,8 @@
   background: #100e07;
   border: 1px solid #3a3320;
   border-radius: 4px;
-  max-width: 180px;
+  min-width: 160px;
+  max-width: 280px;
 }
 
 .bar-btn {
@@ -426,8 +478,134 @@
   border-color: #3d4456;
 }
 
-.bar-btn.panic {
+.bar-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  line-height: 0;
+}
+
+.bar-btn.active {
+  color: var(--text);
+  border-color: #3d4456;
+  background: linear-gradient(#333846, #262b36);
+}
+
+/* Download split menu (save voice / save bank) */
+.dl-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.dl-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 45%);
+}
+
+.dl-menu button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.dl-menu button:hover {
+  background: rgb(255 180 84 / 10%);
+}
+
+.dl-menu-sub {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--dim);
+}
+
+/* Settings popover (engine / poly / midi out / live sysex) */
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 252px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 45%);
+}
+
+.settings-title {
+  padding: 2px 8px 7px;
+  margin-bottom: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+
+.settings-row:hover {
+  background: rgb(255 180 84 / 8%);
+}
+
+.settings-row-label {
+  flex: none;
+  min-width: 88px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dim);
+}
+
+.settings-row select {
+  width: 132px;
   margin-left: auto;
+  padding: 4px 5px;
+  font: 12px var(--mono);
+  color: var(--lcd);
+  background: #100e07;
+  border: 1px solid #3a3320;
+  border-radius: 4px;
+}
+
+.settings-row .cycle {
+  margin-left: auto;
+}
+
+.bar-btn.panic {
   color: #ff9a94;
   border-color: #5c2f2d;
 }
@@ -441,7 +619,7 @@
   gap: 4px;
 }
 
-.poly-ctl {
+.perf-ctl {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -451,13 +629,14 @@
   color: var(--dim);
 }
 
-.poly-ctl select {
+.perf-ctl select {
   padding: 4px 5px;
   font: 12px var(--mono);
   color: var(--lcd);
   background: #100e07;
   border: 1px solid #3a3320;
   border-radius: 4px;
+  max-width: 200px;
 }
 
 .load-msg {
@@ -660,6 +839,16 @@
     inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 10%, transparent);
 }
 
+/* Persistent selection ring — the op/pitch envelope being edited in the
+   combined view. Placed after .hilite so it wins when a panel is both. */
+.panel.selected {
+  border-color: var(--op, var(--accent));
+  box-shadow:
+    0 0 0 1px var(--op, var(--accent)),
+    0 0 14px color-mix(in srgb, var(--op, var(--accent)) 32%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 9%, transparent);
+}
+
 .op-power {
   padding: 3px 8px;
   font-size: 11px;
@@ -722,7 +911,28 @@
 }
 
 .lfo-meter {
+  position: relative;
   max-width: 120px;
+}
+
+/* Centre tick — the LFO zero-crossing that the fill grows out from. */
+.lfo-meter-center {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: rgb(255 255 255 / 20%);
+  z-index: 1;
+}
+
+/* Bipolar fill: anchored to the centre, extends left or right with the LFO. */
+.lfo-meter-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--green);
 }
 
 /* ==== LFO shape graph ==== */
@@ -778,7 +988,7 @@
   flex: 1;
   min-width: 0;
   height: auto;
-  min-height: 56px;
+  min-height: 48px;
   background: linear-gradient(#0a0c11, #0d1017);
   border: 1px solid #232735;
   border-radius: 6px;
@@ -1209,6 +1419,24 @@
 
 .carrier.hilite .algo-node {
   stroke: #fff;
+}
+
+.algo-display g.sel .algo-node {
+  stroke: var(--op, var(--accent));
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 5px var(--op, var(--accent)));
+}
+
+.carrier.sel .algo-node {
+  stroke: #fff;
+}
+
+.algo-display g.dim .algo-node {
+  opacity: 0.35;
+}
+
+.algo-display g.dim .algo-num {
+  opacity: 0.5;
 }
 
 /* ==== Controls ==== */
@@ -1882,6 +2110,47 @@ button.start:hover {
   max-width: 720px;
   line-height: 1.4;
   white-space: normal;
+}
+
+.store-dialog {
+  width: min(420px, 92vw);
+}
+
+.store-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.store-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.store-field select,
+.store-name-input {
+  padding: 6px 8px;
+  font: 13px var(--mono);
+  color: var(--text);
+  background: #24272c;
+  border: 1px solid #3a3f46;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.store-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.store-confirm {
+  color: var(--accent);
 }
 
 /* ==== Library browser overlay ==== */

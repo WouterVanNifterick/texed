@@ -40,6 +40,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   const [audition, setAudition] = useState(true);
   const [target, setTarget] = useState<VoiceBankId | 'auto'>('auto');
   const [perfSetIdx, setPerfSetIdx] = useState(0);
+  const [perfVoiceIdx, setPerfVoiceIdx] = useState(-1);
   const walkTimer = useRef<number | null>(null);
   const voiceListRef = useRef<HTMLDivElement>(null);
 
@@ -430,7 +431,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                 <button
                   type="button"
                   className={`libbrowser-row${perfSetIdx === -1 ? ' selected' : ''}`}
-                  onClick={() => setPerfSetIdx(-1)}
+                  onClick={() => {
+                    setPerfSetIdx(-1);
+                    setPerfVoiceIdx(-1);
+                  }}
                 >
                   LOADED <span className="libbrowser-count">{synth.performanceNames.length}</span>
                 </button>
@@ -440,7 +444,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                   key={set.id}
                   type="button"
                   className={`libbrowser-row${i === perfSetIdx ? ' selected' : ''}`}
-                  onClick={() => setPerfSetIdx(i)}
+                  onClick={() => {
+                    setPerfSetIdx(i);
+                    setPerfVoiceIdx(-1);
+                  }}
                 >
                   <span className="libbrowser-crumb">{collection} ›</span> {set.name}{' '}
                   <span className="libbrowser-count">{set.names.length}</span>
@@ -469,10 +476,11 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                     <button
                       key={i}
                       type="button"
-                      className="libbrowser-row"
-                      onClick={() =>
-                        onSelectPerformance(perfSets[perfSetIdx].set, i, perfSets[perfSetIdx].collection)
-                      }
+                      className={`libbrowser-row${i === perfVoiceIdx ? ' selected' : ''}`}
+                      onClick={() => {
+                        setPerfVoiceIdx(i);
+                        onSelectPerformance(perfSets[perfSetIdx].set, i, perfSets[perfSetIdx].collection);
+                      }}
                       onDoubleClick={onClose}
                     >
                       <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span> {name || 'INIT'}

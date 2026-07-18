@@ -53,6 +53,10 @@ interface OperatorPanelProps {
   subscribeStatus: Subscribe;
   hovered: boolean;
   onHover: (opNum: number | null) => void;
+  /** This operator is the currently selected one (edited in the combined view). */
+  selected: boolean;
+  /** Select this operator. */
+  onSelect: () => void;
   timeScale: EnvTimeScale;
   yMode: YMode;
   /** Show the per-operator envelope graph (hidden in the combined view). */
@@ -70,6 +74,8 @@ export const OperatorPanel = memo(function OperatorPanel({
   subscribeStatus,
   hovered,
   onHover,
+  selected,
+  onSelect,
   timeScale,
   yMode,
   showEnv,
@@ -99,10 +105,11 @@ export const OperatorPanel = memo(function OperatorPanel({
 
   return (
     <section
-      className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${flat ? ' flat' : ''}`}
+      className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${selected ? ' selected' : ''}${flat ? ' flat' : ''}`}
       style={{ ['--op' as string]: OP_COLORS[opNum - 1] }}
       onPointerEnter={() => onHover(opNum)}
       onPointerLeave={() => onHover(null)}
+      onPointerDown={onSelect}
     >
       <div className="panel-head">
         <button
@@ -126,7 +133,7 @@ export const OperatorPanel = memo(function OperatorPanel({
           kind="amp"
           rates={rates}
           levels={levels}
-          ampParams={computeAmpParams(voice, opNum)}
+          ampParams={computeAmpParams(voice, opNum, !!carrier)}
           timeScale={timeScale}
           yMode={yMode}
           color={OP_COLORS[opNum - 1]}

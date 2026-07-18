@@ -3,7 +3,9 @@ import './App.css';
 import dexedIcon from './assets/dexed-icon.svg';
 import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
-import { getVoiceName, voiceToSysex } from './state/params';
+import { setMidiOutConnection, setMidiOutTarget, setMidiOutLive, sendVoiceDump } from './audio/midi-out';
+import { getVoiceName, voiceToSysex, withVoiceName } from './state/params';
+import { acedToSysex } from './engine/amem';
 import { trackCc, trackAftertouch } from './state/live-ctrl';
 import { useFileDrop, usePartSelectKeys, usePersistentState, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
 import { loadSession, saveSession, SESSION_SCHEMA } from './state/persistence';
@@ -18,6 +20,10 @@ import { Segmented } from './components/ui';
 import { PartRack } from './components/PartRack';
 import { LibraryBrowser } from './components/LibraryBrowser';
 import { TopBar } from './components/TopBar';
+import { StoreVoiceDialog } from './components/StoreVoiceDialog';
+import { StoreIcon } from './components/icons';
+import { helpProps } from './state/help';
+import type { VoiceRef } from './engine/voice-library';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 
@@ -39,8 +45,12 @@ export default function App() {
   const [timeMode, setTimeMode] = usePersistentState<TimeMode>('envTimeMode', 'log');
   const [yMode, setYMode] = usePersistentState<YMode>('envYMode', 'db');
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
+  const [midiOutputs, setMidiOutputs] = useState<{ id: string; name: string }[]>([]);
+  const [midiOutId, setMidiOutId] = usePersistentState<string>('midiOutId', '');
+  const [midiLive, setMidiLive] = usePersistentState<'on' | 'off'>('midiLiveSend', 'off');
   const [showParts, setShowParts] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showStore, setShowStore] = useState(false);
   const [polyphony, setPolyphony] = useState(32);
   const midiRef = useRef<MidiConnection | null>(null);
   const [loadMsg, showLoadMsg] = useTransientMessage();
@@ -125,8 +135,14 @@ export default function App() {
         synth.aftertouch(value, channel);
       },
       inputsChanged: setMidiInputs,
+      outputsChanged: setMidiOutputs,
     });
-  }, [synth, engine, volume, noteOn, noteOff, showLoadMsg]);
+    // Route all outgoing SysEx (voice dumps, live param changes) and note
+    // forwarding through this connection, restoring the persisted target/toggle.
+    setMidiOutConnection(midiRef.current);
+    setMidiOutTarget(midiOutId);
+    setMidiOutLive(midiLive === 'on');
+  }, [synth, engine, volume, noteOn, noteOff, showLoadMsg, midiOutId, midiLive]);
 
   // Persist the session (debounced): every rack mutation flows through the
   // synth's mirrored state, so the synth object identity is the change signal.
@@ -152,11 +168,24 @@ export default function App() {
     return () => midiRef.current?.close();
   }, []);
 
-  const onEngine = useCallback(() => {
-    const next = (engine + 1) % ENGINES.length;
-    setEngine(next);
-    synth.setEngine(next);
-  }, [synth, engine]);
+  useEffect(() => {
+    setMidiOutTarget(midiOutId);
+  }, [midiOutId]);
+  useEffect(() => {
+    setMidiOutLive(midiLive === 'on');
+  }, [midiLive]);
+
+  const onSendVoice = useCallback(() => {
+    sendVoiceDump(synth.voice, synth.supplement);
+  }, [synth]);
+
+  const onEngine = useCallback(
+    (next: number) => {
+      setEngine(next);
+      synth.setEngine(next);
+    },
+    [synth],
+  );
 
   const onVolume = useCallback(
     (v: number) => {
@@ -220,15 +249,25 @@ export default function App() {
     });
   }, [synth, showLoadMsg]);
 
-  const onStoreVoice = useCallback(() => {
-    const label = synth.partConfigs[synth.selectedPart]?.voiceLabel ?? 'current slot';
-    synth.storeVoice();
-    showLoadMsg(`Stored voice into ${label}`);
-  }, [synth, showLoadMsg]);
+  const onStoreConfirm = useCallback(
+    (name: string, dest: VoiceRef, destLabel: string) => {
+      synth.setVoice(withVoiceName(synth.voice, name));
+      synth.storeVoice(dest);
+      setShowStore(false);
+      showLoadMsg(`Stored voice into ${destLabel}`);
+    },
+    [synth, showLoadMsg],
+  );
 
   const onSaveVoice = useCallback(() => {
-    const syx = voiceToSysex(synth.voice);
-    const url = URL.createObjectURL(new Blob([syx.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }));
+    // Single voice = DX7II additional data (ACED) followed by the voice (VCED),
+    // the same pair the DX7II transmits for the current voice.
+    const aced = acedToSysex(synth.supplement);
+    const vced = voiceToSysex(synth.voice);
+    const syx = new Uint8Array(aced.length + vced.length);
+    syx.set(aced, 0);
+    syx.set(vced, aced.length);
+    const url = URL.createObjectURL(new Blob([syx.buffer as ArrayBuffer], { type: 'application/octet-stream' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = `${getVoiceName(synth.voice).trim() || 'voice'}.syx`;
@@ -241,14 +280,12 @@ export default function App() {
       <div className="rack">
         <TopBar
           synth={synth}
-          program={program}
-          onSelectProgram={onSelectProgram}
           loadMsg={loadMsg}
           onLoadFiles={onLoadFiles}
           onSaveVoice={onSaveVoice}
-          onStoreVoice={onStoreVoice}
           onSaveBank={onSaveBank}
-          engineName={ENGINES[engine]}
+          engine={engine}
+          engineNames={ENGINES}
           onEngine={onEngine}
           onShowParts={() => setShowParts(true)}
           onShowLibrary={() => setShowLibrary(true)}
@@ -262,61 +299,95 @@ export default function App() {
           masterTuneCents={synth.masterTuneCents}
           onMasterTune={synth.setMasterTune}
           midiInputs={midiInputs}
+          midiOutputs={midiOutputs}
+          midiOutId={midiOutId}
+          onMidiOut={setMidiOutId}
+          midiLive={midiLive === 'on'}
+          onMidiLive={(on) => setMidiLive(on ? 'on' : 'off')}
+          onSendVoice={onSendVoice}
         />
 
         <div className="mode-bar">
-          <Segmented
-            value={envView}
-            onChange={setEnvView}
-            options={[
-              { value: 'individual', label: 'SEPARATE', help: 'Show one envelope per operator plus the pitch EG.' },
-              { value: 'combined', label: 'COMBINED', help: 'Overlay all envelopes on one plot; edit the selected one on top.' },
-            ]}
-          />
-          <Segmented
-            value={opLayout}
-            onChange={setOpLayout}
-            options={[
-              { value: 'grid', label: '3×2', help: 'Arrange the six operator panels in a 3×2 grid.' },
-              { value: 'stack', label: '1×6', help: 'Stack the six operators as flat horizontal rows.' },
-            ]}
-          />
-          <div className="mode-bar-spacer" />
-          <Segmented
-            label="TIME"
-            value={timeMode}
-            onChange={setTimeMode}
-            options={[
-              { value: 'log', label: 'LOG', help: 'Logarithmic time axis: fast attacks and slow releases are both legible.' },
-              { value: 'linear', label: 'LIN', help: 'Linear time axis (clamped to 10 s), same seconds-per-pixel everywhere.' },
-            ]}
-          />
-          <Segmented
-            label="LEVEL"
-            value={yMode}
-            onChange={setYMode}
-            options={[
-              { value: 'db', label: 'dB', help: 'Decibel level axis: decay stages are straight, quiet levels stay visible.' },
-              { value: 'linear', label: 'LIN', help: 'Linear amplitude axis: matches raw sample output; low levels sit near the floor.' },
-            ]}
-          />
+          <div className="mode-bar-left">
+            <select
+              className="program-select"
+              value={program}
+              onChange={(e) => onSelectProgram(Number(e.target.value))}
+              disabled={synth.programOptions.length === 0}
+              {...helpProps('PROGRAM', 'Selects a voice for the current part from the loaded banks.')}
+            >
+              {synth.programOptions.length === 0 ? (
+                <option value={0}>INIT VOICE</option>
+              ) : (
+                synth.programOptions.map((opt, i) => (
+                  <option key={i} value={i}>
+                    {opt.label}
+                  </option>
+                ))
+              )}
+            </select>
+            <button
+              type="button"
+              className="bar-btn bar-btn-icon"
+              onClick={() => setShowStore(true)}
+              aria-label="Store"
+              {...helpProps('STORE', 'Store the edited voice into a bank slot (name + location).')}
+            >
+              <StoreIcon />
+            </button>
+          </div>
+          <div className="mode-bar-viz">
+            <Segmented
+              value={envView}
+              onChange={setEnvView}
+              options={[
+                { value: 'individual', label: 'SEPARATE', help: 'Show one envelope per operator plus the pitch EG.' },
+                { value: 'combined', label: 'COMBINED', help: 'Overlay all envelopes on one plot; edit the selected one on top.' },
+              ]}
+            />
+            <Segmented
+              value={opLayout}
+              onChange={setOpLayout}
+              options={[
+                { value: 'grid', label: '3×2', help: 'Arrange the six operator panels in a 3×2 grid.' },
+                { value: 'stack', label: '1×6', help: 'Stack the six operators as flat horizontal rows.' },
+              ]}
+            />
+            <Segmented
+              label="TIME"
+              value={timeMode}
+              onChange={setTimeMode}
+              options={[
+                { value: 'log', label: 'LOG', help: 'Logarithmic time axis: fast attacks and slow releases are both legible.' },
+                { value: 'linear', label: 'LIN', help: 'Linear time axis (clamped to 10 s), same seconds-per-pixel everywhere.' },
+              ]}
+            />
+            <Segmented
+              label="LEVEL"
+              value={yMode}
+              onChange={setYMode}
+              options={[
+                { value: 'db', label: 'dB', help: 'Decibel level axis: decay stages are straight, quiet levels stay visible.' },
+                { value: 'linear', label: 'LIN', help: 'Linear amplitude axis: matches raw sample output; low levels sit near the floor.' },
+              ]}
+            />
+          </div>
         </div>
 
-        {combined && (
-          <EnvOverlay
-            voice={synth.voice}
-            timeScale={timeScale}
-            yMode={yMode}
-            selected={selectedOp}
-            onSelect={setSelectedOp}
-            setParam={synth.setParam}
-            subscribeStatus={synth.subscribeStatus}
-            hoverOp={hoverOp}
-            onHoverOp={setHoverOp}
-          />
-        )}
-
         <main className={`editor${stack ? ' stack' : ''}${combined ? ' combined' : ''}`}>
+          {combined && (
+            <EnvOverlay
+              voice={synth.voice}
+              timeScale={timeScale}
+              yMode={yMode}
+              selected={selectedOp}
+              onSelect={setSelectedOp}
+              setParam={synth.setParam}
+              subscribeStatus={synth.subscribeStatus}
+              hoverOp={hoverOp}
+              onHoverOp={setHoverOp}
+            />
+          )}
           {[1, 2, 3, 4, 5, 6].map((opNum) => (
             <OperatorPanel
               key={opNum}
@@ -328,6 +399,8 @@ export default function App() {
               subscribeStatus={synth.subscribeStatus}
               hovered={hoverOp === opNum}
               onHover={setHoverOp}
+              selected={selectedOp === opNum}
+              onSelect={() => setSelectedOp(opNum)}
               timeScale={timeScale}
               yMode={yMode}
               showEnv={!combined}
@@ -342,6 +415,8 @@ export default function App() {
             subscribeStatus={synth.subscribeStatus}
             hoverOp={hoverOp}
             onHoverOp={setHoverOp}
+            selected={selectedOp}
+            onSelect={setSelectedOp}
             timeScale={timeScale}
             yMode={yMode}
             showEnv={!combined}
@@ -353,14 +428,20 @@ export default function App() {
         <HelpBar />
       </div>
 
+      {showStore && (
+        <StoreVoiceDialog
+          synth={synth}
+          defaultVoice={selectedVoice}
+          onConfirm={onStoreConfirm}
+          onClose={() => setShowStore(false)}
+        />
+      )}
+
       {showParts && (
         <PartRack
           configs={synth.partConfigs}
           selectedPart={synth.selectedPart}
           programOptions={synth.programOptions}
-          performanceNames={synth.performanceNames}
-          performanceIndex={synth.performanceIndex}
-          onSelectPerformance={synth.selectPerformance}
           onSelect={synth.selectPart}
           onSetPart={synth.setPart}
           onSetVoiceRef={synth.setVoiceRef}

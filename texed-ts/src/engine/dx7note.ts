@@ -351,10 +351,17 @@ export class Dx7Note {
         let level = this.env[op].getsample();
         if (this.ampmodsens[op] !== 0) {
           const sensamp = sar64(amdMod * this.ampmodsens[op], 24);
-          const pt = Math.trunc(Math.exp((Math.fround(sensamp) / 262144) * 0.07 + 12.2));
+          // Match C++ `uint32_t pt = exp(...)` (saturate instead of UB on huge values).
+          const pt = Math.min(
+            0xffff_ffff,
+            Math.trunc(Math.exp((Math.fround(sensamp) / 262144) * 0.07 + 12.2)),
+          );
           // level * (pt << 4) can exceed 2^53, so use BigInt.
-          const ldiff = Number((BigInt(level) * BigInt(pt * 16)) >> 28n);
+          const ldiff = Number(((BigInt(level) * BigInt(pt)) << 4n) >> 28n);
           level -= ldiff;
+          // msfa's exp curve can slightly overshoot at AMS=max; negative level
+          // wraps inside Exp2 and sounds like clipping/noise.
+          if (level < 0) level = 0;
         }
         this.params[op].levelIn = level;
       }

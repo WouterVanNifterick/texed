@@ -12,15 +12,22 @@ import { AlgoDisplay } from './AlgoDisplay';
 import { LiveEnvEditor } from './EnvEditor';
 import { PITCH_COLOR, type YMode } from './env-draw';
 import { type EnvTimeScale } from './env-time';
+import { type EnvSelection } from './EnvOverlay';
 import { LfoGraph } from './LfoGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 
 function LfoMeter({ subscribe }: { subscribe: Subscribe }) {
+  // Status is 0..1 with 0.5 = LFO zero-crossing. Draw the fill outward from the
+  // centre so positive and negative excursions are read symmetrically.
   const lfo = useStatus(subscribe, (s) => s.lfo, 0.5);
+  const dev = lfo - 0.5; // -0.5..0.5
+  const width = Math.abs(dev) * 100;
+  const left = dev >= 0 ? 50 : 50 - width;
   return (
     <div className="meter lfo-meter" title="LFO output">
-      <div className="meter-fill" style={{ transform: `scaleX(${lfo.toFixed(3)})` }} />
+      <div className="lfo-meter-center" />
+      <div className="lfo-meter-fill" style={{ left: `${left}%`, width: `${width}%` }} />
     </div>
   );
 }
@@ -33,6 +40,9 @@ interface GlobalPanelProps {
   subscribeStatus: Subscribe;
   hoverOp: number | null;
   onHoverOp: (opNum: number | null) => void;
+  /** Currently selected envelope (op number 1..6 or the pitch EG). */
+  selected: EnvSelection;
+  onSelect: (sel: EnvSelection) => void;
   timeScale: EnvTimeScale;
   yMode: YMode;
   /** Show the pitch EG graph here (hidden in the combined view). */
@@ -47,6 +57,8 @@ export const GlobalPanel = memo(function GlobalPanel({
   subscribeStatus,
   hoverOp,
   onHoverOp,
+  selected,
+  onSelect,
   timeScale,
   yMode,
   showEnv,
@@ -70,7 +82,15 @@ export const GlobalPanel = memo(function GlobalPanel({
         </div>
         <div className="algo-panel-body">
           <div className="algo-vis-block">
-            <AlgoDisplay algorithm={voice[G.algorithm]} hoverOp={hoverOp} onHover={onHoverOp} />
+            <AlgoDisplay
+              voice={voice}
+              algorithm={voice[G.algorithm]}
+              hoverOp={hoverOp}
+              onHover={onHoverOp}
+              selectedOp={typeof selected === 'number' ? selected : null}
+              onSelect={onSelect}
+              subscribeStatus={subscribeStatus}
+            />
           </div>
           <div className="algo-ctl-block">
             <div className="algo-ctl-grid">
@@ -178,7 +198,11 @@ export const GlobalPanel = memo(function GlobalPanel({
         </div>
       </section>
 
-      <section className="panel pitch-panel">
+      <section
+        className={`panel pitch-panel${selected === 'pitch' ? ' selected' : ''}`}
+        style={{ ['--op' as string]: PITCH_COLOR }}
+        onPointerDown={() => onSelect('pitch')}
+      >
         <div className="panel-head">
           <span className="panel-title">PITCH EG</span>
         </div>
@@ -389,7 +413,7 @@ const CTRL_ROWS: CtrlRowSpec[] = [
 const DEST_HELP: Record<string, (name: string) => string> = {
   PITCH: (n) => `Pitch modulation range (0–99) — how much LFO pitch modulation the ${n} can add.`,
   AMP: (n) => `Amplitude modulation range (0–99) — how much LFO amplitude modulation the ${n} can add.`,
-  EG: (n) => `EG bias range (0–99) — the ${n} raises the level of AMS-sensitive operators, e.g. for breath-controlled swells.`,
+  EG: (n) => `EG bias range (0–99) — assigns the ${n} as an EG-bias gate for AMS-sensitive operators (0 = closed/silent, high = open). Raise the controller to hear the swell.`,
   VOL: (n) => `Volume range (0–99) — how far the ${n} can attenuate the part volume.`,
   BIAS: (n) => `Pitch bias (−50…+50) — the ${n} bends pitch directly up or down from center 0.`,
 };

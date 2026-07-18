@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VoiceSupplement, createDefaultAmem } from '../amem';
+import { VoiceSupplement, createDefaultAmem, extendedAmsTable } from '../amem';
 import { Controllers } from '../controllers';
 import { SynthRack } from '../synth-rack';
 import { initVoice } from '../cartridge';
@@ -248,5 +248,19 @@ describe('supplement plumbing through SynthRack', () => {
     expect(rack.masterTuneCents).toBe(12.5);
     rack.noteOn(60, 100, 1);
     expect(renderBlocks(rack, 200)).toBeGreaterThan(0);
+  });
+});
+
+describe('extended AMS table', () => {
+  it('keeps DX7II AMS 0–7 within the classic msfa depth range', () => {
+    expect(extendedAmsTable).toHaveLength(8);
+    expect(extendedAmsTable[0]).toBe(0);
+    expect(extendedAmsTable[2]).toBe(4_342_338); // DX7 AMS 1
+    expect(extendedAmsTable[5]).toBe(7_171_437); // DX7 AMS 2
+    expect(extendedAmsTable[7]).toBe(16_777_216); // DX7 AMS 3
+    for (let i = 1; i < 8; i++) {
+      expect(extendedAmsTable[i]).toBeGreaterThan(extendedAmsTable[i - 1]);
+      expect(extendedAmsTable[i]).toBeLessThanOrEqual(1 << 24);
+    }
   });
 });

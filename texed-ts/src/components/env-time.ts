@@ -26,24 +26,29 @@ export const REF_LABEL = 'note 60 · vel 99';
 export type TimeMode = 'log' | 'linear';
 
 /** Combined per-operator output level and rate scaling (dx7note.ts init). */
-export function computeAmpParams(voice: Uint8Array, opNum: number): AmpEnvParams {
+export function computeAmpParams(voice: Uint8Array, opNum: number, scaleByOutlevel = true): AmpEnvParams {
   const base = opBase(opNum);
   const rates = [voice[base + OP.egRate(0)], voice[base + OP.egRate(1)], voice[base + OP.egRate(2)], voice[base + OP.egRate(3)]];
   const levels = [voice[base + OP.egLevel(0)], voice[base + OP.egLevel(1)], voice[base + OP.egLevel(2)], voice[base + OP.egLevel(3)]];
 
-  let outlevel = scaleoutlevel(voice[base + OP.outputLevel]);
-  outlevel += scaleLevel(
-    REF_NOTE,
-    voice[base + OP.breakPoint],
-    voice[base + OP.leftDepth],
-    voice[base + OP.rightDepth],
-    voice[base + OP.leftCurve],
-    voice[base + OP.rightCurve],
-  );
-  outlevel = Math.min(127, outlevel);
-  outlevel = outlevel << 5;
-  outlevel += scaleVelocity(REF_VELOCITY, voice[base + OP.velocitySens]);
-  outlevel = Math.max(0, outlevel);
+  let outlevel: number;
+  if (scaleByOutlevel) {
+    outlevel = scaleoutlevel(voice[base + OP.outputLevel]);
+    outlevel += scaleLevel(
+      REF_NOTE,
+      voice[base + OP.breakPoint],
+      voice[base + OP.leftDepth],
+      voice[base + OP.rightDepth],
+      voice[base + OP.leftCurve],
+      voice[base + OP.rightCurve],
+    );
+    outlevel = Math.min(127, outlevel);
+    outlevel = outlevel << 5;
+    outlevel += scaleVelocity(REF_VELOCITY, voice[base + OP.velocitySens]);
+    outlevel = Math.max(0, outlevel);
+  } else {
+    outlevel = scaleoutlevel(99) << 5;
+  }
 
   const rateScaling = scaleRate(REF_NOTE, voice[base + OP.rateScaling]);
   return { rates, levels, outlevel, rateScaling };

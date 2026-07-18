@@ -13,9 +13,6 @@ interface PartRackProps {
   configs: PartConfig[];
   selectedPart: number;
   programOptions: ProgramOption[];
-  performanceNames: string[];
-  performanceIndex: number;
-  onSelectPerformance: (index: number) => void;
   onSelect: (index: number) => void;
   onSetPart: (index: number, config: Partial<PartConfig>) => void;
   onSetVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
@@ -24,8 +21,7 @@ interface PartRackProps {
 }
 
 export function PartRack({
-  configs, selectedPart, programOptions, performanceNames, performanceIndex,
-  onSelectPerformance,
+  configs, selectedPart, programOptions,
   onSelect, onSetPart, onSetVoiceRef, subscribeStatus, onClose,
 }: PartRackProps) {
   const [activity, setActivity] = useState<number[]>([]);
@@ -45,21 +41,6 @@ export function PartRack({
       <div className="partrack" onClick={(e) => e.stopPropagation()}>
         <div className="partrack-header">
           <span className="partrack-title">PART RACK</span>
-          {performanceNames.length > 0 && (
-            <label>
-              Performance&nbsp;
-              <select
-                value={performanceIndex}
-                onChange={(e) => onSelectPerformance(Number(e.target.value))}
-              >
-                {performanceNames.map((name, i) => (
-                  <option key={i} value={i}>
-                    {String(i + 1).padStart(2, '0')} {name || 'INIT'}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <button type="button" className="partrack-btn" onClick={onClose}>CLOSE</button>
         </div>
 

@@ -7,6 +7,7 @@ import type { LoadReport } from '../engine/sysex-loader';
 import { initVoice } from '../engine/cartridge';
 import { createDefaultAmem } from '../engine/amem';
 import { voiceRefEquals } from '../engine/synth-rack';
+import { emitVoiceParam, emitSupplement } from './midi-out';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
 
@@ -85,6 +86,12 @@ export function useDexedSynth(): DexedSynth {
   const [loadReport, setLoadReport] = useState<LoadReport | null>(null);
   const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
   const [supplement, setSupplementState] = useState<Uint8Array>(() => createDefaultAmem());
+  // Mirrors `supplement` so live ACED emission can build a patched copy without a
+  // stale-closure read; chained synchronously in setSupplementParam for rapid edits.
+  const supplementRef = useRef(supplement);
+  useEffect(() => {
+    supplementRef.current = supplement;
+  }, [supplement]);
   const [masterTuneCents, setMasterTuneCents] = useState(0);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
   const [selectedPart, setSelectedPart] = useState(0);
@@ -183,18 +190,19 @@ export function useDexedSynth(): DexedSynth {
         return next;
       });
       post({ type: MsgType.SetParam, offset, value });
+      emitVoiceParam(offset, value);
     },
     [post],
   );
 
   const setSupplementParam = useCallback(
     (offset: number, value: number) => {
-      setSupplementState((prev) => {
-        const next = new Uint8Array(prev);
-        next[offset] = value;
-        return next;
-      });
+      const next = new Uint8Array(supplementRef.current);
+      next[offset] = value;
+      supplementRef.current = next;
+      setSupplementState(next);
       post({ type: MsgType.SetSupplementParam, offset, value });
+      emitSupplement(next);
     },
     [post],
   );

@@ -84,7 +84,7 @@ export function ScalingGraph({
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {
-        // synthetic/stale pointer ids — dragging still works while inside
+        // synthetic/stale pointer ids - dragging still works while inside
       }
       const rect = root.current.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * W;
@@ -161,7 +161,7 @@ export function ScalingGraph({
       ref={root}
       className="scale-graph"
       title={
-        'Keyboard level scaling — drag break point ←→ · drag sides ↑↓ (up = more level, down = less) · click label: LIN/EXP'
+        'Keyboard level scaling - drag break point ←→ · drag sides ↑↓ (up = more level, down = less) · click label: LIN/EXP'
       }
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -205,7 +205,7 @@ export function ScalingGraph({
         className="scale-crv left"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => toggleExp('left')}
-        title="Left curve — click to toggle LIN/EXP (drag the graph up/down for ±depth)"
+        title="Left curve - click to toggle LIN/EXP (drag the graph up/down for ±depth)"
       >
         {CURVES[leftCurve]} {leftDepth}
       </button>
@@ -214,7 +214,7 @@ export function ScalingGraph({
         className="scale-crv right"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => toggleExp('right')}
-        title="Right curve — click to toggle LIN/EXP (drag the graph up/down for ±depth)"
+        title="Right curve - click to toggle LIN/EXP (drag the graph up/down for ±depth)"
       >
         {rightDepth} {CURVES[rightCurve]}
       </button>

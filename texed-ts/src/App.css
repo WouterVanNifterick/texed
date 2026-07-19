@@ -897,7 +897,7 @@
     inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 10%, transparent);
 }
 
-/* Persistent selection ring — the op/pitch envelope being edited in the
+/* Persistent selection ring - the op/pitch envelope being edited in the
    combined view. Placed after .hilite so it wins when a panel is both. */
 .panel.selected {
   border-color: var(--op, var(--accent));
@@ -976,7 +976,7 @@
   max-width: 120px;
 }
 
-/* Centre tick — the LFO zero-crossing that the fill grows out from. */
+/* Centre tick - the LFO zero-crossing that the fill grows out from. */
 .lfo-meter-center {
   position: absolute;
   top: 0;
@@ -1402,7 +1402,7 @@
   overflow: hidden;
 }
 
-/* Compact identity column — only as wide as OP / role / freq need. */
+/* Compact identity column - only as wide as OP / role / freq need. */
 .op-panel.flat .panel-head {
   flex: 0 0 auto;
   flex-direction: column;

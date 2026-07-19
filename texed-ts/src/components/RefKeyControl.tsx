@@ -32,7 +32,7 @@ export function RefKeyControl({
         className="ref-key-field"
         {...helpProps(
           'Paint note',
-          'MIDI note the envelope curves are drawn for — rate and level scaling depend on it.',
+          'MIDI note the envelope curves are drawn for - rate and level scaling depend on it.',
         )}
       >
         <span className="ref-key-tag">NOTE</span>
@@ -50,7 +50,7 @@ export function RefKeyControl({
         className="ref-key-field"
         {...helpProps(
           'Paint velocity',
-          'Velocity the envelope curves are drawn for — velocity sensitivity depends on it.',
+          'Velocity the envelope curves are drawn for - velocity sensitivity depends on it.',
         )}
       >
         <span className="ref-key-tag">VEL</span>

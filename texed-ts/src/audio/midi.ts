@@ -20,7 +20,7 @@ export interface MidiConnection {
   setForwardOutput: (deviceId: string | null) => void;
 }
 
-/** System real-time bytes (clock, active sensing, reset, …) — not useful to pass through. */
+/** System real-time bytes (clock, active sensing, reset, …) - not useful to pass through. */
 export function shouldForwardMidi(data: Uint8Array | ArrayLike<number>): boolean {
   return data.length > 0 && data[0] < 0xf8;
 }

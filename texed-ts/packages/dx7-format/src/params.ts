@@ -1,5 +1,5 @@
 // State layer: parameter metadata and accessors for the unpacked 156-byte
-// DX7 voice. Pure data — no audio, no React. Byte offsets live in
+// DX7 voice. Pure data - no audio, no React. Byte offsets live in
 // engine/voice-layout.ts (the single source of truth) and are re-exported here.
 
 import { OP, G } from './voice-layout';

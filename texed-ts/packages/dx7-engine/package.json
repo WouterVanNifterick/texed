@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "DX7 real-time DSP engine (msfa port): FM core, envelopes, LFO, multi-timbral SynthRack. Host-agnostic — renders into Float32Arrays.",
+  "description": "DX7 real-time DSP engine (msfa port): FM core, envelopes, LFO, multi-timbral SynthRack. Host-agnostic - renders into Float32Arrays.",
   "exports": {
     "./*": "./src/*.ts"
   },

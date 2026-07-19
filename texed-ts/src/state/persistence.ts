@@ -1,6 +1,6 @@
 // Session persistence: the user's loaded library, edits, part setup and a few
 // UI values survive page reloads via IndexedDB. Built-in library content is
-// never stored — only what lives in the rack.
+// never stored - only what lives in the rack.
 
 import type { RackState } from '@texed/dx7-format/rack-state';
 
@@ -52,7 +52,7 @@ export async function saveSession(record: SessionRecord): Promise<void> {
     await requestDone(tx.objectStore(STORE).put(record, KEY));
     db.close();
   } catch {
-    // Private browsing / quota / blocked — losing persistence is acceptable.
+    // Private browsing / quota / blocked - losing persistence is acceptable.
   }
 }
 

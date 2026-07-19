@@ -3,7 +3,7 @@
 // that both the single-timbre SynthUnit and the multi-timbral SynthRack can
 // share the exact same voice-management and render logic.
 //
-// A Part renders mono and applies NO global FX — the host (SynthUnit or
+// A Part renders mono and applies NO global FX - the host (SynthUnit or
 // SynthRack) owns the filter/master-gain/pan stage.
 
 import { N } from './synth';
@@ -445,7 +445,7 @@ export class Part {
   // ==== Shared-budget voice stealing (used by SynthRack) ====
 
   /** Number of voices currently producing sound and counting toward the
-   * polyphony budget. Voices in a forced-damp fade are excluded — they are on
+   * polyphony budget. Voices in a forced-damp fade are excluded - they are on
    * their way out and must not cause further steals. */
   activeVoiceCount(): number {
     let n = 0;

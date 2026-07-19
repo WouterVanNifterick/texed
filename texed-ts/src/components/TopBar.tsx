@@ -114,7 +114,7 @@ export function TopBar({
                 type="button"
                 className={`part-btn${selected ? ' selected' : ''}${cfg && !cfg.enabled ? ' off' : ''}${active ? ' active' : ''}`}
                 onClick={() => synth.selectPart(i)}
-                title={`Part ${i + 1}${cfg && !cfg.enabled ? ' (disabled)' : ''}${active ? ' — sounding' : ''}`}
+                title={`Part ${i + 1}${cfg && !cfg.enabled ? ' (disabled)' : ''}${active ? ' - sounding' : ''}`}
               >
                 {i + 1}
               </button>
@@ -143,7 +143,7 @@ export function TopBar({
             className="perf-ctl"
             {...helpProps(
               'PERFORMANCE',
-              'Select a multi-timbral performance — loads all 8 parts with their voices and settings.',
+              'Select a multi-timbral performance - loads all 8 parts with their voices and settings.',
             )}
           >
             PERF
@@ -178,7 +178,7 @@ export function TopBar({
           onClick={() => fileRef.current?.click()}
           {...helpProps(
             'LOAD',
-            'Loads .syx (VMEM banks, AMEM, single VCED voices, performances) or raw .Dx7Voice files — or drop them anywhere.',
+            'Loads .syx (VMEM banks, AMEM, single VCED voices, performances) or raw .Dx7Voice files - or drop them anywhere.',
           )}
         >
           LOAD
@@ -265,7 +265,7 @@ export function TopBar({
             size={28}
             format={(t) => (t > 0 ? `+${t}¢` : `${t}¢`)}
             onChange={onMasterTune}
-            help="Master tune (−50…+50 cents) — global pitch offset from 8973S system setup."
+            help="Master tune (−50…+50 cents) - global pitch offset from 8973S system setup."
           />
         </div>
 
@@ -273,7 +273,7 @@ export function TopBar({
           type="button"
           className="bar-btn panic"
           onClick={synth.panic}
-          {...helpProps('PANIC', 'All notes off — immediately silences every part.')}
+          {...helpProps('PANIC', 'All notes off - immediately silences every part.')}
         >
           PANIC
         </button>
@@ -326,7 +326,7 @@ export function TopBar({
                 className="settings-row"
                 {...helpProps(
                   'ENGINE',
-                  'FM engine model — MODERN (24-bit float), MARK I (original DX7 fixed-point), or OPL series.',
+                  'FM engine model - MODERN (24-bit float), MARK I (original DX7 fixed-point), or OPL series.',
                 )}
               >
                 <span className="settings-row-label">Engine</span>

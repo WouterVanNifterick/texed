@@ -21,7 +21,7 @@ const tPerBlock = N / SR;
 // of 64-sample blocks at a stage boundary (the engine folds one partial step of
 // the next stage into the transition block). ~1.5 ms is far below anything the
 // visualization can show, so times are asserted within a small block tolerance
-// while breakpoint levels — which both clamp to the same target — match exactly.
+// while breakpoint levels - which both clamp to the same target - match exactly.
 // The fold can accumulate across the three key-on transitions, so a few blocks
 // (~6 ms) is the worst case over a full chain.
 const BLOCK_TOL = 5;

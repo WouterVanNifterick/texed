@@ -25,25 +25,25 @@ import { ScalingGraph, type ScalingField } from './ScalingGraph';
 // Help-bar descriptions, paraphrased from the DX7 / DX7II operating manuals.
 const HELP = {
   egLevel: (i: number) =>
-    `EG level ${i + 1} of 4 (0–99) — the level this envelope segment settles at. L4 is the level after key release, usually 0.`,
+    `EG level ${i + 1} of 4 (0–99) - the level this envelope segment settles at. L4 is the level after key release, usually 0.`,
   egRate: (i: number) =>
-    `EG rate ${i + 1} of 4 (0–99) — how fast the envelope travels to L${i + 1}; higher is faster.`,
-  mode: 'Oscillator mode — RATIO tracks the keyboard as a multiple of the played note; FIXED holds a constant frequency in Hz.',
+    `EG rate ${i + 1} of 4 (0–99) - how fast the envelope travels to L${i + 1}; higher is faster.`,
+  mode: 'Oscillator mode - RATIO tracks the keyboard as a multiple of the played note; FIXED holds a constant frequency in Hz.',
   coarse:
-    'Frequency coarse — ratio ×0.50 to ×31.00 in RATIO mode; 1 / 10 / 100 / 1000 Hz steps in FIXED mode.',
-  fine: 'Frequency fine (0–99) — raises the coarse frequency by up to ×2 (RATIO) or ×10 (FIXED) in small steps.',
+    'Frequency coarse - ratio ×0.50 to ×31.00 in RATIO mode; 1 / 10 / 100 / 1000 Hz steps in FIXED mode.',
+  fine: 'Frequency fine (0–99) - raises the coarse frequency by up to ×2 (RATIO) or ×10 (FIXED) in small steps.',
   detune:
-    'Detune (−7…+7) — slight pitch offset against the other operators, for thickness and beating.',
+    'Detune (−7…+7) - slight pitch offset against the other operators, for thickness and beating.',
   level:
-    'Output level (0–99) — loudness for a carrier; modulation depth (brightness/timbre) when this operator modulates another.',
-  vel: 'Key velocity sensitivity (0–7) — how strongly playing harder raises this operator’s output level.',
+    'Output level (0–99) - loudness for a carrier; modulation depth (brightness/timbre) when this operator modulates another.',
+  vel: 'Key velocity sensitivity (0–7) - how strongly playing harder raises this operator’s output level.',
   rateSc:
-    'Keyboard rate scaling (0–7) — envelopes run faster toward the top of the keyboard, like acoustic instruments.',
-  ams: 'Amplitude modulation sensitivity (0–7) — how much LFO amp modulation and controller EG bias affect this operator.',
+    'Keyboard rate scaling (0–7) - envelopes run faster toward the top of the keyboard, like acoustic instruments.',
+  ams: 'Amplitude modulation sensitivity (0–7) - how much LFO amp modulation and controller EG bias affect this operator.',
   fract:
-    'Fractional scaling (DX7II) — high-resolution keyboard level scaling, stored in the AMEM supplement.',
+    'Fractional scaling (DX7II) - high-resolution keyboard level scaling, stored in the AMEM supplement.',
   scaling:
-    'Keyboard level scaling — operator level varies around the break point. Drag left/right of the break point to set depths, drag the blue line to move it, click the corner labels to change curves (−LIN −EXP +EXP +LIN).',
+    'Keyboard level scaling - operator level varies around the break point. Drag left/right of the break point to set depths, drag the blue line to move it, click the corner labels to change curves (−LIN −EXP +EXP +LIN).',
 };
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
@@ -136,7 +136,7 @@ export const OperatorPanel = memo(function OperatorPanel({
           onClick={() => setParam(G.opEnable, voice[G.opEnable] ^ (1 << opIdx))}
           {...helpProps(
             `OP${opNum} ON/OFF`,
-            'Switches this operator in or out of the algorithm — useful for hearing what each operator contributes.',
+            'Switches this operator in or out of the algorithm - useful for hearing what each operator contributes.',
           )}
         >
           OP{opNum}
@@ -225,7 +225,7 @@ export const OperatorPanel = memo(function OperatorPanel({
           onChange={set(OP.outputLevel)}
           help={
             levelZero
-              ? 'Output level is 0 — raise LEVEL to hear this operator (or to modulate with it).'
+              ? 'Output level is 0 - raise LEVEL to hear this operator (or to modulate with it).'
               : HELP.level
           }
         />

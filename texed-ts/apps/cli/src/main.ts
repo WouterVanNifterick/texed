@@ -3,7 +3,7 @@
 //   pnpm cli <file.mid> [--syx bank.syx] [--out out.wav] [--rate 48000] [--program n]
 //
 // The same SynthRack that runs in the browser's AudioWorklet renders here in
-// Node — no DOM, no audio device, just Float32Arrays in and a WAV out.
+// Node - no DOM, no audio device, just Float32Arrays in and a WAV out.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { SynthRack, NUM_PARTS } from '@texed/dx7-engine/synth-rack';

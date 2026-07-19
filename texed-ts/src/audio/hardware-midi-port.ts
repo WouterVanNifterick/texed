@@ -30,7 +30,7 @@ export class HardwareMidiPort implements SynthPort {
   }
 
   async start(): Promise<void> {
-    // Nothing to bring up — the app owns the Web MIDI connection. Seed the UI
+    // Nothing to bring up - the app owns the Web MIDI connection. Seed the UI
     // with an editable default state, since the hardware can't be queried for
     // program lists or rack state.
     this.emit({ type: 'voice', data: this.voice.slice(), supplement: this.supplement.slice() });

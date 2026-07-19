@@ -97,7 +97,8 @@ export function ScalingGraph({
         mode: 'depth',
         side,
         startY: e.clientY,
-        startVal: side === 'left' ? signedDepth(leftDepth, leftCurve) : signedDepth(rightDepth, rightCurve),
+        startVal:
+          side === 'left' ? signedDepth(leftDepth, leftCurve) : signedDepth(rightDepth, rightCurve),
         rect,
       };
     },
@@ -145,7 +146,9 @@ export function ScalingGraph({
   const y = (scale: number) => clamp(H / 2 - (scale / MAX_SCALE) * (H / 2 - 4), 3, H - 3);
   const points: string[] = [];
   for (let n = 0; n <= W; n += 1) {
-    points.push(`${n},${y(scaleLevel(n, breakPoint, leftDepth, rightDepth, leftCurve, rightCurve)).toFixed(1)}`);
+    points.push(
+      `${n},${y(scaleLevel(n, breakPoint, leftDepth, rightDepth, leftCurve, rightCurve)).toFixed(1)}`,
+    );
   }
 
   const toggleExp = (side: 'left' | 'right') => {
@@ -157,7 +160,9 @@ export function ScalingGraph({
     <div
       ref={root}
       className="scale-graph"
-      title={'Keyboard level scaling — drag break point ←→ · drag sides ↑↓ (up = more level, down = less) · click label: LIN/EXP'}
+      title={
+        'Keyboard level scaling — drag break point ←→ · drag sides ↑↓ (up = more level, down = less) · click label: LIN/EXP'
+      }
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -165,7 +170,14 @@ export function ScalingGraph({
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
         <defs>
-          <linearGradient id="scale-fill" gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={0} y2={H}>
+          <linearGradient
+            id="scale-fill"
+            gradientUnits="userSpaceOnUse"
+            x1={0}
+            y1={0}
+            x2={0}
+            y2={H}
+          >
             <stop offset="0%" stopColor="#ffb454" stopOpacity={0.45} />
             <stop offset="50%" stopColor="#ffb454" stopOpacity={0.04} />
             <stop offset="100%" stopColor="#ffb454" stopOpacity={0.45} />

@@ -118,7 +118,12 @@ export type CtrlName = keyof typeof CTRL_OFFSETS;
 /** dest: 0 = pitch, 1 = amp, 2 = EG bias, 3 = vol (FC/MC) or pitch bias (BC/AT). */
 export const getCtrlRange = (a: Uint8Array, ctrl: CtrlName, dest: number): number =>
   a[CTRL_OFFSETS[ctrl] + dest] & 0x7f;
-export const setCtrlRange = (_a: Uint8Array, ctrl: CtrlName, dest: number, value: number): ByteEdit => ({
+export const setCtrlRange = (
+  _a: Uint8Array,
+  ctrl: CtrlName,
+  dest: number,
+  value: number,
+): ByteEdit => ({
   offset: CTRL_OFFSETS[ctrl] + dest,
   value: value & 0x7f,
 });

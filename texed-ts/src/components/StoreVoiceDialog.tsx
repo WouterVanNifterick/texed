@@ -14,7 +14,12 @@ interface StoreVoiceDialogProps {
   onClose: () => void;
 }
 
-export function StoreVoiceDialog({ synth, defaultVoice, onConfirm, onClose }: StoreVoiceDialogProps) {
+export function StoreVoiceDialog({
+  synth,
+  defaultVoice,
+  onConfirm,
+  onClose,
+}: StoreVoiceDialogProps) {
   const [name, setName] = useState(() => getVoiceName(synth.voice));
 
   const useProgramList = synth.programOptions.length > 0;
@@ -119,7 +124,12 @@ export function StoreVoiceDialog({ synth, defaultVoice, onConfirm, onClose }: St
           <button type="button" className="partrack-btn" onClick={onClose}>
             CANCEL
           </button>
-          <button type="button" className="partrack-btn store-confirm" onClick={handleConfirm} disabled={!name.trim()}>
+          <button
+            type="button"
+            className="partrack-btn store-confirm"
+            onClick={handleConfirm}
+            disabled={!name.trim()}
+          >
             STORE
           </button>
         </div>

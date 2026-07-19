@@ -77,7 +77,9 @@ export function py(g: DrawGeom, levelQ24: number): number {
 
 /** Polyline point string for the dense curve. */
 export function curvePoints(trace: EnvTrace, g: DrawGeom): string {
-  return trace.curve.map((p) => `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`).join(' ');
+  return trace.curve
+    .map((p) => `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`)
+    .join(' ');
 }
 
 /** Filled polygon (curve closed to the baseline). */

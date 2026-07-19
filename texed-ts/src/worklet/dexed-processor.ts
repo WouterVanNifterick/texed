@@ -30,7 +30,11 @@ class DexedProcessor extends AudioWorkletProcessor {
   }
 
   private postVoice(): void {
-    this.post({ type: 'voice', data: this.rack.getVoiceData(), supplement: this.rack.getSupplementData() });
+    this.post({
+      type: 'voice',
+      data: this.rack.getVoiceData(),
+      supplement: this.rack.getSupplementData(),
+    });
   }
 
   private postMasterTune(): void {
@@ -38,7 +42,11 @@ class DexedProcessor extends AudioWorkletProcessor {
   }
 
   private postParts(): void {
-    this.post({ type: 'parts', configs: this.rack.getPartConfigs(), selectedPart: this.rack.selectedPart });
+    this.post({
+      type: 'parts',
+      configs: this.rack.getPartConfigs(),
+      selectedPart: this.rack.selectedPart,
+    });
   }
 
   private postPerformances(): void {
@@ -237,7 +245,9 @@ class DexedProcessor extends AudioWorkletProcessor {
             report: {
               frames: 0,
               applied: [],
-              skipped: [`session restore failed: ${err instanceof Error ? err.message : String(err)}`],
+              skipped: [
+                `session restore failed: ${err instanceof Error ? err.message : String(err)}`,
+              ],
             },
           });
         }

@@ -4,7 +4,15 @@
 
 import { memo } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { OP, G, opBase, formatOpFreq, formatDetune, OSC_MODES, PARAM_CENTER } from '@texed/dx7-format/params';
+import {
+  OP,
+  G,
+  opBase,
+  formatOpFreq,
+  formatDetune,
+  OSC_MODES,
+  PARAM_CENTER,
+} from '@texed/dx7-format/params';
 import { getAms, setAms, getScalingMode, setScalingMode } from '@texed/dx7-format/supplement';
 import { algoGraph } from '../state/algo';
 import { helpProps } from '../state/help';
@@ -21,14 +29,19 @@ const HELP = {
   egRate: (i: number) =>
     `EG rate ${i + 1} of 4 (0–99) — how fast the envelope travels to L${i + 1}; higher is faster.`,
   mode: 'Oscillator mode — RATIO tracks the keyboard as a multiple of the played note; FIXED holds a constant frequency in Hz.',
-  coarse: 'Frequency coarse — ratio ×0.50 to ×31.00 in RATIO mode; 1 / 10 / 100 / 1000 Hz steps in FIXED mode.',
+  coarse:
+    'Frequency coarse — ratio ×0.50 to ×31.00 in RATIO mode; 1 / 10 / 100 / 1000 Hz steps in FIXED mode.',
   fine: 'Frequency fine (0–99) — raises the coarse frequency by up to ×2 (RATIO) or ×10 (FIXED) in small steps.',
-  detune: 'Detune (−7…+7) — slight pitch offset against the other operators, for thickness and beating.',
-  level: 'Output level (0–99) — loudness for a carrier; modulation depth (brightness/timbre) when this operator modulates another.',
+  detune:
+    'Detune (−7…+7) — slight pitch offset against the other operators, for thickness and beating.',
+  level:
+    'Output level (0–99) — loudness for a carrier; modulation depth (brightness/timbre) when this operator modulates another.',
   vel: 'Key velocity sensitivity (0–7) — how strongly playing harder raises this operator’s output level.',
-  rateSc: 'Keyboard rate scaling (0–7) — envelopes run faster toward the top of the keyboard, like acoustic instruments.',
+  rateSc:
+    'Keyboard rate scaling (0–7) — envelopes run faster toward the top of the keyboard, like acoustic instruments.',
   ams: 'Amplitude modulation sensitivity (0–7) — how much LFO amp modulation and controller EG bias affect this operator.',
-  fract: 'Fractional scaling (DX7II) — high-resolution keyboard level scaling, stored in the AMEM supplement.',
+  fract:
+    'Fractional scaling (DX7II) — high-resolution keyboard level scaling, stored in the AMEM supplement.',
   scaling:
     'Keyboard level scaling — operator level varies around the break point. Drag left/right of the break point to set depths, drag the blue line to move it, click the corner labels to change curves (−LIN −EXP +EXP +LIN).',
 };
@@ -151,18 +164,58 @@ export const OperatorPanel = memo(function OperatorPanel({
 
       <div className="eg-grid">
         {[0, 1, 2, 3].map((i) => (
-          <Knob key={`l${i}`} label={`L${i + 1}`} value={v(OP.egLevel(i))} max={99} onChange={set(OP.egLevel(i))} help={HELP.egLevel(i)} />
+          <Knob
+            key={`l${i}`}
+            label={`L${i + 1}`}
+            value={v(OP.egLevel(i))}
+            max={99}
+            onChange={set(OP.egLevel(i))}
+            help={HELP.egLevel(i)}
+          />
         ))}
         {[0, 1, 2, 3].map((i) => (
-          <Knob key={`r${i}`} label={`R${i + 1}`} value={v(OP.egRate(i))} max={99} onChange={set(OP.egRate(i))} help={HELP.egRate(i)} />
+          <Knob
+            key={`r${i}`}
+            label={`R${i + 1}`}
+            value={v(OP.egRate(i))}
+            max={99}
+            onChange={set(OP.egRate(i))}
+            help={HELP.egRate(i)}
+          />
         ))}
       </div>
 
       <div className="ctl-row">
-        <Cycle label="MODE" value={v(OP.oscMode)} options={OSC_MODES} onChange={set(OP.oscMode)} help={HELP.mode} />
-        <Knob label="COARSE" value={v(OP.freqCoarse)} max={31} onChange={set(OP.freqCoarse)} help={HELP.coarse} />
-        <Knob label="FINE" value={v(OP.freqFine)} max={99} onChange={set(OP.freqFine)} help={HELP.fine} />
-        <Knob label="DETUNE" value={v(OP.detune)} max={14} center={PARAM_CENTER.detune} format={formatDetune} onChange={set(OP.detune)} help={HELP.detune} />
+        <Cycle
+          label="MODE"
+          value={v(OP.oscMode)}
+          options={OSC_MODES}
+          onChange={set(OP.oscMode)}
+          help={HELP.mode}
+        />
+        <Knob
+          label="COARSE"
+          value={v(OP.freqCoarse)}
+          max={31}
+          onChange={set(OP.freqCoarse)}
+          help={HELP.coarse}
+        />
+        <Knob
+          label="FINE"
+          value={v(OP.freqFine)}
+          max={99}
+          onChange={set(OP.freqFine)}
+          help={HELP.fine}
+        />
+        <Knob
+          label="DETUNE"
+          value={v(OP.detune)}
+          max={14}
+          center={PARAM_CENTER.detune}
+          format={formatDetune}
+          onChange={set(OP.detune)}
+          help={HELP.detune}
+        />
         <Knob
           label="LEVEL"
           value={outLevel}
@@ -176,7 +229,13 @@ export const OperatorPanel = memo(function OperatorPanel({
               : HELP.level
           }
         />
-        <Knob label="VEL" value={v(OP.velocitySens)} max={7} onChange={set(OP.velocitySens)} help={HELP.vel} />
+        <Knob
+          label="VEL"
+          value={v(OP.velocitySens)}
+          max={7}
+          onChange={set(OP.velocitySens)}
+          help={HELP.vel}
+        />
       </div>
 
       <div className="ctl-row scale-row">
@@ -190,7 +249,13 @@ export const OperatorPanel = memo(function OperatorPanel({
             onChange={(field: ScalingField, value) => setParam(base + OP[field], value)}
           />
         </div>
-        <Knob label="RATE SC" value={v(OP.rateScaling)} max={7} onChange={set(OP.rateScaling)} help={HELP.rateSc} />
+        <Knob
+          label="RATE SC"
+          value={v(OP.rateScaling)}
+          max={7}
+          onChange={set(OP.rateScaling)}
+          help={HELP.rateSc}
+        />
         <Knob label="AMS" value={ams} max={7} onChange={onAms} help={HELP.ams} />
         <Toggle
           label="FRACT"

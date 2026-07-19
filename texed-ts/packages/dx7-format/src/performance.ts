@@ -3,7 +3,12 @@
 import type { PartConfig } from './part-config';
 import { NUM_PARTS } from './part-config';
 import { bulkPayloadFromFrame, SysexKind, type SysexFrame } from './sysex';
-import { decodeDx7iiVoiceRef, decodeTx802VoiceRef, defaultVoiceRef, type VoiceRef } from './voice-library';
+import {
+  decodeDx7iiVoiceRef,
+  decodeTx802VoiceRef,
+  defaultVoiceRef,
+  type VoiceRef,
+} from './voice-library';
 
 export const TX802_PMEM_BLOCK = 84;
 export const DX7II_PERF_BLOCK = 51;
@@ -263,4 +268,3 @@ export function mapVoiceNumber(vnum: number): number {
 }
 
 export { defaultVoiceRef, type VoiceRef };
-

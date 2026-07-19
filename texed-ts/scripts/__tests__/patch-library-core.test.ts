@@ -108,7 +108,9 @@ describe('buildManifest', () => {
     const col = { id: 'c', name: 'C', banks: [bank], performanceSets: [] };
     expect(() => buildManifest([col, col])).toThrow(/duplicate/);
     expect(() =>
-      buildManifest([{ id: 'c', name: 'C', banks: [{ ...bank, voices: [] }], performanceSets: [] }]),
+      buildManifest([
+        { id: 'c', name: 'C', banks: [{ ...bank, voices: [] }], performanceSets: [] },
+      ]),
     ).toThrow(/no voices/);
   });
 });

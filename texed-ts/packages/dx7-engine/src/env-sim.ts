@@ -115,11 +115,7 @@ interface StageKin {
 }
 
 /** Port of env.ts advance(): kinematics for one amp EG stage. */
-function ampStageKin(
-  ix: number,
-  level: number,
-  p: AmpEnvParams,
-): StageKin {
+function ampStageKin(ix: number, level: number, p: AmpEnvParams): StageKin {
   const newlevel = p.levels[ix];
   const target = ampTargetLevel(newlevel, p.outlevel);
   const rising = target > level;
@@ -170,7 +166,11 @@ function attackBlocks(startLevel: number, target: number, inc: number): number {
 }
 
 /** Blocks and end level for one amp EG stage entered at `startLevel`. */
-function ampStage(startLevel: number, ix: number, p: AmpEnvParams): {
+function ampStage(
+  startLevel: number,
+  ix: number,
+  p: AmpEnvParams,
+): {
   blocks: number;
   endLevel: number;
   kin: StageKin;
@@ -186,9 +186,17 @@ function ampStage(startLevel: number, ix: number, p: AmpEnvParams): {
   // Any processed non-hold stage advances the envelope in at least one block
   // (the attack floor snap can overshoot a low target and finish immediately).
   if (kin.rising) {
-    return { blocks: Math.max(1, attackBlocks(startLevel, kin.target, kin.inc)), endLevel: kin.target, kin };
+    return {
+      blocks: Math.max(1, attackBlocks(startLevel, kin.target, kin.inc)),
+      endLevel: kin.target,
+      kin,
+    };
   }
-  return { blocks: Math.max(1, Math.ceil((startLevel - kin.target) / kin.inc)), endLevel: kin.target, kin };
+  return {
+    blocks: Math.max(1, Math.ceil((startLevel - kin.target) / kin.inc)),
+    endLevel: kin.target,
+    kin,
+  };
 }
 
 /** Exact level after `b` blocks within a stage entered at `startLevel`. */
@@ -204,7 +212,9 @@ function ampLevelAtBlock(startLevel: number, b: number, kin: StageKin): number {
       if (step <= 0) break;
       const bandTop = (17 - k) << 24;
       const bandBlocks =
-        kin.target <= bandTop ? Math.ceil((kin.target - level) / step) : Math.floor((bandTop - level) / step) + 1;
+        kin.target <= bandTop
+          ? Math.ceil((kin.target - level) / step)
+          : Math.floor((bandTop - level) / step) + 1;
       const take = Math.min(bandBlocks, b - done);
       level = (level + take * step) | 0;
       done += take;
@@ -226,7 +236,10 @@ function sampleSegment(
 ): void {
   const tPerBlock = N / SR;
   if (kin.staticSamples > 0 || blocks <= 1) {
-    out.push({ timeSec: tStart + blocks * tPerBlock, levelQ24: ampLevelAtBlock(startLevel, blocks, kin) });
+    out.push({
+      timeSec: tStart + blocks * tPerBlock,
+      levelQ24: ampLevelAtBlock(startLevel, blocks, kin),
+    });
     return;
   }
   for (let i = 1; i <= CURVE_PTS; i++) {
@@ -437,7 +450,12 @@ export function simulatePitchEnv(
 // ---- Inverse mappings (drag a node → parameter value) ----------------------
 
 /** Duration (sec) of amp stage `ix` for a candidate raw rate, fixed start level. */
-function ampStageDurationSec(startLevel: number, ix: number, rawRate: number, p: AmpEnvParams): number {
+function ampStageDurationSec(
+  startLevel: number,
+  ix: number,
+  rawRate: number,
+  p: AmpEnvParams,
+): number {
   const probe: AmpEnvParams = {
     rates: [p.rates[0], p.rates[1], p.rates[2], p.rates[3]],
     levels: p.levels,
@@ -455,14 +473,22 @@ const logT = (sec: number) => Math.log2(1 + Math.max(0, sec) / 0.05);
  * Compared in log-time so the choice matches what the eye sees; ties break
  * toward `currentRate` to avoid value jumps across qrate plateaus while dragging.
  */
-export function rateForStageDuration(p: AmpEnvParams, ix: number, targetSec: number, currentRate: number): number {
+export function rateForStageDuration(
+  p: AmpEnvParams,
+  ix: number,
+  targetSec: number,
+  currentRate: number,
+): number {
   const startLevel = ampStartLevelForStage(p, ix);
   const targetL = logT(targetSec);
   let best = currentRate;
   let bestErr = Infinity;
   for (let r = 0; r <= 99; r++) {
     const err = Math.abs(logT(ampStageDurationSec(startLevel, ix, r, p)) - targetL);
-    if (err < bestErr - 1e-9 || (Math.abs(err - bestErr) <= 1e-9 && Math.abs(r - currentRate) < Math.abs(best - currentRate))) {
+    if (
+      err < bestErr - 1e-9 ||
+      (Math.abs(err - bestErr) <= 1e-9 && Math.abs(r - currentRate) < Math.abs(best - currentRate))
+    ) {
       bestErr = err;
       best = r;
     }
@@ -486,7 +512,10 @@ export function pitchRateForStageDuration(
   for (let r = 0; r <= 99; r++) {
     const sec = (pitchStageBlocks(startLevel, target, r) * N) / SR;
     const err = Math.abs(logT(sec) - targetL);
-    if (err < bestErr - 1e-9 || (Math.abs(err - bestErr) <= 1e-9 && Math.abs(r - currentRate) < Math.abs(best - currentRate))) {
+    if (
+      err < bestErr - 1e-9 ||
+      (Math.abs(err - bestErr) <= 1e-9 && Math.abs(r - currentRate) < Math.abs(best - currentRate))
+    ) {
       bestErr = err;
       best = r;
     }

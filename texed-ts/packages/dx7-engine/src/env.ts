@@ -128,7 +128,7 @@ export class Env {
     this.staticcount = 0;
     this.targetlevel = 0;
     this.ix = 3;
-    const blocks = Math.max(1, ((DAMP_MS / 1000) * sampleRate / N) | 0);
+    const blocks = Math.max(1, (((DAMP_MS / 1000) * sampleRate) / N) | 0);
     this.inc = Math.max(1, (this.level / blocks) | 0);
   }
 

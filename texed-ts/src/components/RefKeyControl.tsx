@@ -17,13 +17,23 @@ interface RefKeyControlProps {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-export function RefKeyControl({ note, velocity, follow, onNote, onVelocity, onToggleFollow }: RefKeyControlProps) {
+export function RefKeyControl({
+  note,
+  velocity,
+  follow,
+  onNote,
+  onVelocity,
+  onToggleFollow,
+}: RefKeyControlProps) {
   return (
     <div className="ref-key">
       <span className="segmented-label">KEY</span>
       <label
         className="ref-key-field"
-        {...helpProps('Paint note', 'MIDI note the envelope curves are drawn for — rate and level scaling depend on it.')}
+        {...helpProps(
+          'Paint note',
+          'MIDI note the envelope curves are drawn for — rate and level scaling depend on it.',
+        )}
       >
         <span className="ref-key-tag">NOTE</span>
         <input
@@ -38,7 +48,10 @@ export function RefKeyControl({ note, velocity, follow, onNote, onVelocity, onTo
       </label>
       <label
         className="ref-key-field"
-        {...helpProps('Paint velocity', 'Velocity the envelope curves are drawn for — velocity sensitivity depends on it.')}
+        {...helpProps(
+          'Paint velocity',
+          'Velocity the envelope curves are drawn for — velocity sensitivity depends on it.',
+        )}
       >
         <span className="ref-key-tag">VEL</span>
         <input

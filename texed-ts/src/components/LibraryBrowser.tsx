@@ -48,7 +48,8 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     fetchLibraryManifest().then((m) => {
       setManifest(m);
       setManifestPending(false);
-      if (m && m.collections.length > 0) setColId((cur) => (cur === LOADED_ID ? m.collections[0].id : cur));
+      if (m && m.collections.length > 0)
+        setColId((cur) => (cur === LOADED_ID ? m.collections[0].id : cur));
     });
   }, []);
 
@@ -189,7 +190,9 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
         .then(({ voices, supplements }) => {
           synth.loadBankInto(dest, voices, supplements);
           const label = synth.banks.find((b) => b.id === dest)?.label ?? dest;
-          showMsg(`Loaded ${bank.name}${bank.voices.length > 32 ? ` ${start + 1}–${start + 32}` : ''} → ${label}`);
+          showMsg(
+            `Loaded ${bank.name}${bank.voices.length > 32 ? ` ${start + 1}–${start + 32}` : ''} → ${label}`,
+          );
         })
         .catch(() => showMsg(`Could not load bank ${bank.name}`));
     },
@@ -235,8 +238,16 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
             value={tab}
             onChange={setTab}
             options={[
-              { value: 'voices', label: 'VOICES', help: 'Browse built-in and loaded voices; click to load into the current part.' },
-              { value: 'performances', label: 'PERFORMANCES', help: 'Browse loaded and built-in multi-part performances.' },
+              {
+                value: 'voices',
+                label: 'VOICES',
+                help: 'Browse built-in and loaded voices; click to load into the current part.',
+              },
+              {
+                value: 'performances',
+                label: 'PERFORMANCES',
+                help: 'Browse loaded and built-in multi-part performances.',
+              },
             ]}
           />
           {tab === 'voices' && (
@@ -247,19 +258,31 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                 value={search}
                 spellCheck={false}
                 onChange={(e) => setSearch(e.target.value)}
-                {...helpProps('SEARCH', 'Filters every built-in and loaded voice by name, bank, and collection.')}
+                {...helpProps(
+                  'SEARCH',
+                  'Filters every built-in and loaded voice by name, bank, and collection.',
+                )}
               />
               <label
                 className="libbrowser-audition"
-                {...helpProps('AUDITION', 'Plays a short middle C on the current part whenever a voice is selected.')}
+                {...helpProps(
+                  'AUDITION',
+                  'Plays a short middle C on the current part whenever a voice is selected.',
+                )}
               >
-                <input type="checkbox" checked={audition} onChange={(e) => setAudition(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={audition}
+                  onChange={(e) => setAudition(e.target.checked)}
+                />
                 AUDITION
               </label>
             </>
           )}
           <span className="libbrowser-part">→ PART {synth.selectedPart + 1}</span>
-          <button type="button" className="libbrowser-btn" onClick={onClose}>CLOSE</button>
+          <button type="button" className="libbrowser-btn" onClick={onClose}>
+            CLOSE
+          </button>
         </div>
 
         {tab === 'voices' && searchResults && (
@@ -286,7 +309,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                 onClick={() => loadBuiltInVoice(hit.bank, hit.index)}
                 onDoubleClick={onClose}
               >
-                <span className="libbrowser-crumb">{hit.collectionName} › {hit.bank.name} ›</span> {hit.name}
+                <span className="libbrowser-crumb">
+                  {hit.collectionName} › {hit.bank.name} ›
+                </span>{' '}
+                {hit.name}
               </button>
             ))}
             {searchResults.loaded.length === 0 && searchResults.builtIn.length === 0 && (
@@ -315,12 +341,16 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
               ))}
               {manifestPending && <p className="libbrowser-empty">Loading library…</p>}
               {!manifestPending && !manifest && (
-                <p className="libbrowser-empty">Built-in library unavailable — LOAD or drop your own .syx files.</p>
+                <p className="libbrowser-empty">
+                  Built-in library unavailable — LOAD or drop your own .syx files.
+                </p>
               )}
             </div>
 
             <div className="libbrowser-col libbrowser-col-banks">
-              <div className="libbrowser-colhead">{colId === LOADED_ID ? 'VOICE MEMORY' : 'BANKS'}</div>
+              <div className="libbrowser-colhead">
+                {colId === LOADED_ID ? 'VOICE MEMORY' : 'BANKS'}
+              </div>
               {colId === LOADED_ID ? (
                 <div className="libbrowser-bankinfo">
                   {synth.banks.map((b) => (
@@ -342,7 +372,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                   >
                     {b.name} <span className="libbrowser-count">{b.voices.length}</span>
                     {b.hasAmem && (
-                      <span className="libbrowser-badge" title="Carries DX7II AMEM supplements (fractional scaling, unison, extended controllers)">
+                      <span
+                        className="libbrowser-badge"
+                        title="Carries DX7II AMEM supplements (fractional scaling, unison, extended controllers)"
+                      >
                         II
                       </span>
                     )}
@@ -365,7 +398,8 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                   onClick={() => activateVoiceRow(i)}
                   onDoubleClick={onClose}
                 >
-                  <span className="libbrowser-num">{String(i + 1).padStart(3, '0')}</span> {row.name}
+                  <span className="libbrowser-num">{String(i + 1).padStart(3, '0')}</span>{' '}
+                  {row.name}
                 </button>
               ))}
               {voiceRows.length === 0 && <p className="libbrowser-empty">No voices here yet.</p>}
@@ -375,13 +409,22 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
 
         {tab === 'voices' && !searchResults && activeBank && (
           <div className="libbrowser-footer">
-            <label {...helpProps('TARGET', 'Which half-bank of voice memory LOAD BANK writes into. AUTO picks the first empty one.')}>
+            <label
+              {...helpProps(
+                'TARGET',
+                'Which half-bank of voice memory LOAD BANK writes into. AUTO picks the first empty one.',
+              )}
+            >
               TARGET&nbsp;
-              <select value={target} onChange={(e) => setTarget(e.target.value as VoiceBankId | 'auto')}>
+              <select
+                value={target}
+                onChange={(e) => setTarget(e.target.value as VoiceBankId | 'auto')}
+              >
                 <option value="auto">AUTO</option>
                 {synth.banks.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.label}{b.populated ? ' ●' : ''}
+                    {b.label}
+                    {b.populated ? ' ●' : ''}
                   </option>
                 ))}
               </select>
@@ -391,7 +434,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                 type="button"
                 className="libbrowser-btn"
                 onClick={() => loadBankRange(activeBank, 0, resolveTarget())}
-                {...helpProps('LOAD BANK', 'Copies this 32-voice bank into the target half-bank of voice memory.')}
+                {...helpProps(
+                  'LOAD BANK',
+                  'Copies this 32-voice bank into the target half-bank of voice memory.',
+                )}
               >
                 LOAD BANK →
               </button>
@@ -404,7 +450,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                       type="button"
                       className="libbrowser-btn"
                       onClick={() => loadBankRange(activeBank, q * 32, resolveTarget())}
-                      {...helpProps('LOAD RANGE', 'Copies these 32 voices into the target half-bank of voice memory.')}
+                      {...helpProps(
+                        'LOAD RANGE',
+                        'Copies these 32 voices into the target half-bank of voice memory.',
+                      )}
                     >
                       {q * 32 + 1}–{Math.min((q + 1) * 32, activeBank.voices.length)} →
                     </button>
@@ -414,7 +463,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                   type="button"
                   className="libbrowser-btn"
                   onClick={() => loadAll128(activeBank)}
-                  {...helpProps('LOAD ALL', 'Fills all four half-banks (INT 1–64 + CRT 1–64) with this 128-voice bank.')}
+                  {...helpProps(
+                    'LOAD ALL',
+                    'Fills all four half-banks (INT 1–64 + CRT 1–64) with this 128-voice bank.',
+                  )}
                 >
                   LOAD ALL 128
                 </button>
@@ -468,7 +520,8 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                       onClick={() => synth.selectPerformance(i)}
                       onDoubleClick={onClose}
                     >
-                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span> {name || 'INIT'}
+                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span>{' '}
+                      {name || 'INIT'}
                     </button>
                   ))
                 : perfSets[perfSetIdx] &&
@@ -479,11 +532,16 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                       className={`libbrowser-row${i === perfVoiceIdx ? ' selected' : ''}`}
                       onClick={() => {
                         setPerfVoiceIdx(i);
-                        onSelectPerformance(perfSets[perfSetIdx].set, i, perfSets[perfSetIdx].collection);
+                        onSelectPerformance(
+                          perfSets[perfSetIdx].set,
+                          i,
+                          perfSets[perfSetIdx].collection,
+                        );
                       }}
                       onDoubleClick={onClose}
                     >
-                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span> {name || 'INIT'}
+                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span>{' '}
+                      {name || 'INIT'}
                     </button>
                   ))}
             </div>

@@ -73,7 +73,8 @@ export class Controllers {
   core!: FmCore;
 
   private applyMod(cc: number, mod: FmMod): void {
-    if (mod.pitchRange) this.pitchMod = Math.max(this.pitchMod, Math.trunc(cc * 0.01 * mod.pitchRange));
+    if (mod.pitchRange)
+      this.pitchMod = Math.max(this.pitchMod, Math.trunc(cc * 0.01 * mod.pitchRange));
     if (mod.ampRange) this.ampMod = Math.max(this.ampMod, Math.trunc(cc * 0.01 * mod.ampRange));
     if (mod.egRange) this.egMod = Math.max(this.egMod, Math.trunc(cc * 0.01 * mod.egRange));
   }
@@ -104,14 +105,19 @@ export class Controllers {
 
     // No EG bias assigned anywhere: operators play at full level.
     const egAssigned =
-      this.wheel.egRange || this.breath.egRange || (this.fc1AsCs1 ? 0 : this.foot.egRange) ||
-      this.at.egRange || this.foot2.egRange || this.midiCs.egRange;
+      this.wheel.egRange ||
+      this.breath.egRange ||
+      (this.fc1AsCs1 ? 0 : this.foot.egRange) ||
+      this.at.egRange ||
+      this.foot2.egRange ||
+      this.midiCs.egRange;
     if (!egAssigned) {
       this.egMod = 127;
     }
 
     // BC/AT pitch bias: full range shifts pitch by ±1 octave (Q24 per octave).
-    const bias = this.biasFactor(this.breathCc, this.breath) + this.biasFactor(this.aftertouchCc, this.at);
+    const bias =
+      this.biasFactor(this.breathCc, this.breath) + this.biasFactor(this.aftertouchCc, this.at);
     this.pitchBiasMod = Math.trunc(Math.max(-1, Math.min(1, bias)) * (1 << 24));
 
     let vol = this.volFactor(this.foot2Cc, this.foot2) * this.volFactor(this.midiCsCc, this.midiCs);

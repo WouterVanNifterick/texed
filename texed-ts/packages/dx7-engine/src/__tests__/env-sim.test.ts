@@ -57,7 +57,15 @@ function runOracle(p: AmpEnvParams): Oracle {
       sustainLevel = level;
     }
   }
-  if (e.getPosition() < 3) return { keyOnBlocks, sustainBlock: 0, sustainLevel: 0, releaseBlock: 0, releaseLevel: 0, skipped: true };
+  if (e.getPosition() < 3)
+    return {
+      keyOnBlocks,
+      sustainBlock: 0,
+      sustainLevel: 0,
+      releaseBlock: 0,
+      releaseLevel: 0,
+      skipped: true,
+    };
   const sustainBlock = block;
 
   e.keydown(false);
@@ -76,12 +84,30 @@ function runOracle(p: AmpEnvParams): Oracle {
 
 describe('simulateAmpEnv matches the real Env', () => {
   const cases: { name: string; p: AmpEnvParams }[] = [
-    { name: 'typical pluck', p: { rates: [99, 60, 40, 50], levels: [99, 80, 60, 0], outlevel: 99 << 5, rateScaling: 0 } },
-    { name: 'slow attack', p: { rates: [30, 99, 99, 70], levels: [99, 99, 99, 0], outlevel: 99 << 5, rateScaling: 0 } },
-    { name: 'L1=0 static start', p: { rates: [40, 50, 60, 40], levels: [0, 90, 70, 0], outlevel: 99 << 5, rateScaling: 0 } },
-    { name: 'equal levels (hold)', p: { rates: [80, 50, 50, 40], levels: [80, 80, 80, 0], outlevel: 90 << 5, rateScaling: 0 } },
-    { name: 'rate scaling', p: { rates: [70, 60, 40, 50], levels: [99, 70, 50, 0], outlevel: 80 << 5, rateScaling: 20 } },
-    { name: 'low output level', p: { rates: [99, 70, 50, 60], levels: [99, 80, 60, 0], outlevel: 20 << 5, rateScaling: 0 } },
+    {
+      name: 'typical pluck',
+      p: { rates: [99, 60, 40, 50], levels: [99, 80, 60, 0], outlevel: 99 << 5, rateScaling: 0 },
+    },
+    {
+      name: 'slow attack',
+      p: { rates: [30, 99, 99, 70], levels: [99, 99, 99, 0], outlevel: 99 << 5, rateScaling: 0 },
+    },
+    {
+      name: 'L1=0 static start',
+      p: { rates: [40, 50, 60, 40], levels: [0, 90, 70, 0], outlevel: 99 << 5, rateScaling: 0 },
+    },
+    {
+      name: 'equal levels (hold)',
+      p: { rates: [80, 50, 50, 40], levels: [80, 80, 80, 0], outlevel: 90 << 5, rateScaling: 0 },
+    },
+    {
+      name: 'rate scaling',
+      p: { rates: [70, 60, 40, 50], levels: [99, 70, 50, 0], outlevel: 80 << 5, rateScaling: 20 },
+    },
+    {
+      name: 'low output level',
+      p: { rates: [99, 70, 50, 60], levels: [99, 80, 60, 0], outlevel: 20 << 5, rateScaling: 0 },
+    },
   ];
 
   for (const { name, p } of cases) {
@@ -135,9 +161,18 @@ describe('simulateAmpEnv matches the real Env', () => {
 
 describe('simulatePitchEnv matches the real PitchEnv', () => {
   const cases: number[][][] = [
-    [[80, 60, 40, 50], [80, 30, 50, 50]],
-    [[99, 99, 99, 99], [99, 0, 50, 50]],
-    [[40, 40, 40, 40], [60, 70, 45, 50]],
+    [
+      [80, 60, 40, 50],
+      [80, 30, 50, 50],
+    ],
+    [
+      [99, 99, 99, 99],
+      [99, 0, 50, 50],
+    ],
+    [
+      [40, 40, 40, 40],
+      [60, 70, 45, 50],
+    ],
   ];
   for (let c = 0; c < cases.length; c++) {
     const [rates, levels] = cases[c];
@@ -168,7 +203,12 @@ describe('simulatePitchEnv matches the real PitchEnv', () => {
 });
 
 describe('inverse mappings round-trip', () => {
-  const p: AmpEnvParams = { rates: [70, 60, 40, 50], levels: [99, 80, 60, 0], outlevel: 99 << 5, rateScaling: 0 };
+  const p: AmpEnvParams = {
+    rates: [70, 60, 40, 50],
+    levels: [99, 80, 60, 0],
+    outlevel: 99 << 5,
+    rateScaling: 0,
+  };
 
   it('levelForTarget lands on a param giving the same amp level', () => {
     // Low L params clamp to the same floor target (a genuine plateau), so the
@@ -194,12 +234,15 @@ describe('inverse mappings round-trip', () => {
         probe.rates[ix] = r;
         const sim = simulateAmpEnv(probe, 60_000 * tPerBlock);
         const t0 = ix === 0 ? 0 : sim.nodes[ix - 1].timeSec;
-        const dur = (ix === 3 ? sim.releaseEndSec : sim.nodes[ix].timeSec) - (ix === 3 ? sim.gateSec : t0);
+        const dur =
+          (ix === 3 ? sim.releaseEndSec : sim.nodes[ix].timeSec) - (ix === 3 ? sim.gateSec : t0);
         const rBack = rateForStageDuration(probe, ix, dur, r);
         const probe2 = { ...p, rates: [...probe.rates] };
         probe2.rates[ix] = rBack;
         const sim2 = simulateAmpEnv(probe2, 60_000 * tPerBlock);
-        const dur2 = (ix === 3 ? sim2.releaseEndSec : sim2.nodes[ix].timeSec) - (ix === 3 ? sim2.gateSec : (ix === 0 ? 0 : sim2.nodes[ix - 1].timeSec));
+        const dur2 =
+          (ix === 3 ? sim2.releaseEndSec : sim2.nodes[ix].timeSec) -
+          (ix === 3 ? sim2.gateSec : ix === 0 ? 0 : sim2.nodes[ix - 1].timeSec);
         expect(Math.abs(dur2 - dur)).toBeLessThan(dur * 0.05 + tPerBlock * 4);
       }
     }
@@ -216,7 +259,7 @@ describe('inverse mappings round-trip', () => {
       void start;
       const sim = simulatePitchEnv(rates, levels, 60_000 * tPerBlock);
       const t0 = ix === 0 ? 0 : sim.nodes[ix - 1].timeSec;
-      const dur = (ix === 3 ? sim.releaseEndSec - sim.gateSec : sim.nodes[ix].timeSec - t0);
+      const dur = ix === 3 ? sim.releaseEndSec - sim.gateSec : sim.nodes[ix].timeSec - t0;
       const rBack = pitchRateForStageDuration(levels, ix, dur, rates[ix]);
       expect(rBack).toBeGreaterThanOrEqual(0);
       expect(rBack).toBeLessThanOrEqual(99);

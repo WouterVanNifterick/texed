@@ -10,7 +10,12 @@ import { Freqlut } from './freqlut';
 import { Exp2 } from './exp2';
 import { Porta } from './porta';
 import { sar64 } from './fixedpoint';
-import { kControllerPitch, kControllerPitchRangeUp, kControllerPitchStep, kControllerPitchRangeDn } from './controllers';
+import {
+  kControllerPitch,
+  kControllerPitchRangeUp,
+  kControllerPitchStep,
+  kControllerPitchRangeDn,
+} from './controllers';
 import type { Controllers } from './controllers';
 import type { TuningState } from './tuning';
 import { VoiceSupplement, extendedAmsTable } from '@texed/dx7-format/amem';
@@ -167,7 +172,13 @@ export class Dx7Note {
     return extendedAmsTable[extendedAmsTable.length - 1];
   }
 
-  private oscFreq(midinote: number, mode: number, coarse: number, fine: number, detune: number): number {
+  private oscFreq(
+    midinote: number,
+    mode: number,
+    coarse: number,
+    fine: number,
+    detune: number,
+  ): number {
     let logfreq: number;
     if (mode === 0) {
       logfreq = this.tuningState.midinoteToLogfreq(midinote);
@@ -233,13 +244,16 @@ export class Dx7Note {
       const coarse = patch[off + 18];
       const fine = patch[off + 19];
       const detune = patch[off + 20];
-      const freq = this.oscFreq(midinote, mode, coarse, fine, detune) + (mode === 0 ? this.randPitchOffset : 0);
+      const freq =
+        this.oscFreq(midinote, mode, coarse, fine, detune) +
+        (mode === 0 ? this.randPitchOffset : 0);
       this.opMode[op] = mode;
       this.basepitch[op] = freq;
       this.portaCurpitch[op] = freq;
       this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
     }
-    const pegRateAdj = sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
+    const pegRateAdj =
+      sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
     for (let i = 0; i < 4; i++) {
       rates[i] = Math.min(99, patch[126 + i] + pegRateAdj);
       levels[i] = patch[130 + i];
@@ -281,9 +295,9 @@ export class Dx7Note {
     if (pb !== 0) {
       if (ctrls.values_[kControllerPitchStep] === 0) {
         if (pb >= 0) {
-          pb = Math.trunc((pb << 11) * ctrls.values_[kControllerPitchRangeUp] / 12.0);
+          pb = Math.trunc(((pb << 11) * ctrls.values_[kControllerPitchRangeUp]) / 12.0);
         } else {
-          pb = Math.trunc((pb << 11) * ctrls.values_[kControllerPitchRangeDn] / 12.0);
+          pb = Math.trunc(((pb << 11) * ctrls.values_[kControllerPitchRangeDn]) / 12.0);
         }
       } else {
         const stp = Math.trunc(12 / ctrls.values_[kControllerPitchStep]);
@@ -293,7 +307,7 @@ export class Dx7Note {
     }
 
     if (ctrls.mpeEnabled) {
-      const d = Math.trunc(((this.mpePitchBend - 0x2000) << 11) * ctrls.mpePitchBendRange / 12.0);
+      const d = Math.trunc((((this.mpePitchBend - 0x2000) << 11) * ctrls.mpePitchBendRange) / 12.0);
       pb += d;
     }
 
@@ -394,7 +408,8 @@ export class Dx7Note {
       const fine = patch[off + 19];
       const detune = patch[off + 20];
       this.basepitch[op] =
-        this.oscFreq(midinote, mode, coarse, fine, detune) + (mode === 0 ? this.randPitchOffset : 0);
+        this.oscFreq(midinote, mode, coarse, fine, detune) +
+        (mode === 0 ? this.randPitchOffset : 0);
       this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
       this.opMode[op] = mode;
 

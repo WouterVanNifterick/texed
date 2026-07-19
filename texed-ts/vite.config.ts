@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // Served from https://<user>.github.io/texed/ in production, root in dev.
 export default defineConfig(({ command }) => ({
@@ -8,4 +8,4 @@ export default defineConfig(({ command }) => ({
   worker: {
     format: 'es',
   },
-}))
+}));

@@ -75,7 +75,11 @@ export class HardwareMidiPort implements SynthPort {
         this.bytes(acedToSysex(this.supplement));
         this.bytes(voiceToSysex(this.voice));
         if ((cmd.partIndex ?? 0) === 0) {
-          this.emit({ type: 'voice', data: this.voice.slice(), supplement: this.supplement.slice() });
+          this.emit({
+            type: 'voice',
+            data: this.voice.slice(),
+            supplement: this.supplement.slice(),
+          });
         }
         break;
       case MsgType.Panic:

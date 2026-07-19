@@ -3,11 +3,25 @@ import './App.css';
 import dexedIcon from './assets/dexed-icon.svg';
 import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
-import { setMidiOutConnection, setMidiOutTarget, setMidiOutLive, sendVoiceDump, hardwarePort } from './audio/midi-out';
+import {
+  setMidiOutConnection,
+  setMidiOutTarget,
+  setMidiOutLive,
+  sendVoiceDump,
+  hardwarePort,
+} from './audio/midi-out';
 import { getVoiceName, voiceToSysex, withVoiceName } from '@texed/dx7-format/params';
 import { acedToSysex } from '@texed/dx7-format/amem';
 import { trackCc, trackAftertouch } from './state/live-ctrl';
-import { useFileDrop, usePartSelectKeys, usePersistentState, usePersistentNumber, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
+import {
+  useFileDrop,
+  usePartSelectKeys,
+  usePersistentState,
+  usePersistentNumber,
+  useQwertyKeyboard,
+  useStageScale,
+  useTransientMessage,
+} from './hooks';
 import { loadSession, saveSession, SESSION_SCHEMA } from './state/persistence';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
@@ -45,7 +59,10 @@ export default function App() {
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [selectedOp, setSelectedOp] = useState<EnvSelection>(1);
-  const [envView, setEnvView] = usePersistentState<'individual' | 'combined'>('envView', 'individual');
+  const [envView, setEnvView] = usePersistentState<'individual' | 'combined'>(
+    'envView',
+    'individual',
+  );
   const [opLayout, setOpLayout] = usePersistentState<'grid' | 'stack'>('opLayout', 'grid');
   const [timeMode, setTimeMode] = usePersistentState<TimeMode>('envTimeMode', 'log');
   const [yMode, setYMode] = usePersistentState<YMode>('envYMode', 'db');
@@ -87,10 +104,7 @@ export default function App() {
     if (banks.length) parts.push(`${banks.length} VMEM bank${banks.length > 1 ? 's' : ''}`);
     if (amem.length) parts.push(`${amem.length} AMEM pair${amem.length > 1 ? 's' : ''}`);
     const rest = applied.filter(
-      (a) =>
-        !a.startsWith('performances') &&
-        !a.startsWith('VMEM →') &&
-        !a.startsWith('AMEM'),
+      (a) => !a.startsWith('performances') && !a.startsWith('VMEM →') && !a.startsWith('AMEM'),
     );
     parts.push(...rest);
     if (skipped.length) parts.push(`skipped: ${skipped.join(', ')}`);
@@ -251,9 +265,7 @@ export default function App() {
   const dragging = useFileDrop(onDrop);
 
   const selectedVoice = synth.partConfigs[synth.selectedPart]?.voice;
-  const programIdx = selectedVoice
-    ? programIndexForVoice(synth.programOptions, selectedVoice)
-    : 0;
+  const programIdx = selectedVoice ? programIndexForVoice(synth.programOptions, selectedVoice) : 0;
   const program = programIdx >= 0 ? programIdx : 0;
 
   const onSaveBank = useCallback(() => {
@@ -263,7 +275,9 @@ export default function App() {
         showLoadMsg(`Bank ${bank} is empty — nothing to save`);
         return;
       }
-      const url = URL.createObjectURL(new Blob([data.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }));
+      const url = URL.createObjectURL(
+        new Blob([data.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }),
+      );
       const a = document.createElement('a');
       a.href = url;
       a.download = `${bank}.syx`;
@@ -290,7 +304,9 @@ export default function App() {
     const syx = new Uint8Array(aced.length + vced.length);
     syx.set(aced, 0);
     syx.set(vced, aced.length);
-    const url = URL.createObjectURL(new Blob([syx.buffer as ArrayBuffer], { type: 'application/octet-stream' }));
+    const url = URL.createObjectURL(
+      new Blob([syx.buffer as ArrayBuffer], { type: 'application/octet-stream' }),
+    );
     const a = document.createElement('a');
     a.href = url;
     a.download = `${getVoiceName(synth.voice).trim() || 'voice'}.syx`;
@@ -337,7 +353,10 @@ export default function App() {
               value={program}
               onChange={(e) => onSelectProgram(Number(e.target.value))}
               disabled={synth.programOptions.length === 0}
-              {...helpProps('PROGRAM', 'Selects a voice for the current part from the loaded banks.')}
+              {...helpProps(
+                'PROGRAM',
+                'Selects a voice for the current part from the loaded banks.',
+              )}
             >
               {synth.programOptions.length === 0 ? (
                 <option value={0}>INIT VOICE</option>
@@ -364,16 +383,32 @@ export default function App() {
               value={envView}
               onChange={setEnvView}
               options={[
-                { value: 'individual', label: 'SEPARATE', help: 'Show one envelope per operator plus the pitch EG.' },
-                { value: 'combined', label: 'COMBINED', help: 'Overlay all envelopes on one plot; edit the selected one on top.' },
+                {
+                  value: 'individual',
+                  label: 'SEPARATE',
+                  help: 'Show one envelope per operator plus the pitch EG.',
+                },
+                {
+                  value: 'combined',
+                  label: 'COMBINED',
+                  help: 'Overlay all envelopes on one plot; edit the selected one on top.',
+                },
               ]}
             />
             <Segmented
               value={opLayout}
               onChange={setOpLayout}
               options={[
-                { value: 'grid', label: '3×2', help: 'Arrange the six operator panels in a 3×2 grid.' },
-                { value: 'stack', label: '1×6', help: 'Stack the six operators as flat horizontal rows.' },
+                {
+                  value: 'grid',
+                  label: '3×2',
+                  help: 'Arrange the six operator panels in a 3×2 grid.',
+                },
+                {
+                  value: 'stack',
+                  label: '1×6',
+                  help: 'Stack the six operators as flat horizontal rows.',
+                },
               ]}
             />
             <Segmented
@@ -381,8 +416,16 @@ export default function App() {
               value={timeMode}
               onChange={setTimeMode}
               options={[
-                { value: 'log', label: 'LOG', help: 'Logarithmic time axis: fast attacks and slow releases are both legible.' },
-                { value: 'linear', label: 'LIN', help: 'Linear time axis (clamped to 10 s), same seconds-per-pixel everywhere.' },
+                {
+                  value: 'log',
+                  label: 'LOG',
+                  help: 'Logarithmic time axis: fast attacks and slow releases are both legible.',
+                },
+                {
+                  value: 'linear',
+                  label: 'LIN',
+                  help: 'Linear time axis (clamped to 10 s), same seconds-per-pixel everywhere.',
+                },
               ]}
             />
             <Segmented
@@ -390,8 +433,16 @@ export default function App() {
               value={yMode}
               onChange={setYMode}
               options={[
-                { value: 'db', label: 'dB', help: 'Decibel level axis: decay stages are straight, quiet levels stay visible.' },
-                { value: 'linear', label: 'LIN', help: 'Linear amplitude axis: matches raw sample output; low levels sit near the floor.' },
+                {
+                  value: 'db',
+                  label: 'dB',
+                  help: 'Decibel level axis: decay stages are straight, quiet levels stay visible.',
+                },
+                {
+                  value: 'linear',
+                  label: 'LIN',
+                  help: 'Linear amplitude axis: matches raw sample output; low levels sit near the floor.',
+                },
               ]}
             />
             <RefKeyControl
@@ -486,11 +537,7 @@ export default function App() {
       )}
 
       {showLibrary && (
-        <LibraryBrowser
-          synth={synth}
-          showMsg={showLoadMsg}
-          onClose={() => setShowLibrary(false)}
-        />
+        <LibraryBrowser synth={synth} showMsg={showLoadMsg} onClose={() => setShowLibrary(false)} />
       )}
 
       {dragging && (
@@ -506,7 +553,9 @@ export default function App() {
               <img src={dexedIcon} alt="" className="start-icon" width={72} height={72} />
               <div className="start-title">
                 <h1>TEXED</h1>
-                <p className="start-tag">Yamaha DX7/TX802/TX816 FM synthesizer, right in your browser.</p>
+                <p className="start-tag">
+                  Yamaha DX7/TX802/TX816 FM synthesizer, right in your browser.
+                </p>
               </div>
             </header>
 
@@ -515,7 +564,7 @@ export default function App() {
               <li>128-voice polyphony</li>
               <li>Loads TX802 / TX816 multi-timbral performances</li>
               <li>Drag &amp; drop .syx files</li>
-              <li>Live interactive envelope editing</li>              
+              <li>Live interactive envelope editing</li>
               <li>100% free &amp; open source</li>
             </ul>
 
@@ -526,7 +575,7 @@ export default function App() {
             <footer className="start-credits">
               <span>
                 Wouter van Nifterick (woutervannifterick&nbsp;at&nbsp;gmail&nbsp;dot&nbsp;com)
-              </span>              
+              </span>
             </footer>
           </div>
         </div>

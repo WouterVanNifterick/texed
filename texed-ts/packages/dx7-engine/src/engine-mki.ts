@@ -250,21 +250,53 @@ export class EngineMkI extends FmCore {
           if ((flags & 0xc0) === 0xc0 && fbOn) {
             switch (algorithm) {
               case 3:
-                this.computeFb3(outptr, params, gain1, gain2, fbBuf, Math.min(feedbackShift + 2, 16));
+                this.computeFb3(
+                  outptr,
+                  params,
+                  gain1,
+                  gain2,
+                  fbBuf,
+                  Math.min(feedbackShift + 2, 16),
+                );
                 params[1].phase = (params[1].phase + (params[1].freq << LG_N)) | 0;
                 params[2].phase = (params[2].phase + (params[2].freq << LG_N)) | 0;
                 op += 2;
                 break;
               case 5:
-                this.computeFb2(outptr, params, gain1, gain2, fbBuf, Math.min(feedbackShift + 2, 16));
+                this.computeFb2(
+                  outptr,
+                  params,
+                  gain1,
+                  gain2,
+                  fbBuf,
+                  Math.min(feedbackShift + 2, 16),
+                );
                 params[1].phase = (params[1].phase + (params[1].freq << LG_N)) | 0;
                 op++;
                 break;
               case 31:
-                this.computeFb(outptr, param.phase, param.freq, gain1, gain2, fbBuf, Math.min(feedbackShift + 2, 16), add);
+                this.computeFb(
+                  outptr,
+                  param.phase,
+                  param.freq,
+                  gain1,
+                  gain2,
+                  fbBuf,
+                  Math.min(feedbackShift + 2, 16),
+                  add,
+                );
                 break;
               default:
-                this.computeFb(outptr, param.phase, param.freq, gain1, gain2, fbBuf, feedbackShift, add);
+                this.computeFb(
+                  outptr,
+                  param.phase,
+                  param.freq,
+                  gain1,
+                  gain2,
+                  fbBuf,
+                  feedbackShift,
+                  add,
+                );
                 break;
             }
           } else {

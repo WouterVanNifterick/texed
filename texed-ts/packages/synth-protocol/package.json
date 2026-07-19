@@ -1,0 +1,16 @@
+{
+  "name": "@texed/synth-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Transport-agnostic control protocol for a Texed synth: commands, events, and the SynthPort interface implemented by worklet/hardware/native bridges.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@texed/dx7-format": "workspace:*"
+  }
+}

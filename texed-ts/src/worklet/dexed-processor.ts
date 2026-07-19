@@ -2,10 +2,10 @@
 // stereo audio. A fresh rack has only part 0 enabled (omni), so single-timbre
 // use is unchanged; enabling more parts gives TX802/TX816 behavior.
 
-import { SynthRack } from '../engine/synth-rack';
-import { identifySysex, SysexKind, voiceFromVced } from '../engine/sysex';
-import { loadSysexFile, applySystemSetupToParts } from '../engine/sysex-loader';
-import { MsgType, type ToWorkletMessage, type FromWorkletMessage } from './protocol';
+import { SynthRack } from '@texed/dx7-engine/synth-rack';
+import { identifySysex, SysexKind, voiceFromVced } from '@texed/dx7-format/sysex';
+import { loadSysexFile, applySystemSetupToParts } from '@texed/dx7-format/sysex-loader';
+import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
 
 const STATUS_INTERVAL = 12;
 
@@ -18,14 +18,14 @@ class DexedProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.rack = new SynthRack(sampleRate);
-    this.port.onmessage = (e: MessageEvent<ToWorkletMessage>) => this.handleMessage(e.data);
+    this.port.onmessage = (e: MessageEvent<SynthCommand>) => this.handleMessage(e.data);
     this.postVoice();
     this.postParts();
     this.postProgramState();
     this.postMasterTune();
   }
 
-  private post(msg: FromWorkletMessage): void {
+  private post(msg: SynthEvent): void {
     this.port.postMessage(msg);
   }
 
@@ -97,7 +97,7 @@ class DexedProcessor extends AudioWorkletProcessor {
     this.post({ type: 'loadReport', report: result.report });
   }
 
-  private handleMessage(msg: ToWorkletMessage): void {
+  private handleMessage(msg: SynthCommand): void {
     switch (msg.type) {
       case MsgType.NoteOn:
         this.rack.noteOn(msg.note, msg.velocity, msg.channel ?? 1);

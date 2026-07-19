@@ -5,16 +5,24 @@
 
 import { useMemo } from 'react';
 import type { SynthStatus } from '../audio/useDexedSynth';
-import { OP, G, opBase } from '../state/params';
+import { OP, G, opBase } from '@texed/dx7-format/params';
 import { helpProps, setHelp } from '../state/help';
-import { simulateAmpEnv, simulatePitchEnv } from '../engine/env-sim';
-import { computeAmpParams, pitchEgParams, REF_LABEL, type EnvTimeScale } from './env-time';
+import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
+import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
 import { makeYMap, curvePoints, OP_COLORS, PITCH_COLOR, type YMode, type DrawGeom } from './env-draw';
 import { LiveEnvEditor } from './EnvEditor';
+import { noteLabel } from './ui';
 
 const W = 100;
 const H = 100;
 const PAD = 2;
+
+// The crosshair maps the paint note across the on-screen keyboard span
+// (C2–C7) and the velocity 1..127 over the plot height. It is a loose visual
+// tie between "note ↔ horizontal, velocity ↔ vertical", not a data axis.
+const XHAIR_NOTE_LO = 36;
+const XHAIR_NOTE_HI = 96;
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 export type EnvSelection = number | 'pitch'; // op number 1..6, or the pitch EG
@@ -29,6 +37,8 @@ interface EnvOverlayProps {
   subscribeStatus: Subscribe;
   hoverOp: number | null;
   onHoverOp: (opNum: number | null) => void;
+  note: number;
+  velocity: number;
 }
 
 export function EnvOverlay({
@@ -41,6 +51,8 @@ export function EnvOverlay({
   subscribeStatus,
   hoverOp,
   onHoverOp,
+  note,
+  velocity,
 }: EnvOverlayProps) {
   // Background polylines for every envelope (the selected one is redrawn on top
   // by the editor). Recomputed when any EG byte or the scale changes.
@@ -49,7 +61,7 @@ export function EnvOverlay({
     const pitchYmap = makeYMap('pitch', yMode);
     const out: { key: string; sel: EnvSelection; color: string; points: string; kind: 'amp' | 'pitch' }[] = [];
     for (let opNum = 1; opNum <= 6; opNum++) {
-      const trace = simulateAmpEnv(computeAmpParams(voice, opNum), timeScale.gateSec);
+      const trace = simulateAmpEnv(computeAmpParams(voice, opNum, true, note, velocity), timeScale.gateSec);
       const g: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap: ampYmap };
       out.push({ key: `op${opNum}`, sel: opNum, color: OP_COLORS[opNum - 1], points: curvePoints(trace, g), kind: 'amp' });
     }
@@ -58,7 +70,11 @@ export function EnvOverlay({
     const pg: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap: pitchYmap };
     out.push({ key: 'pitch', sel: 'pitch', color: PITCH_COLOR, points: curvePoints(pt, pg), kind: 'pitch' });
     return out;
-  }, [voice, timeScale, yMode]);
+  }, [voice, timeScale, yMode, note, velocity]);
+
+  // Crosshair position: note → x (over the keyboard span), velocity → y (top = loud).
+  const xhairX = PAD + clamp01((note - XHAIR_NOTE_LO) / (XHAIR_NOTE_HI - XHAIR_NOTE_LO)) * (W - 2 * PAD);
+  const xhairY = PAD + (1 - clamp01(velocity / 127)) * (H - 2 * PAD);
 
   // Editor props for the selected envelope.
   const editor =
@@ -90,7 +106,7 @@ export function EnvOverlay({
               kind="amp"
               rates={rates}
               levels={levels}
-              ampParams={computeAmpParams(voice, opNum)}
+              ampParams={computeAmpParams(voice, opNum, true, note, velocity)}
               timeScale={timeScale}
               yMode={yMode}
               color={OP_COLORS[opNum - 1]}
@@ -137,7 +153,6 @@ export function EnvOverlay({
             PITCH
           </button>
         </div>
-        <span className="env-ref" title={`Timing shown for ${REF_LABEL}`}>{REF_LABEL}</span>
       </div>
 
       <div className="env-overlay-plot">
@@ -166,8 +181,18 @@ export function EnvOverlay({
                 onPointerLeave={() => onHoverOp(null)}
               />
             ))}
+          {/* Paint note/velocity crosshair: note ↔ horizontal, velocity ↔ vertical. */}
+          <line className="env-xhair-v" x1={xhairX} y1={0} x2={xhairX} y2={H} />
+          <line className="env-xhair-h" x1={0} y1={xhairY} x2={W} y2={xhairY} />
+          <circle className="env-xhair-dot" cx={xhairX} cy={xhairY} r={1.6} />
         </svg>
         {editor}
+        <span className="env-xhair-label note" style={{ left: `${(xhairX / W) * 100}%` }} aria-hidden>
+          {noteLabel(note)}
+        </span>
+        <span className="env-xhair-label vel" style={{ top: `${(xhairY / H) * 100}%` }} aria-hidden>
+          v{velocity}
+        </span>
         <div className="env-overlay-axis" aria-hidden>
           <span>{yMode === 'db' ? '0 dB' : '1.0'}</span>
           <span>{yMode === 'db' ? '−72 dB' : '0'}</span>

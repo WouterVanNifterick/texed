@@ -2,7 +2,7 @@
 // UI values survive page reloads via IndexedDB. Built-in library content is
 // never stored — only what lives in the rack.
 
-import type { RackState } from '../engine/rack-state';
+import type { RackState } from '@texed/dx7-format/rack-state';
 
 const DB_NAME = 'texed';
 const DB_VERSION = 1;

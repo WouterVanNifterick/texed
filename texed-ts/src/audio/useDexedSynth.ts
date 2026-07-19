@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import workletUrl from '../worklet/dexed-processor.ts?worker&url';
-import { MsgType, type ToWorkletMessage, type FromWorkletMessage, type StatusMsg, type RackState } from '../worklet/protocol';
-import type { PartConfig, ProgramOption } from '../engine/synth-rack';
-import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
-import type { LoadReport } from '../engine/sysex-loader';
-import { initVoice } from '../engine/cartridge';
-import { createDefaultAmem } from '../engine/amem';
-import { voiceRefEquals } from '../engine/synth-rack';
+import { MsgType, type SynthCommand, type StatusMsg, type RackState } from '@texed/synth-protocol/protocol';
+import type { SynthPort } from '@texed/synth-protocol/port';
+import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
+import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
+import type { LoadReport } from '@texed/dx7-format/sysex-loader';
+import { initVoice } from '@texed/dx7-format/cartridge';
+import { createDefaultAmem } from '@texed/dx7-format/amem';
+import { voiceRefEquals } from '@texed/dx7-format/voice-library';
+import { WorkletPort } from './worklet-port';
 import { emitVoiceParam, emitSupplement } from './midi-out';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
@@ -75,9 +76,12 @@ export function useStatus<T>(
   return value;
 }
 
-export function useDexedSynth(): DexedSynth {
-  const ctxRef = useRef<AudioContext | null>(null);
-  const nodeRef = useRef<AudioWorkletNode | null>(null);
+export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
+  // The transport is swappable: the default WorkletPort runs the TS engine
+  // locally; a hardware-MIDI or native-bridge port can be passed in instead.
+  const portRef = useRef<SynthPort | null>(externalPort ?? null);
+  if (portRef.current === null) portRef.current = new WorkletPort();
+  const port = portRef.current;
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
   const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
   const fullStateCb = useRef<((state: RackState) => void) | null>(null);
@@ -98,55 +102,46 @@ export function useDexedSynth(): DexedSynth {
   const [performanceNames, setPerformanceNames] = useState<string[]>([]);
   const [performanceIndex, setPerformanceIndex] = useState(0);
 
-  const post = useCallback((msg: ToWorkletMessage, transfer?: Transferable[]) => {
-    nodeRef.current?.port.postMessage(msg, transfer ?? []);
-  }, []);
+  const post = useCallback(
+    (msg: SynthCommand, transfer?: ArrayBuffer[]) => {
+      port.send(msg, transfer);
+    },
+    [port],
+  );
 
-  const start = useCallback(async () => {
-    if (ctxRef.current) {
-      await ctxRef.current.resume();
-      return;
-    }
-    const ctx = new AudioContext();
-    await ctx.audioWorklet.addModule(workletUrl);
-    const node = new AudioWorkletNode(ctx, 'dexed-processor', {
-      numberOfInputs: 0,
-      numberOfOutputs: 1,
-      outputChannelCount: [2],
-    });
-    node.port.onmessage = (e: MessageEvent<FromWorkletMessage>) => {
-      const m = e.data;
-      if (m.type === 'programState') {
-        setProgramOptions(m.options);
-        setBanks(m.banks);
-      } else if (m.type === 'loadReport') {
-        setLoadReport(m.report);
-      } else if (m.type === 'voice') {
-        setVoiceState(new Uint8Array(m.data));
-        setSupplementState(new Uint8Array(m.supplement));
-      } else if (m.type === 'masterTune') {
-        setMasterTuneCents(m.cents);
-      } else if (m.type === 'parts') {
-        setPartConfigs(m.configs);
-        setSelectedPart(m.selectedPart);
-      } else if (m.type === 'performances') {
-        setPerformanceNames(m.names);
-        setPerformanceIndex(m.index);
-      } else if (m.type === 'bankDump') {
-        bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
-        bankDumpCb.current = null;
-      } else if (m.type === 'fullState') {
-        fullStateCb.current?.(m.state);
-        fullStateCb.current = null;
-      } else if (m.type === 'status') {
-        for (const cb of statusSubs.current) cb(m);
-      }
-    };
-    node.connect(ctx.destination);
-    ctxRef.current = ctx;
-    nodeRef.current = node;
-    await ctx.resume();
-  }, []);
+  useEffect(
+    () =>
+      port.onEvent((m) => {
+        if (m.type === 'programState') {
+          setProgramOptions(m.options);
+          setBanks(m.banks);
+        } else if (m.type === 'loadReport') {
+          setLoadReport(m.report);
+        } else if (m.type === 'voice') {
+          setVoiceState(new Uint8Array(m.data));
+          setSupplementState(new Uint8Array(m.supplement));
+        } else if (m.type === 'masterTune') {
+          setMasterTuneCents(m.cents);
+        } else if (m.type === 'parts') {
+          setPartConfigs(m.configs);
+          setSelectedPart(m.selectedPart);
+        } else if (m.type === 'performances') {
+          setPerformanceNames(m.names);
+          setPerformanceIndex(m.index);
+        } else if (m.type === 'bankDump') {
+          bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
+          bankDumpCb.current = null;
+        } else if (m.type === 'fullState') {
+          fullStateCb.current?.(m.state);
+          fullStateCb.current = null;
+        } else if (m.type === 'status') {
+          for (const cb of statusSubs.current) cb(m);
+        }
+      }),
+    [port],
+  );
+
+  const start = useCallback(() => port.start(), [port]);
 
   const noteOn = useCallback(
     (note: number, velocity: number, channel = 1) => post({ type: MsgType.NoteOn, note, velocity, channel }),
@@ -223,7 +218,7 @@ export function useDexedSynth(): DexedSynth {
         if (opts?.supplement) setSupplementState(opts.supplement);
       }
       const buf = v.slice().buffer as ArrayBuffer;
-      const transfer: Transferable[] = [buf];
+      const transfer: ArrayBuffer[] = [buf];
       let supplement: ArrayBuffer | undefined;
       if (opts?.supplement) {
         supplement = opts.supplement.slice().buffer as ArrayBuffer;
@@ -262,7 +257,7 @@ export function useDexedSynth(): DexedSynth {
   const loadBankInto = useCallback(
     (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => {
       const vbuf = voices.slice().buffer as ArrayBuffer;
-      const transfer: Transferable[] = [vbuf];
+      const transfer: ArrayBuffer[] = [vbuf];
       let sbuf: ArrayBuffer | undefined;
       if (supplements) {
         sbuf = supplements.slice().buffer as ArrayBuffer;

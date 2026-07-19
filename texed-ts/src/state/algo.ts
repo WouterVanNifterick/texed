@@ -1,7 +1,7 @@
 // State layer: derive a drawable modulation graph for each of the 32 DX7
 // algorithms from the engine's routing-flags table (no hardcoded layouts).
 
-import { algorithms, FmOperatorFlags } from '../engine/fm-core';
+import { algorithms, FmOperatorFlags } from '@texed/dx7-format/algorithms';
 
 export interface AlgoNode {
   op: number; // sysex op index 0..5 (0 = OP6)

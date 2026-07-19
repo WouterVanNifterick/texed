@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DexedSynth } from '../audio/useDexedSynth';
 import { programIndexForVoice } from '../audio/useDexedSynth';
-import { getVoiceName } from '../state/params';
-import type { VoiceRef, VoiceBankId } from '../engine/voice-library';
-import { VOICE_BANK_LABELS } from '../engine/voice-library';
+import { getVoiceName } from '@texed/dx7-format/params';
+import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
+import { VOICE_BANK_LABELS } from '@texed/dx7-format/voice-library';
 
 interface StoreVoiceDialogProps {
   synth: DexedSynth;

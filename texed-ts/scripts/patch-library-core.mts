@@ -2,9 +2,9 @@
 // Reuses the engine's sysex parsers so the manifest always agrees with what
 // the app will load at runtime.
 
-import { loadSysexFile } from '../src/engine/sysex-loader';
-import { createDefaultAmem } from '../src/engine/amem';
-import { VOICE_BANK_LABELS, type VoiceBankId } from '../src/engine/voice-library';
+import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
+import { createDefaultAmem } from '@texed/dx7-format/amem';
+import { VOICE_BANK_LABELS, type VoiceBankId } from '@texed/dx7-format/voice-library';
 import {
   LIBRARY_SCHEMA,
   type LibCollection,

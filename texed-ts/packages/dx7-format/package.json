@@ -1,0 +1,13 @@
+{
+  "name": "@texed/dx7-format",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DX7/DX7II/TX802 data formats: voice layout, SysEx pack/unpack, cartridges, performances. Pure data, no DSP, no DOM.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

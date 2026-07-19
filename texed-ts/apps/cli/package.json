@@ -1,0 +1,19 @@
+{
+  "name": "@texed/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless host for the Texed DX7 engine: renders a Standard MIDI File to WAV from the console.",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@texed/dx7-engine": "workspace:*",
+    "@texed/dx7-format": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "tsx": "^4.23.1"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@texed/dx7-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DX7 real-time DSP engine (msfa port): FM core, envelopes, LFO, multi-timbral SynthRack. Host-agnostic — renders into Float32Arrays.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@texed/dx7-format": "workspace:*"
+  }
+}

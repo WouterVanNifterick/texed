@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm build:library && vite",
-    "build": "pnpm build:library && tsc -b && vite build",
+    "build": "pnpm build:library && pnpm typecheck && vite build",
     "build:library": "tsx scripts/build-patch-library.mts",
+    "cli": "pnpm --filter @texed/cli start",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "pnpm -r typecheck && tsc -b"
   },
   "dependencies": {
+    "@texed/dx7-engine": "workspace:*",
+    "@texed/dx7-format": "workspace:*",
+    "@texed/synth-protocol": "workspace:*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

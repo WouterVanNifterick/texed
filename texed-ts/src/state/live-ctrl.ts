@@ -2,7 +2,7 @@
 // Fed from the MIDI input router in App; read by the controllers popup.
 
 import { useSyncExternalStore } from 'react';
-import type { CtrlName } from './supplement';
+import type { CtrlName } from '@texed/dx7-format/supplement';
 
 // Defaults mirror engine/controllers.ts: an unplugged FC2/MC pedal reads max.
 const values: Record<CtrlName, number> = {

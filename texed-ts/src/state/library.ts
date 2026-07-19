@@ -2,10 +2,10 @@
 // scripts/build-patch-library.mts). Fetches are cached; .syx files are parsed
 // on the main thread with the same engine loader the worklet uses.
 
-import { loadSysexFile } from '../engine/sysex-loader';
-import { voiceFromRawVced } from '../engine/sysex';
-import { AMEM_SLOT_SIZE } from '../engine/amem';
-import { VOICE_BANK_ORDER, type VoiceLibrary } from '../engine/voice-library';
+import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
+import { voiceFromRawVced } from '@texed/dx7-format/sysex';
+import { AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
+import { VOICE_BANK_ORDER, type VoiceLibrary } from '@texed/dx7-format/voice-library';
 import {
   isLibraryManifest,
   type LibBank,

@@ -1,0 +1,4 @@
+dist
+public/library
+pnpm-lock.yaml
+*.syx

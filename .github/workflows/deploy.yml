@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: texed-ts/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: texed-ts/dist
 

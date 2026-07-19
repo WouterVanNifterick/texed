@@ -14,11 +14,7 @@ import {
   type SysexFrame,
 } from './sysex';
 import { parseSystemSetup, systemSetupPayloadFromFrame, masterTuningCents } from './system-setup';
-import {
-  VoiceLibrary,
-  VOICE_BANK_ORDER,
-  type VoiceBankId,
-} from './voice-library';
+import { VoiceLibrary, VOICE_BANK_ORDER, type VoiceBankId } from './voice-library';
 
 export interface LoadReport {
   frames: number;
@@ -180,7 +176,8 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
     report.applied.push(`AMEM → ${pendingAmemBank} (final)`);
   }
 
-  const loaded = lib.populatedBanks().length > 0 || lib.performances.length > 0 || singleVoice !== null;
+  const loaded =
+    lib.populatedBanks().length > 0 || lib.performances.length > 0 || singleVoice !== null;
   return { library: lib, report, loaded, singleVoice };
 }
 
@@ -191,7 +188,12 @@ function loadRawVced(bytes: Uint8Array): LoadResult {
   if (bytes.length === 155 || bytes.length === 156) {
     const voice = voiceFromRawVced(bytes);
     if (!voice) {
-      return { library: lib, report: { ...report, skipped: ['raw VCED (parse failed)'] }, loaded: false, singleVoice: null };
+      return {
+        library: lib,
+        report: { ...report, skipped: ['raw VCED (parse failed)'] },
+        loaded: false,
+        singleVoice: null,
+      };
     }
     report.applied.push('raw VCED voice');
     return { library: lib, report, loaded: true, singleVoice: voice };
@@ -203,7 +205,12 @@ function loadRawVced(bytes: Uint8Array): LoadResult {
     if (voice) voices.push(voice);
   }
   if (voices.length === 0) {
-    return { library: lib, report: { ...report, skipped: ['raw VCED (parse failed)'] }, loaded: false, singleVoice: null };
+    return {
+      library: lib,
+      report: { ...report, skipped: ['raw VCED (parse failed)'] },
+      loaded: false,
+      singleVoice: null,
+    };
   }
 
   const cart = cartridgeFromVoices(voices);

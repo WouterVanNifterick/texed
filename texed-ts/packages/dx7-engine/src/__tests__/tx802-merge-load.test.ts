@@ -13,12 +13,7 @@ describe('TX802 incremental load', () => {
   it('merges banks then performances without losing either', () => {
     const rack = new SynthRack(44100);
     const banks = loadSysexFile(
-      new Uint8Array([
-        ...load('A1.SYX'),
-        ...load('A2.SYX'),
-        ...load('B1.SYX'),
-        ...load('B2.SYX'),
-      ]),
+      new Uint8Array([...load('A1.SYX'), ...load('A2.SYX'), ...load('B1.SYX'), ...load('B2.SYX')]),
     );
     rack.loadLibrary(banks.library);
 

@@ -55,10 +55,29 @@ function useDismiss(open: boolean, close: () => void, ref: RefObject<HTMLElement
 }
 
 export function TopBar({
-  synth, loadMsg, onLoadFiles, onSaveVoice, onSaveBank,
-  engine, engineNames, onEngine, onShowParts, onShowLibrary, polyphony, onPolyphony,
-  volume, onVolume, masterTuneCents, onMasterTune, midiInputs,
-  midiOutputs, midiOutId, onMidiOut, midiLive, onMidiLive, onSendVoice,
+  synth,
+  loadMsg,
+  onLoadFiles,
+  onSaveVoice,
+  onSaveBank,
+  engine,
+  engineNames,
+  onEngine,
+  onShowParts,
+  onShowLibrary,
+  polyphony,
+  onPolyphony,
+  volume,
+  onVolume,
+  masterTuneCents,
+  onMasterTune,
+  midiInputs,
+  midiOutputs,
+  midiOutId,
+  onMidiOut,
+  midiLive,
+  onMidiLive,
+  onSendVoice,
 }: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const dlRef = useRef<HTMLDivElement>(null);
@@ -80,7 +99,10 @@ export function TopBar({
       <div className="bar-group">
         <div
           className="part-strip"
-          {...helpProps('PART SELECT', 'Chooses which of the 8 multi-timbral parts the editor below is editing. Keys 1–8 also select parts.')}
+          {...helpProps(
+            'PART SELECT',
+            'Chooses which of the 8 multi-timbral parts the editor below is editing. Keys 1–8 also select parts.',
+          )}
         >
           {Array.from({ length: 8 }, (_, i) => {
             const cfg = synth.partConfigs[i];
@@ -104,7 +126,10 @@ export function TopBar({
           type="button"
           className="bar-btn"
           onClick={onShowParts}
-          {...helpProps('PARTS', 'Opens the multi-timbral part rack: 8 parts with their own voice, channel, volume, pan and note range.')}
+          {...helpProps(
+            'PARTS',
+            'Opens the multi-timbral part rack: 8 parts with their own voice, channel, volume, pan and note range.',
+          )}
         >
           PARTS
         </button>
@@ -116,7 +141,10 @@ export function TopBar({
         {synth.performanceNames.length > 0 && (
           <label
             className="perf-ctl"
-            {...helpProps('PERFORMANCE', 'Select a multi-timbral performance — loads all 8 parts with their voices and settings.')}
+            {...helpProps(
+              'PERFORMANCE',
+              'Select a multi-timbral performance — loads all 8 parts with their voices and settings.',
+            )}
           >
             PERF
             <select
@@ -136,7 +164,10 @@ export function TopBar({
           type="button"
           className="bar-btn"
           onClick={onShowLibrary}
-          {...helpProps('LIBRARY', 'Browse the built-in voice and performance library (FS1R, TX802, DX7II factory sets and more) plus everything you have loaded.')}
+          {...helpProps(
+            'LIBRARY',
+            'Browse the built-in voice and performance library (FS1R, TX802, DX7II factory sets and more) plus everything you have loaded.',
+          )}
         >
           LIBRARY
         </button>
@@ -145,7 +176,10 @@ export function TopBar({
           type="button"
           className="bar-btn"
           onClick={() => fileRef.current?.click()}
-          {...helpProps('LOAD', 'Loads .syx (VMEM banks, AMEM, single VCED voices, performances) or raw .Dx7Voice files — or drop them anywhere.')}
+          {...helpProps(
+            'LOAD',
+            'Loads .syx (VMEM banks, AMEM, single VCED voices, performances) or raw .Dx7Voice files — or drop them anywhere.',
+          )}
         >
           LOAD
         </button>
@@ -170,7 +204,10 @@ export function TopBar({
             aria-haspopup="menu"
             aria-expanded={dlOpen}
             aria-label="Save"
-            {...helpProps('SAVE', 'Save the current voice (ACED + VCED) or the whole 32-voice bank (VMEM + AMEM) as a .syx file.')}
+            {...helpProps(
+              'SAVE',
+              'Save the current voice (ACED + VCED) or the whole 32-voice bank (VMEM + AMEM) as a .syx file.',
+            )}
           >
             <DownloadIcon />
           </button>
@@ -203,7 +240,11 @@ export function TopBar({
         </div>
       </div>
 
-      {loadMsg && <span className="load-msg" title={loadMsg}>{loadMsg}</span>}
+      {loadMsg && (
+        <span className="load-msg" title={loadMsg}>
+          {loadMsg}
+        </span>
+      )}
 
       <div className="bar-group bar-group-right">
         <div className="bar-knobs">
@@ -243,7 +284,12 @@ export function TopBar({
       <div className="bar-group">
         <span
           className={`midi-led${midiInputs.length > 0 ? ' on' : ''}`}
-          {...helpProps('MIDI', midiInputs.length > 0 ? `Connected MIDI inputs: ${midiInputs.join(', ')}` : 'Lights up when a MIDI input device is connected.')}
+          {...helpProps(
+            'MIDI',
+            midiInputs.length > 0
+              ? `Connected MIDI inputs: ${midiInputs.join(', ')}`
+              : 'Lights up when a MIDI input device is connected.',
+          )}
         >
           MIDI
         </span>
@@ -253,7 +299,10 @@ export function TopBar({
           className="bar-btn"
           disabled={!midiOutId}
           onClick={onSendVoice}
-          {...helpProps('SEND', 'Transmit the current voice (ACED + VCED) to the selected MIDI output.')}
+          {...helpProps(
+            'SEND',
+            'Transmit the current voice (ACED + VCED) to the selected MIDI output.',
+          )}
         >
           SEND
         </button>
@@ -275,7 +324,10 @@ export function TopBar({
               <div className="settings-title">SETTINGS</div>
               <label
                 className="settings-row"
-                {...helpProps('ENGINE', 'FM engine model — MODERN (24-bit float), MARK I (original DX7 fixed-point), or OPL series.')}
+                {...helpProps(
+                  'ENGINE',
+                  'FM engine model — MODERN (24-bit float), MARK I (original DX7 fixed-point), or OPL series.',
+                )}
               >
                 <span className="settings-row-label">Engine</span>
                 <select value={engine} onChange={(e) => onEngine(Number(e.target.value))}>
@@ -289,7 +341,10 @@ export function TopBar({
 
               <label
                 className="settings-row"
-                {...helpProps('POLY', 'Maximum number of simultaneous voices before the oldest notes are stolen.')}
+                {...helpProps(
+                  'POLY',
+                  'Maximum number of simultaneous voices before the oldest notes are stolen.',
+                )}
               >
                 <span className="settings-row-label">Polyphony</span>
                 <select value={polyphony} onChange={(e) => onPolyphony(Number(e.target.value))}>
@@ -303,7 +358,10 @@ export function TopBar({
 
               <label
                 className="settings-row"
-                {...helpProps('MIDI OUT', 'Device for voice send, incoming-MIDI forwarding, and live parameter SysEx.')}
+                {...helpProps(
+                  'MIDI OUT',
+                  'Device for voice send, incoming-MIDI forwarding, and live parameter SysEx.',
+                )}
               >
                 <span className="settings-row-label">MIDI out</span>
                 <select value={midiOutId} onChange={(e) => onMidiOut(e.target.value)}>

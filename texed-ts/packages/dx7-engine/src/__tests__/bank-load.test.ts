@@ -10,8 +10,7 @@ import { getVoiceName } from '@texed/dx7-format/params';
 const here = dirname(fileURLToPath(import.meta.url));
 const patch = (rel: string) =>
   new Uint8Array(readFileSync(join(here, '../../../../../patches', rel)));
-const fx = (name: string) =>
-  new Uint8Array(readFileSync(join(here, 'fixtures', name)));
+const fx = (name: string) => new Uint8Array(readFileSync(join(here, 'fixtures', name)));
 
 describe('loadSysexFile — ajay.syx', () => {
   const result = loadSysexFile(patch('DX7II_Collections/Ajay/ajay.syx'));

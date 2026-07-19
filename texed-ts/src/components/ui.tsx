@@ -38,7 +38,21 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number): s
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-export function Knob({ label, value, max, min = 0, onChange, format, size = 34, accent, layout = 'stacked', help, helpLabel, center, className }: KnobProps) {
+export function Knob({
+  label,
+  value,
+  max,
+  min = 0,
+  onChange,
+  format,
+  size = 34,
+  accent,
+  layout = 'stacked',
+  help,
+  helpLabel,
+  center,
+  className,
+}: KnobProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startValue: number; scale: number } | null>(null);
 
@@ -47,7 +61,8 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       root.current?.focus();
       e.currentTarget.setPointerCapture(e.pointerId);
       const scale =
-        parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) || 1;
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) ||
+        1;
       drag.current = { startY: e.clientY, startValue: value, scale };
     },
     [value],
@@ -167,13 +182,18 @@ export function Knob({ label, value, max, min = 0, onChange, format, size = 34, 
       >
         <circle cx={c} cy={c} r={r} className="knob-body" />
         <path d={arcPath(c, c, r, start, start + ARC)} className="knob-track" />
-        {centerAngle !== null && (() => {
-          const [tx1, ty1] = polar(c, c, r - 2.5, centerAngle);
-          const [tx2, ty2] = polar(c, c, r + 2.5, centerAngle);
-          return <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} className="knob-center-tick" />;
-        })()}
+        {centerAngle !== null &&
+          (() => {
+            const [tx1, ty1] = polar(c, c, r - 2.5, centerAngle);
+            const [tx2, ty2] = polar(c, c, r + 2.5, centerAngle);
+            return <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} className="knob-center-tick" />;
+          })()}
         {showFill && (
-          <path d={arcPath(c, c, r, fillFrom, fillTo)} className="knob-fill" style={accent ? { stroke: accent } : undefined} />
+          <path
+            d={arcPath(c, c, r, fillFrom, fillTo)}
+            className="knob-fill"
+            style={accent ? { stroke: accent } : undefined}
+          />
         )}
         <line x1={c} y1={c} x2={px} y2={py} className="knob-pointer" />
       </svg>
@@ -197,7 +217,15 @@ interface PartSliderProps {
 }
 
 /** Compact rack fader styled to match knobs. */
-export function PartSlider({ value, min, max, onChange, onClick, center = false, label }: PartSliderProps) {
+export function PartSlider({
+  value,
+  min,
+  max,
+  onChange,
+  onClick,
+  center = false,
+  label,
+}: PartSliderProps) {
   const span = max - min || 1;
   const pct = ((value - min) / span) * 100;
   const fillStyle = center
@@ -408,7 +436,9 @@ export function Cycle({ label, value, options, onChange, help }: CycleProps) {
       <button
         type="button"
         onClick={() => onChange((value + 1) % options.length)}
-        onWheel={(e) => onChange((value + (e.deltaY < 0 ? 1 : options.length - 1)) % options.length)}
+        onWheel={(e) =>
+          onChange((value + (e.deltaY < 0 ? 1 : options.length - 1)) % options.length)
+        }
       >
         {options[value] ?? '?'}
       </button>
@@ -443,7 +473,12 @@ interface SegmentedProps<T extends string> {
 }
 
 /** Two-or-more-segment button group (mutually exclusive), tab-strip styled. */
-export function Segmented<T extends string>({ label, value, options, onChange }: SegmentedProps<T>) {
+export function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: SegmentedProps<T>) {
   return (
     <div className="segmented">
       {label && <span className="segmented-label">{label}</span>}

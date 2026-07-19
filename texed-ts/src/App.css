@@ -169,7 +169,10 @@
   border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
-  transition: color 0.12s, background 0.12s, border-color 0.12s;
+  transition:
+    color 0.12s,
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .seg:hover {
@@ -317,7 +320,10 @@
   border: 1px solid transparent;
   border-radius: 5px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .panel-tab:hover {
@@ -517,7 +523,10 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .bar-btn:hover {
@@ -775,7 +784,9 @@
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 4%),
     0 4px 14px rgb(0 0 0 / 30%);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .panel-head {
@@ -906,7 +917,10 @@
   border: 1px solid var(--line);
   border-radius: 5px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .op-power.on {
@@ -1205,7 +1219,9 @@
   background: #0d1017;
   cursor: grab;
   touch-action: none;
-  transition: transform 0.08s, box-shadow 0.08s;
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s;
 }
 
 .env-node:hover,
@@ -1260,7 +1276,9 @@
   border-left: 3px solid var(--chip);
   border-radius: 3px;
   cursor: pointer;
-  transition: color 0.12s, background 0.12s;
+  transition:
+    color 0.12s,
+    background 0.12s;
 }
 
 .env-chip:hover,
@@ -1896,7 +1914,9 @@
   background: linear-gradient(#343a4a, #0c0e13 85%);
   border-radius: 0 0 3px 3px;
   z-index: 2;
-  box-shadow: inset 0 -3px 4px rgb(255 255 255 / 6%), 0 2px 3px rgb(0 0 0 / 45%);
+  box-shadow:
+    inset 0 -3px 4px rgb(255 255 255 / 6%),
+    0 2px 3px rgb(0 0 0 / 45%);
 }
 
 .key.black.active {
@@ -1960,7 +1980,9 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
-  font: 13px system-ui, sans-serif;
+  font:
+    13px system-ui,
+    sans-serif;
 }
 
 .start-head {
@@ -2067,7 +2089,9 @@ button.start:hover {
   max-width: 96vw;
   max-height: 92vh;
   overflow: auto;
-  font: 12px system-ui, sans-serif;
+  font:
+    12px system-ui,
+    sans-serif;
   box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
 }
 
@@ -2252,7 +2276,9 @@ button.start:hover {
   padding: 12px 14px;
   width: min(860px, 96vw);
   height: min(640px, 92vh);
-  font: 12px system-ui, sans-serif;
+  font:
+    12px system-ui,
+    sans-serif;
   box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
 }
 

@@ -34,8 +34,18 @@ export function computeAmpParams(
   velocity = REF_VELOCITY,
 ): AmpEnvParams {
   const base = opBase(opNum);
-  const rates = [voice[base + OP.egRate(0)], voice[base + OP.egRate(1)], voice[base + OP.egRate(2)], voice[base + OP.egRate(3)]];
-  const levels = [voice[base + OP.egLevel(0)], voice[base + OP.egLevel(1)], voice[base + OP.egLevel(2)], voice[base + OP.egLevel(3)]];
+  const rates = [
+    voice[base + OP.egRate(0)],
+    voice[base + OP.egRate(1)],
+    voice[base + OP.egRate(2)],
+    voice[base + OP.egRate(3)],
+  ];
+  const levels = [
+    voice[base + OP.egLevel(0)],
+    voice[base + OP.egLevel(1)],
+    voice[base + OP.egLevel(2)],
+    voice[base + OP.egLevel(3)],
+  ];
 
   let outlevel: number;
   if (scaleByOutlevel) {
@@ -62,8 +72,18 @@ export function computeAmpParams(
 
 export function pitchEgParams(voice: Uint8Array): { rates: number[]; levels: number[] } {
   return {
-    rates: [voice[G.pitchEgRate(0)], voice[G.pitchEgRate(1)], voice[G.pitchEgRate(2)], voice[G.pitchEgRate(3)]],
-    levels: [voice[G.pitchEgLevel(0)], voice[G.pitchEgLevel(1)], voice[G.pitchEgLevel(2)], voice[G.pitchEgLevel(3)]],
+    rates: [
+      voice[G.pitchEgRate(0)],
+      voice[G.pitchEgRate(1)],
+      voice[G.pitchEgRate(2)],
+      voice[G.pitchEgRate(3)],
+    ],
+    levels: [
+      voice[G.pitchEgLevel(0)],
+      voice[G.pitchEgLevel(1)],
+      voice[G.pitchEgLevel(2)],
+      voice[G.pitchEgLevel(3)],
+    ],
   };
 }
 
@@ -96,7 +116,10 @@ function formatTime(sec: number): string {
 }
 
 function makeScale(mode: TimeMode, gateSec: number, maxReleaseEnd: number): EnvTimeScale {
-  const axisMax = mode === 'log' ? clamp(maxReleaseEnd, 1, 60) : Math.min(clamp(maxReleaseEnd, 0.25, 60), LINEAR_MAX);
+  const axisMax =
+    mode === 'log'
+      ? clamp(maxReleaseEnd, 1, 60)
+      : Math.min(clamp(maxReleaseEnd, 0.25, 60), LINEAR_MAX);
   const clamped = maxReleaseEnd > axisMax * 1.001;
 
   const denom = Math.log2(1 + axisMax / T0);
@@ -154,15 +177,26 @@ export function computeEnvTimeScale(
   for (const p of ampParams) {
     maxReleaseEnd = Math.max(maxReleaseEnd, simulateAmpEnv(p, gateSec).releaseEndSec);
   }
-  maxReleaseEnd = Math.max(maxReleaseEnd, simulatePitchEnv(peg.rates, peg.levels, gateSec).releaseEndSec);
+  maxReleaseEnd = Math.max(
+    maxReleaseEnd,
+    simulatePitchEnv(peg.rates, peg.levels, gateSec).releaseEndSec,
+  );
 
   return makeScale(mode, gateSec, maxReleaseEnd);
 }
 
 /** React hook: memoized shared time scale, recomputed only when EG bytes change. */
-export function useEnvTimeScale(voice: Uint8Array, mode: TimeMode, note = REF_NOTE, velocity = REF_VELOCITY): EnvTimeScale {
+export function useEnvTimeScale(
+  voice: Uint8Array,
+  mode: TimeMode,
+  note = REF_NOTE,
+  velocity = REF_VELOCITY,
+): EnvTimeScale {
   const key = useMemo(() => envDepKey(voice), [voice]);
-  return useMemo(() => computeEnvTimeScale(voice, mode, note, velocity), [key, mode, note, velocity]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(
+    () => computeEnvTimeScale(voice, mode, note, velocity),
+    [key, mode, note, velocity],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** Hash of every byte the seven envelope curves depend on. */
@@ -174,7 +208,8 @@ function envDepKey(voice: Uint8Array): string {
     bytes.push(voice[base + OP.outputLevel]);
     bytes.push(voice[base + OP.rateScaling]);
     bytes.push(voice[base + OP.velocitySens]);
-    for (const o of [OP.breakPoint, OP.leftDepth, OP.rightDepth, OP.leftCurve, OP.rightCurve]) bytes.push(voice[base + o]);
+    for (const o of [OP.breakPoint, OP.leftDepth, OP.rightDepth, OP.leftCurve, OP.rightCurve])
+      bytes.push(voice[base + o]);
   }
   for (let i = 0; i < 4; i++) bytes.push(voice[G.pitchEgRate(i)], voice[G.pitchEgLevel(i)]);
   return bytes.join(',');

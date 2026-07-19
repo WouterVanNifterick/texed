@@ -1,6 +1,10 @@
 // 16-bit stereo PCM WAV encoder.
 
-export function encodeWavStereo16(left: Float32Array, right: Float32Array, sampleRate: number): Uint8Array {
+export function encodeWavStereo16(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate: number,
+): Uint8Array {
   const frames = left.length;
   const dataSize = frames * 4;
   const buf = new ArrayBuffer(44 + dataSize);

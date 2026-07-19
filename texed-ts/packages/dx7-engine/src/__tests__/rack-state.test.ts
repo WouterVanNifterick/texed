@@ -53,9 +53,7 @@ describe('SynthRack.getFullState / restoreFullState', () => {
 
   it('round-trips performances', () => {
     const rack = new SynthRack(44100);
-    const combined = loadSysexFile(
-      new Uint8Array([...fx('tx802-prg1.syx')]),
-    );
+    const combined = loadSysexFile(new Uint8Array([...fx('tx802-prg1.syx')]));
     rack.loadLibrary(combined.library);
     rack.loadPerformances([
       { name: 'Test Perf', parts: [{ enabled: true, voice: { bank: 'internalA', program: 3 } }] },

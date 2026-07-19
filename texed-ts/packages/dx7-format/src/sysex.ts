@@ -174,14 +174,17 @@ export function identifyFrame(frame: Uint8Array): SysexFrame {
       return { ...base, kind: SysexKind.Cartridge, checksumOk: verifyChecksum(frame, 6, 4096) };
     case 0x02: {
       const size = (frame[4] << 7) | frame[5];
-      return { ...base, kind: SysexKind.Dx5Performance, checksumOk: verifyChecksum(frame, 6, size) };
+      return {
+        ...base,
+        kind: SysexKind.Dx5Performance,
+        checksumOk: verifyChecksum(frame, 6, size),
+      };
     }
     case 0x06: {
       const size = (frame[4] << 7) | frame[5];
       const data = frame.subarray(6, 6 + size);
-      const kind = size === 1120 && !isTx802PerformancePayload(data)
-        ? SysexKind.Amem
-        : SysexKind.Performance;
+      const kind =
+        size === 1120 && !isTx802PerformancePayload(data) ? SysexKind.Amem : SysexKind.Performance;
       return { ...base, kind, checksumOk: verifyChecksum(frame, 6, size) };
     }
     case 0x7e: {
@@ -209,7 +212,9 @@ export function identifySysex(bytes: Uint8Array): SysexFrame[] {
 /** True when `bytes` is raw VCED parameter data (no F0..F7 wrapper). */
 export function isRawVcedBuffer(bytes: Uint8Array): boolean {
   if (bytes.length === 0 || bytes[0] === 0xf0) return false;
-  return bytes.length === 155 || bytes.length === 156 || (bytes.length > 155 && bytes.length % 155 === 0);
+  return (
+    bytes.length === 155 || bytes.length === 156 || (bytes.length > 155 && bytes.length % 155 === 0)
+  );
 }
 
 /**
@@ -243,7 +248,15 @@ export function voiceFromVced(frame: Uint8Array): Uint8Array | null {
 /** Serialize a 156-byte editable voice as a 163-byte VCED single-voice dump. */
 /** DX7 VCED single-parameter change: live edit of one byte of the 156-byte voice. */
 export function voiceParamChangeSysex(offset: number, value: number, device = 0): Uint8Array {
-  return Uint8Array.of(0xf0, 0x43, 0x10 | (device & 0x0f), (offset >> 7) & 0x7f, offset & 0x7f, value & 0x7f, 0xf7);
+  return Uint8Array.of(
+    0xf0,
+    0x43,
+    0x10 | (device & 0x0f),
+    (offset >> 7) & 0x7f,
+    offset & 0x7f,
+    value & 0x7f,
+    0xf7,
+  );
 }
 
 export function vcedFromVoice(voice: Uint8Array, channel = 0): Uint8Array {

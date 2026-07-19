@@ -66,7 +66,12 @@ export const GlobalPanel = memo(function GlobalPanel({
   const [tab, setTab] = useState<'dx7ii' | 'ctrl'>('dx7ii');
   const set = (offset: number) => (value: number) => setParam(offset, value);
   const setSup = (edit: Sup.ByteEdit) => setSupplementParam(edit.offset, edit.value);
-  const pitchRates = [voice[G.pitchEgRate(0)], voice[G.pitchEgRate(1)], voice[G.pitchEgRate(2)], voice[G.pitchEgRate(3)]];
+  const pitchRates = [
+    voice[G.pitchEgRate(0)],
+    voice[G.pitchEgRate(1)],
+    voice[G.pitchEgRate(2)],
+    voice[G.pitchEgRate(3)],
+  ];
   const pitchLevels = [
     voice[G.pitchEgLevel(0)],
     voice[G.pitchEgLevel(1)],
@@ -253,7 +258,10 @@ export const GlobalPanel = memo(function GlobalPanel({
             type="button"
             className={`panel-tab${tab === 'dx7ii' ? ' on' : ''}`}
             onClick={() => setTab('dx7ii')}
-            {...helpProps('DX7II', 'DX7II performance parameters: voice mode, pitch bend, portamento and pitch EG options.')}
+            {...helpProps(
+              'DX7II',
+              'DX7II performance parameters: voice mode, pitch bend, portamento and pitch EG options.',
+            )}
           >
             DX7II
           </button>
@@ -261,130 +269,133 @@ export const GlobalPanel = memo(function GlobalPanel({
             type="button"
             className={`panel-tab${tab === 'ctrl' ? ' on' : ''}`}
             onClick={() => setTab('ctrl')}
-            {...helpProps('CTRL', 'DX7II controller assignments: modulation ranges and live values for MW, BC, AT, MC, FC1 and FC2.')}
+            {...helpProps(
+              'CTRL',
+              'DX7II controller assignments: modulation ranges and live values for MW, BC, AT, MC, FC1 and FC2.',
+            )}
           >
             CTRL
           </button>
         </div>
         {tab === 'ctrl' && <ControllerRows supplement={supplement} setSup={setSup} />}
         {tab === 'dx7ii' && (
-        <div className="dx7ii-groups">
-          <div className="ctl-group wide">
-            <div className="ctl-group-label">VOICE</div>
-            <div className="ctl-row">
-              <Toggle
-                label="MONO"
-                on={Sup.getMono(supplement)}
-                onChange={(on) => setSup(Sup.setMono(supplement, on))}
-                help="Mono mode — plays one note at a time with last-note priority instead of polyphonically."
-              />
-              <Toggle
-                label="UNISON"
-                on={Sup.getUnison(supplement)}
-                onChange={(on) => setSup(Sup.setUnison(supplement, on))}
-                help="Unison — stacks several detuned voices on every note for a fatter sound, at the cost of polyphony."
-              />
-              <Knob
-                label="UNI DET"
-                value={Sup.getUnisonDetune(supplement)}
-                max={7}
-                size={24}
-                onChange={(v) => setSup(Sup.setUnisonDetune(supplement, v))}
-                help="Unison detune (0–7) — pitch spread between the stacked unison voices."
-              />
-              <Knob
-                label="RND PT"
-                value={Sup.getRandomPitchDepth(supplement)}
-                max={7}
-                size={24}
-                onChange={(v) => setSup(Sup.setRandomPitchDepth(supplement, v))}
-                help="Random pitch (0–7) — random per-note pitch drift, like a slightly unstable analog oscillator."
-              />
+          <div className="dx7ii-groups">
+            <div className="ctl-group wide">
+              <div className="ctl-group-label">VOICE</div>
+              <div className="ctl-row">
+                <Toggle
+                  label="MONO"
+                  on={Sup.getMono(supplement)}
+                  onChange={(on) => setSup(Sup.setMono(supplement, on))}
+                  help="Mono mode — plays one note at a time with last-note priority instead of polyphonically."
+                />
+                <Toggle
+                  label="UNISON"
+                  on={Sup.getUnison(supplement)}
+                  onChange={(on) => setSup(Sup.setUnison(supplement, on))}
+                  help="Unison — stacks several detuned voices on every note for a fatter sound, at the cost of polyphony."
+                />
+                <Knob
+                  label="UNI DET"
+                  value={Sup.getUnisonDetune(supplement)}
+                  max={7}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setUnisonDetune(supplement, v))}
+                  help="Unison detune (0–7) — pitch spread between the stacked unison voices."
+                />
+                <Knob
+                  label="RND PT"
+                  value={Sup.getRandomPitchDepth(supplement)}
+                  max={7}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setRandomPitchDepth(supplement, v))}
+                  help="Random pitch (0–7) — random per-note pitch drift, like a slightly unstable analog oscillator."
+                />
+              </div>
+            </div>
+            <div className="ctl-group">
+              <div className="ctl-group-label">PITCH BEND</div>
+              <div className="ctl-row">
+                <Knob
+                  label="PB RNG"
+                  value={Sup.getPitchBendRange(supplement)}
+                  max={12}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setPitchBendRange(supplement, v))}
+                  help="Pitch bend range (0–12) — bend wheel range in semitones, up to one octave."
+                />
+                <Knob
+                  label="PB STEP"
+                  value={Sup.getPitchBendStep(supplement)}
+                  max={12}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setPitchBendStep(supplement, v))}
+                  help="Pitch bend step (0–12) — quantizes the bend into semitone steps; 0 bends smoothly."
+                />
+                <Cycle
+                  label="PB MODE"
+                  value={Sup.getPitchBendMode(supplement)}
+                  options={Sup.PB_MODES}
+                  onChange={(v) => setSup(Sup.setPitchBendMode(supplement, v))}
+                  help="Pitch bend mode — bend all notes, only the lowest or highest note, or only physically held keys (K.ON)."
+                />
+              </div>
+            </div>
+            <div className="ctl-group">
+              <div className="ctl-group-label">PORTAMENTO</div>
+              <div className="ctl-row">
+                <Knob
+                  label="PORTA"
+                  value={Sup.getPortaTime(supplement)}
+                  max={99}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setPortaTime(supplement, v))}
+                  help="Portamento time (0–99) — glide time from the previous note to the new one; 0 is instant."
+                />
+                <Cycle
+                  label="P MODE"
+                  value={Sup.getPortaMode(supplement)}
+                  options={Sup.PORTA_MODES}
+                  onChange={(v) => setSup(Sup.setPortaMode(supplement, v))}
+                  help="Portamento mode — RETAIN/FOLLOW in poly mode; FINGERED (legato only) or FULL TIME in mono mode."
+                />
+                <Knob
+                  label="P STEP"
+                  value={Sup.getPortaStep(supplement)}
+                  max={12}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setPortaStep(supplement, v))}
+                  help="Portamento step (0–12) — glissando in quantized semitone steps instead of a smooth glide; 0 is smooth."
+                />
+              </div>
+            </div>
+            <div className="ctl-group wide">
+              <div className="ctl-group-label">PITCH EG</div>
+              <div className="ctl-row">
+                <Cycle
+                  label="PEG RNG"
+                  value={Sup.getPitchEgRange(supplement)}
+                  options={Sup.PEG_RANGES}
+                  onChange={(v) => setSup(Sup.setPitchEgRange(supplement, v))}
+                  help="Pitch EG range — maximum pitch envelope excursion: 8 or 4 octaves, 1 octave, or a half octave."
+                />
+                <Knob
+                  label="PEG RS"
+                  value={Sup.getPitchEgScaleRate(supplement)}
+                  max={7}
+                  size={24}
+                  onChange={(v) => setSup(Sup.setPitchEgScaleRate(supplement, v))}
+                  help="Pitch EG rate scaling (0–7) — the pitch envelope runs faster for higher notes."
+                />
+                <Toggle
+                  label="PEG VEL"
+                  on={Sup.getPitchEgVelSens(supplement)}
+                  onChange={(on) => setSup(Sup.setPitchEgVelSens(supplement, on))}
+                  help="Pitch EG velocity — key velocity scales the depth of the pitch envelope."
+                />
+              </div>
             </div>
           </div>
-          <div className="ctl-group">
-            <div className="ctl-group-label">PITCH BEND</div>
-            <div className="ctl-row">
-              <Knob
-                label="PB RNG"
-                value={Sup.getPitchBendRange(supplement)}
-                max={12}
-                size={24}
-                onChange={(v) => setSup(Sup.setPitchBendRange(supplement, v))}
-                help="Pitch bend range (0–12) — bend wheel range in semitones, up to one octave."
-              />
-              <Knob
-                label="PB STEP"
-                value={Sup.getPitchBendStep(supplement)}
-                max={12}
-                size={24}
-                onChange={(v) => setSup(Sup.setPitchBendStep(supplement, v))}
-                help="Pitch bend step (0–12) — quantizes the bend into semitone steps; 0 bends smoothly."
-              />
-              <Cycle
-                label="PB MODE"
-                value={Sup.getPitchBendMode(supplement)}
-                options={Sup.PB_MODES}
-                onChange={(v) => setSup(Sup.setPitchBendMode(supplement, v))}
-                help="Pitch bend mode — bend all notes, only the lowest or highest note, or only physically held keys (K.ON)."
-              />
-            </div>
-          </div>
-          <div className="ctl-group">
-            <div className="ctl-group-label">PORTAMENTO</div>
-            <div className="ctl-row">
-              <Knob
-                label="PORTA"
-                value={Sup.getPortaTime(supplement)}
-                max={99}
-                size={24}
-                onChange={(v) => setSup(Sup.setPortaTime(supplement, v))}
-                help="Portamento time (0–99) — glide time from the previous note to the new one; 0 is instant."
-              />
-              <Cycle
-                label="P MODE"
-                value={Sup.getPortaMode(supplement)}
-                options={Sup.PORTA_MODES}
-                onChange={(v) => setSup(Sup.setPortaMode(supplement, v))}
-                help="Portamento mode — RETAIN/FOLLOW in poly mode; FINGERED (legato only) or FULL TIME in mono mode."
-              />
-              <Knob
-                label="P STEP"
-                value={Sup.getPortaStep(supplement)}
-                max={12}
-                size={24}
-                onChange={(v) => setSup(Sup.setPortaStep(supplement, v))}
-                help="Portamento step (0–12) — glissando in quantized semitone steps instead of a smooth glide; 0 is smooth."
-              />
-            </div>
-          </div>
-          <div className="ctl-group wide">
-            <div className="ctl-group-label">PITCH EG</div>
-            <div className="ctl-row">
-              <Cycle
-                label="PEG RNG"
-                value={Sup.getPitchEgRange(supplement)}
-                options={Sup.PEG_RANGES}
-                onChange={(v) => setSup(Sup.setPitchEgRange(supplement, v))}
-                help="Pitch EG range — maximum pitch envelope excursion: 8 or 4 octaves, 1 octave, or a half octave."
-              />
-              <Knob
-                label="PEG RS"
-                value={Sup.getPitchEgScaleRate(supplement)}
-                max={7}
-                size={24}
-                onChange={(v) => setSup(Sup.setPitchEgScaleRate(supplement, v))}
-                help="Pitch EG rate scaling (0–7) — the pitch envelope runs faster for higher notes."
-              />
-              <Toggle
-                label="PEG VEL"
-                on={Sup.getPitchEgVelSens(supplement)}
-                onChange={(on) => setSup(Sup.setPitchEgVelSens(supplement, on))}
-                help="Pitch EG velocity — key velocity scales the depth of the pitch envelope."
-              />
-            </div>
-          </div>
-        </div>
         )}
       </section>
     </div>
@@ -412,8 +423,10 @@ const CTRL_ROWS: CtrlRowSpec[] = [
 
 const DEST_HELP: Record<string, (name: string) => string> = {
   PITCH: (n) => `Pitch modulation range (0–99) — how much LFO pitch modulation the ${n} can add.`,
-  AMP: (n) => `Amplitude modulation range (0–99) — how much LFO amplitude modulation the ${n} can add.`,
-  EG: (n) => `EG bias range (0–99) — assigns the ${n} as an EG-bias gate for AMS-sensitive operators (0 = closed/silent, high = open). Raise the controller to hear the swell.`,
+  AMP: (n) =>
+    `Amplitude modulation range (0–99) — how much LFO amplitude modulation the ${n} can add.`,
+  EG: (n) =>
+    `EG bias range (0–99) — assigns the ${n} as an EG-bias gate for AMS-sensitive operators (0 = closed/silent, high = open). Raise the controller to hear the swell.`,
   VOL: (n) => `Volume range (0–99) — how far the ${n} can attenuate the part volume.`,
   BIAS: (n) => `Pitch bias (−50…+50) — the ${n} bends pitch directly up or down from center 0.`,
 };
@@ -422,10 +435,11 @@ const DEST_HELP: Record<string, (name: string) => string> = {
 function CtrlId({ ctrl, label, name }: { ctrl: Sup.CtrlName; label: string; name: string }) {
   const value = useLiveCtrl(ctrl);
   return (
-    <div className="ctrl-mod-id" {...helpProps(label, `${name} — the meter shows the last received MIDI value (${value}).`)}>
-      <span className="ctrl-mod-name">
-        {label}        
-      </span>
+    <div
+      className="ctrl-mod-id"
+      {...helpProps(label, `${name} — the meter shows the last received MIDI value (${value}).`)}
+    >
+      <span className="ctrl-mod-name">{label}</span>
       <div className="ctrl-live">
         <div className="ctrl-live-fill" style={{ width: `${(value / 127) * 100}%` }} />
       </div>
@@ -440,7 +454,13 @@ function ControllerRows({
   supplement: Uint8Array;
   setSup: (edit: Sup.ByteEdit) => void;
 }) {
-  const cell = (row: CtrlRowSpec, dest: number, destLabel: string, format?: (v: number) => string, center?: number) => (
+  const cell = (
+    row: CtrlRowSpec,
+    dest: number,
+    destLabel: string,
+    format?: (v: number) => string,
+    center?: number,
+  ) => (
     <Knob
       key={row.ctrl}
       label=""
@@ -461,12 +481,17 @@ function ControllerRows({
       {CTRL_ROWS.map((row) => (
         <CtrlId key={row.ctrl} ctrl={row.ctrl} label={row.label} name={row.name} />
       ))}
-      <span className="ctrl-grid-dest">PITCH     </span>{CTRL_ROWS.map((row) => cell(row, 0, 'PITCH'))}
-      <span className="ctrl-grid-dest">AMP       </span>{CTRL_ROWS.map((row) => cell(row, 1, 'AMP'))}
-      <span className="ctrl-grid-dest">EG        </span>{CTRL_ROWS.map((row) => cell(row, 2, 'EG'))}
-      <span className="ctrl-grid-dest">VOL / BIAS</span>{CTRL_ROWS.map((row) => {
+      <span className="ctrl-grid-dest">PITCH </span>
+      {CTRL_ROWS.map((row) => cell(row, 0, 'PITCH'))}
+      <span className="ctrl-grid-dest">AMP </span>
+      {CTRL_ROWS.map((row) => cell(row, 1, 'AMP'))}
+      <span className="ctrl-grid-dest">EG </span>
+      {CTRL_ROWS.map((row) => cell(row, 2, 'EG'))}
+      <span className="ctrl-grid-dest">VOL / BIAS</span>
+      {CTRL_ROWS.map((row) => {
         if (row.fourth === 'vol') return cell(row, 3, 'VOL');
-        if (row.fourth === 'bias') return cell(row, 3, 'BIAS', Sup.formatPitchBias, Sup.PITCH_BIAS_CENTER);
+        if (row.fourth === 'bias')
+          return cell(row, 3, 'BIAS', Sup.formatPitchBias, Sup.PITCH_BIAS_CENTER);
         return <span key={row.ctrl} />;
       })}
       <span />

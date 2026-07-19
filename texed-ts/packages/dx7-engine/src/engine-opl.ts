@@ -168,7 +168,16 @@ export class EngineOpl extends FmCore {
         }
         if (inbus === 0 || !hasContents[inbus]) {
           if ((flags & 0xc0) === 0xc0 && feedbackShift < 16) {
-            this.computeFb(outptr, param.phase, param.freq, gain1, gain2, fbBuf, feedbackShift, add);
+            this.computeFb(
+              outptr,
+              param.phase,
+              param.freq,
+              gain1,
+              gain2,
+              fbBuf,
+              feedbackShift,
+              add,
+            );
           } else {
             this.computePure(outptr, param.phase, param.freq, gain1, gain2, add);
           }

@@ -11,7 +11,9 @@ declare const AudioWorkletProcessor: {
   new (options?: AudioWorkletNodeOptions): AudioWorkletProcessor;
 };
 
-type AudioWorkletProcessorCtor = new (options?: AudioWorkletNodeOptions) => AudioWorkletProcessor & {
+type AudioWorkletProcessorCtor = new (
+  options?: AudioWorkletNodeOptions,
+) => AudioWorkletProcessor & {
   process(
     inputs: Float32Array[][],
     outputs: Float32Array[][],

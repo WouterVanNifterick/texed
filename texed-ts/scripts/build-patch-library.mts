@@ -39,7 +39,12 @@ const COLLECTIONS: CollectionSpec[] = [
     dir: 'TX802_Factory',
     kind: 'syx',
     perfBankMap: {
-      'original/P.SYX': ['original/A1.SYX', 'original/A2.SYX', 'original/B1.SYX', 'original/B2.SYX'],
+      'original/P.SYX': [
+        'original/A1.SYX',
+        'original/A2.SYX',
+        'original/B1.SYX',
+        'original/B2.SYX',
+      ],
       'fmori/perf_1-64.syx': ['fmori/voice_1-32.syx', 'fmori/voice_33-64.syx'],
     },
   },
@@ -48,7 +53,12 @@ const COLLECTIONS: CollectionSpec[] = [
   { id: 'dx7s-factory', name: 'DX7s Factory', dir: 'DX7s_Factory', kind: 'syx' },
   { id: 'dx5', name: 'DX5', dir: 'DX5', kind: 'syx' },
   { id: 'dx7ii-collections', name: 'DX7II Collections', dir: 'DX7II_Collections', kind: 'syx' },
-  { id: 'dx7ii-freeware', name: 'DX7II Yamaha Freeware', dir: 'DX7II_Yamaha_Freeware', kind: 'syx' },
+  {
+    id: 'dx7ii-freeware',
+    name: 'DX7II Yamaha Freeware',
+    dir: 'DX7II_Yamaha_Freeware',
+    kind: 'syx',
+  },
 ];
 
 /** All files under `root`, as collection-relative forward-slash paths, sorted. */
@@ -67,7 +77,10 @@ async function writeOut(relPath: string, data: Uint8Array | string): Promise<voi
 }
 
 function fileStem(relPath: string): string {
-  return relPath.split('/').pop()!.replace(/\.[^.]+$/, '');
+  return relPath
+    .split('/')
+    .pop()!
+    .replace(/\.[^.]+$/, '');
 }
 
 async function buildFs1rCollection(spec: CollectionSpec): Promise<LibCollection> {
@@ -83,13 +96,22 @@ async function buildFs1rCollection(spec: CollectionSpec): Promise<LibCollection>
     const voiceFiles = (await walkFiles(bankRoot)).filter((f) => /\.dx7voice$/i.test(f));
     if (voiceFiles.length === 0) continue;
     const files: SourceFile[] = await Promise.all(
-      voiceFiles.map(async (f) => ({ path: f, data: new Uint8Array(await readFile(path.join(bankRoot, f))) })),
+      voiceFiles.map(async (f) => ({
+        path: f,
+        data: new Uint8Array(await readFile(path.join(bankRoot, f))),
+      })),
     );
     const { blob, names } = packFs1rBank(files);
     const n = dirName.replace(/\D+/g, '') || dirName;
     const file = `${spec.id}/bank-${n}.vced.bin`;
     await writeOut(file, blob);
-    banks.push({ id: `${spec.id}/bank-${n}`, name: `Bank ${n}`, file, format: 'vced155', voices: names });
+    banks.push({
+      id: `${spec.id}/bank-${n}`,
+      name: `Bank ${n}`,
+      file,
+      format: 'vced155',
+      voices: names,
+    });
   }
   return { id: spec.id, name: spec.name, banks, performanceSets: [] };
 }
@@ -145,7 +167,8 @@ async function main(): Promise<void> {
   const collections: LibCollection[] = [];
   for (const spec of COLLECTIONS) {
     console.log(`collection: ${spec.name}`);
-    const col = spec.kind === 'fs1r' ? await buildFs1rCollection(spec) : await buildSyxCollection(spec);
+    const col =
+      spec.kind === 'fs1r' ? await buildFs1rCollection(spec) : await buildSyxCollection(spec);
     if (col.banks.length === 0 && col.performanceSets.length === 0) {
       console.warn(`  empty collection, dropped: ${spec.id}`);
       continue;
@@ -157,9 +180,17 @@ async function main(): Promise<void> {
   await writeOut('manifest.json', JSON.stringify(manifest));
 
   const nBanks = collections.reduce((a, c) => a + c.banks.length, 0);
-  const nVoices = collections.reduce((a, c) => a + c.banks.reduce((x, b) => x + b.voices.length, 0), 0);
-  const nPerfs = collections.reduce((a, c) => a + c.performanceSets.reduce((x, p) => x + p.names.length, 0), 0);
-  console.log(`library: ${collections.length} collections, ${nBanks} banks, ${nVoices} voices, ${nPerfs} performances`);
+  const nVoices = collections.reduce(
+    (a, c) => a + c.banks.reduce((x, b) => x + b.voices.length, 0),
+    0,
+  );
+  const nPerfs = collections.reduce(
+    (a, c) => a + c.performanceSets.reduce((x, p) => x + p.names.length, 0),
+    0,
+  );
+  console.log(
+    `library: ${collections.length} collections, ${nBanks} banks, ${nVoices} voices, ${nPerfs} performances`,
+  );
 }
 
 main().catch((err) => {

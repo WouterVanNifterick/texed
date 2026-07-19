@@ -74,7 +74,11 @@ export class Part {
 
   private lastLfoValue = 0;
   private lastLfoDelay = 0;
-  private peekStatus: VoiceStatus = { amp: [0, 0, 0, 0, 0, 0], ampStep: [0, 0, 0, 0, 0, 0], pitchStep: 0 };
+  private peekStatus: VoiceStatus = {
+    amp: [0, 0, 0, 0, 0, 0],
+    ampStep: [0, 0, 0, 0, 0, 0],
+    pitchStep: 0,
+  };
 
   private extraBuf = new Float32Array(N);
   private extraBufSize = 0;
@@ -288,7 +292,12 @@ export class Part {
     }
   }
 
-  private triggerVoice(pitch: number, velocity: number, channel: number, detuneCents: number): void {
+  private triggerVoice(
+    pitch: number,
+    velocity: number,
+    channel: number,
+    detuneCents: number,
+  ): void {
     const note = this.chooseNote(pitch);
     this.currentNote = (note + 1) % MAX_ACTIVE_NOTES;
     const v = this.voices[note];
@@ -305,7 +314,13 @@ export class Part {
     // the new note. ON (or a free slot): restart the envelope from the beginning.
     const continueEnv = voiceSteal && !this.forcedDamp;
     v.dx7Note.setSupplement(this.supplement);
-    v.dx7Note.init(this.data, this.enginePitch(pitch) + detuneCents / 100, velocity, channel, continueEnv);
+    v.dx7Note.init(
+      this.data,
+      this.enginePitch(pitch) + detuneCents / 100,
+      velocity,
+      channel,
+      continueEnv,
+    );
     if (this.data[G.oscKeySync] && !voiceSteal) {
       v.dx7Note.oscSync();
     }
@@ -473,7 +488,13 @@ export class Part {
     if (!cand) return;
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       const v = this.voices[i];
-      if (v.live && !v.damping && v.dx7Note.isPlaying() && v.keydownSeq === cand.seq && !v.keydown === cand.released) {
+      if (
+        v.live &&
+        !v.damping &&
+        v.dx7Note.isPlaying() &&
+        v.keydownSeq === cand.seq &&
+        !v.keydown === cand.released
+      ) {
         v.keydown = false;
         v.damping = true;
         v.dx7Note.forceDamp();
@@ -485,7 +506,9 @@ export class Part {
   // ==== Status ====
 
   getStatus(): { amps: number[]; steps: number[]; pitchStep: number; lfo: number } {
-    let voice: Voice | null = this.voices[this.lastActiveVoice].live ? this.voices[this.lastActiveVoice] : null;
+    let voice: Voice | null = this.voices[this.lastActiveVoice].live
+      ? this.voices[this.lastActiveVoice]
+      : null;
     if (!voice) {
       for (const v of this.voices) {
         if (v.live) {

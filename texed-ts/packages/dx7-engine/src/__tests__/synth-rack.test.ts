@@ -138,7 +138,9 @@ describe('SynthRack', () => {
 
   it('plays after selecting a TX802 performance with omni routing', () => {
     const rack = new SynthRack(44100);
-    const result = loadSysexFile(new Uint8Array(readFileSync(join(here, 'fixtures', 'tx802-prg1.syx'))));
+    const result = loadSysexFile(
+      new Uint8Array(readFileSync(join(here, 'fixtures', 'tx802-prg1.syx'))),
+    );
     expect(result.loaded).toBe(true);
     rack.loadLibrary(result.library);
 

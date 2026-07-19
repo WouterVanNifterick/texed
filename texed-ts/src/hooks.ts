@@ -52,8 +52,23 @@ export function usePersistentNumber(key: string, initial: number): [number, (v: 
 }
 
 const QWERTY_MAP: Record<string, number> = {
-  a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12,
-  o: 13, l: 14, p: 15, ';': 16,
+  a: 0,
+  w: 1,
+  s: 2,
+  e: 3,
+  d: 4,
+  f: 5,
+  t: 6,
+  g: 7,
+  y: 8,
+  h: 9,
+  u: 10,
+  j: 11,
+  k: 12,
+  o: 13,
+  l: 14,
+  p: 15,
+  ';': 16,
 };
 
 const OCTAVE_BASE = 60;
@@ -99,10 +114,7 @@ export function useQwertyKeyboard(
 }
 
 /** Selects multi-timbral parts 1–8 with the digit keys. */
-export function usePartSelectKeys(
-  enabled: boolean,
-  selectPart: (index: number) => void,
-): void {
+export function usePartSelectKeys(enabled: boolean, selectPart: (index: number) => void): void {
   useEffect(() => {
     if (!enabled) return;
     const down = (e: KeyboardEvent) => {
@@ -123,7 +135,9 @@ export function patchFiles(files: FileList | File[]): File[] {
 }
 
 function isFileDrag(dt: DataTransfer | null): boolean {
-  return !!dt && (dt.types.includes('Files') || Array.from(dt.items).some((i) => i.kind === 'file'));
+  return (
+    !!dt && (dt.types.includes('Files') || Array.from(dt.items).some((i) => i.kind === 'file'))
+  );
 }
 
 function patchFilesFromDrop(dt: DataTransfer | null): File[] {

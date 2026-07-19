@@ -35,7 +35,8 @@ for (let i = 0; i < args.length; i++) {
   else if (!a.startsWith('-')) midiPath = a;
   else fail(`unknown option ${a}`);
 }
-if (!midiPath) fail('usage: texed-cli <file.mid> [--syx bank.syx] [--out out.wav] [--rate 48000] [--program n]');
+if (!midiPath)
+  fail('usage: texed-cli <file.mid> [--syx bank.syx] [--out out.wav] [--rate 48000] [--program n]');
 if (!outPath) outPath = midiPath.replace(/\.midi?$/i, '') + '.wav';
 
 // --- engine setup ---
@@ -75,7 +76,8 @@ const setProgram = (part: number, program: number) => {
   const opt = programs[program];
   if (opt) rack.setVoiceRefForPart(part, opt.ref);
 };
-if (initialProgram >= 0) for (const part of partForChannel.values()) setProgram(part, initialProgram);
+if (initialProgram >= 0)
+  for (const part of partForChannel.values()) setProgram(part, initialProgram);
 
 // --- render ---
 const lastEventTime = events[events.length - 1].time;
@@ -115,7 +117,7 @@ while (eventIndex < events.length) {
 // Let releases ring out, then pad a touch of silence.
 const tailLimit = frames + MAX_TAIL_SEC * rate;
 while (rack.getStatus().totalActive > 0 && frames < tailLimit) renderBlock();
-for (let i = 0; i < Math.ceil(0.2 * rate / BLOCK); i++) renderBlock();
+for (let i = 0; i < Math.ceil((0.2 * rate) / BLOCK); i++) renderBlock();
 
 // --- write ---
 const left = new Float32Array(frames);
@@ -126,6 +128,6 @@ for (let i = 0; i < outL.length; i++) {
 }
 writeFileSync(outPath, encodeWavStereo16(left, right, rate));
 console.log(
-  `${outPath}: ${(frames / rate).toFixed(2)}s (${(lastEventTime).toFixed(2)}s of MIDI), ` +
+  `${outPath}: ${(frames / rate).toFixed(2)}s (${lastEventTime.toFixed(2)}s of MIDI), ` +
     `${channels.length} channel(s), peak ${peak.toFixed(3)}${peak >= 1 ? ' (CLIPPED)' : ''}`,
 );

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MsgType, type SynthCommand, type StatusMsg, type RackState } from '@texed/synth-protocol/protocol';
+import {
+  MsgType,
+  type SynthCommand,
+  type StatusMsg,
+  type RackState,
+} from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
 import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
@@ -144,7 +149,8 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
   const start = useCallback(() => port.start(), [port]);
 
   const noteOn = useCallback(
-    (note: number, velocity: number, channel = 1) => post({ type: MsgType.NoteOn, note, velocity, channel }),
+    (note: number, velocity: number, channel = 1) =>
+      post({ type: MsgType.NoteOn, note, velocity, channel }),
     [post],
   );
   const noteOff = useCallback(
@@ -152,7 +158,8 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     [post],
   );
   const controlChange = useCallback(
-    (controller: number, value: number, channel?: number) => post({ type: MsgType.Cc, controller, value, channel }),
+    (controller: number, value: number, channel?: number) =>
+      post({ type: MsgType.Cc, controller, value, channel }),
     [post],
   );
   const pitchBend = useCallback(
@@ -163,7 +170,10 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     (value: number, channel?: number) => post({ type: MsgType.Aftertouch, value, channel }),
     [post],
   );
-  const setEngine = useCallback((engine: number) => post({ type: MsgType.SetEngine, engine }), [post]);
+  const setEngine = useCallback(
+    (engine: number) => post({ type: MsgType.SetEngine, engine }),
+    [post],
+  );
   const setProgram = useCallback(
     (index: number) => {
       const opt = programOptions[index];
@@ -172,10 +182,14 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     [post, programOptions],
   );
   const setVoiceRef = useCallback(
-    (ref: VoiceRef, partIndex?: number) => post({ type: MsgType.SetVoiceRef, voice: ref, partIndex }),
+    (ref: VoiceRef, partIndex?: number) =>
+      post({ type: MsgType.SetVoiceRef, voice: ref, partIndex }),
     [post],
   );
-  const loadCart = useCallback((data: ArrayBuffer) => post({ type: MsgType.LoadCart, data }, [data]), [post]);
+  const loadCart = useCallback(
+    (data: ArrayBuffer) => post({ type: MsgType.LoadCart, data }, [data]),
+    [post],
+  );
 
   const setParam = useCallback(
     (offset: number, value: number) => {
@@ -224,20 +238,32 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
         supplement = opts.supplement.slice().buffer as ArrayBuffer;
         transfer.push(supplement);
       }
-      post({ type: MsgType.LoadVoice, data: buf, supplement, partIndex: opts?.partIndex }, transfer);
+      post(
+        { type: MsgType.LoadVoice, data: buf, supplement, partIndex: opts?.partIndex },
+        transfer,
+      );
     },
     [post],
   );
 
-  const setMasterGain = useCallback((gain: number) => post({ type: MsgType.SetMasterGain, gain }), [post]);
+  const setMasterGain = useCallback(
+    (gain: number) => post({ type: MsgType.SetMasterGain, gain }),
+    [post],
+  );
   const panic = useCallback(() => post({ type: MsgType.Panic }), [post]);
 
-  const selectPart = useCallback((index: number) => post({ type: MsgType.SelectPart, index }), [post]);
+  const selectPart = useCallback(
+    (index: number) => post({ type: MsgType.SelectPart, index }),
+    [post],
+  );
   const setPart = useCallback(
     (index: number, config: Partial<PartConfig>) => post({ type: MsgType.SetPart, index, config }),
     [post],
   );
-  const setPolyphonyCap = useCallback((cap: number) => post({ type: MsgType.SetPolyphonyCap, cap }), [post]);
+  const setPolyphonyCap = useCallback(
+    (cap: number) => post({ type: MsgType.SetPolyphonyCap, cap }),
+    [post],
+  );
 
   const selectPerformance = useCallback(
     (index: number) => post({ type: MsgType.SelectPerformance, index }),
@@ -252,7 +278,10 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     [post],
   );
 
-  const storeVoice = useCallback((dest?: VoiceRef) => post({ type: MsgType.StoreVoice, dest }), [post]);
+  const storeVoice = useCallback(
+    (dest?: VoiceRef) => post({ type: MsgType.StoreVoice, dest }),
+    [post],
+  );
 
   const loadBankInto = useCallback(
     (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => {

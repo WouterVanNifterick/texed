@@ -22,7 +22,15 @@ interface AlgoDisplayProps {
   subscribeStatus: Subscribe;
 }
 
-export function AlgoDisplay({ voice, algorithm, hoverOp, onHover, selectedOp, onSelect, subscribeStatus }: AlgoDisplayProps) {
+export function AlgoDisplay({
+  voice,
+  algorithm,
+  hoverOp,
+  onHover,
+  selectedOp,
+  onSelect,
+  subscribeStatus,
+}: AlgoDisplayProps) {
   const amps = useStatus(subscribeStatus, (s) => s.amps, []);
   const g = algoGraph(algorithm);
   const width = g.cols * CELL + 10;

@@ -63,7 +63,11 @@ export function parseSmf(data: Uint8Array): SmfEvent[] {
         const type = data[p++];
         const mlen = vlq();
         if (type === 0x51 && mlen === 3) {
-          raw.push({ tick, order: order++, tempo: (data[p] << 16) | (data[p + 1] << 8) | data[p + 2] });
+          raw.push({
+            tick,
+            order: order++,
+            tempo: (data[p] << 16) | (data[p + 1] << 8) | data[p + 2],
+          });
         }
         p += mlen;
       } else if (b === 0xf0 || b === 0xf7) {

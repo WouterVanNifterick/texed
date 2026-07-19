@@ -16,7 +16,16 @@ import {
   type EnvTrace,
 } from '@texed/dx7-engine/env-sim';
 import type { EnvTimeScale } from './env-time';
-import { makeYMap, curvePoints, fillPoints, px, py, type YMode, type EnvKind, type DrawGeom } from './env-draw';
+import {
+  makeYMap,
+  curvePoints,
+  fillPoints,
+  px,
+  py,
+  type YMode,
+  type EnvKind,
+  type DrawGeom,
+} from './env-draw';
 
 const W = 100;
 const H = 100;
@@ -42,7 +51,19 @@ interface EnvEditorProps {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function EnvEditor(props: EnvEditorProps) {
-  const { kind, rates, levels, ampParams, timeScale, yMode, stage, onSetRate, onSetLevel, tall, className } = props;
+  const {
+    kind,
+    rates,
+    levels,
+    ampParams,
+    timeScale,
+    yMode,
+    stage,
+    onSetRate,
+    onSetLevel,
+    tall,
+    className,
+  } = props;
   const color = props.color ?? DEFAULT_COLOR[kind];
   const gid = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -125,11 +146,20 @@ export function EnvEditor(props: EnvEditorProps) {
     let dr = 0;
     let dl = 0;
     switch (e.key) {
-      case 'ArrowRight': dr = -1; break; // longer stage = lower rate
-      case 'ArrowLeft': dr = 1; break;
-      case 'ArrowUp': dl = 1; break;
-      case 'ArrowDown': dl = -1; break;
-      default: return;
+      case 'ArrowRight':
+        dr = -1;
+        break; // longer stage = lower rate
+      case 'ArrowLeft':
+        dr = 1;
+        break;
+      case 'ArrowUp':
+        dl = 1;
+        break;
+      case 'ArrowDown':
+        dl = -1;
+        break;
+      default:
+        return;
     }
     e.preventDefault();
     if (dr) onSetRate(s, clamp(rates[s] + dr, 0, 99));
@@ -149,7 +179,14 @@ export function EnvEditor(props: EnvEditorProps) {
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
         <defs>
-          <linearGradient id={`eg-fill-${gid}`} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={0} y2={H}>
+          <linearGradient
+            id={`eg-fill-${gid}`}
+            gradientUnits="userSpaceOnUse"
+            x1={0}
+            y1={0}
+            x2={0}
+            y2={H}
+          >
             {kind === 'pitch' ? (
               <>
                 <stop offset="0%" stopColor={color} stopOpacity={0.34} />
@@ -165,7 +202,14 @@ export function EnvEditor(props: EnvEditorProps) {
           </linearGradient>
         </defs>
         {timeScale.gridlines.map((gl, i) => (
-          <line key={i} x1={PAD + gl.x01 * (W - 2 * PAD)} y1={0} x2={PAD + gl.x01 * (W - 2 * PAD)} y2={H} className="env-grid" />
+          <line
+            key={i}
+            x1={PAD + gl.x01 * (W - 2 * PAD)}
+            y1={0}
+            x2={PAD + gl.x01 * (W - 2 * PAD)}
+            y2={H}
+            className="env-grid"
+          />
         ))}
         {kind === 'pitch' && <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="env-midline" />}
         {/* key-off marker */}
@@ -196,7 +240,11 @@ export function EnvEditor(props: EnvEditorProps) {
           />
         );
       })}
-      {timeScale.clamped && <span className="env-overflow" title="Envelope extends past the visible time range">›</span>}
+      {timeScale.clamped && (
+        <span className="env-overflow" title="Envelope extends past the visible time range">
+          ›
+        </span>
+      )}
     </div>
   );
 }
@@ -208,7 +256,11 @@ export function LiveEnvEditor(
   props: Omit<EnvEditorProps, 'stage'> & { subscribe: Subscribe; opIdx?: number },
 ) {
   const { subscribe, opIdx, ...rest } = props;
-  const stage = useStatus(subscribe, (s) => (rest.kind === 'pitch' ? s.pitchStep : s.steps[opIdx ?? 0]), 4);
+  const stage = useStatus(
+    subscribe,
+    (s) => (rest.kind === 'pitch' ? s.pitchStep : s.steps[opIdx ?? 0]),
+    4,
+  );
   return <EnvEditor {...rest} stage={stage} />;
 }
 

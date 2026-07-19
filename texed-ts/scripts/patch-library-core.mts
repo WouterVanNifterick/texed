@@ -21,7 +21,10 @@ const VCED_SIZE = 155;
 
 /** "0.003 MM-Piano 1.Dx7Voice" → "MM-Piano 1". */
 export function fs1rVoiceNameFromFilename(filename: string): string {
-  const base = filename.split('/').pop()!.replace(/\.dx7voice$/i, '');
+  const base = filename
+    .split('/')
+    .pop()!
+    .replace(/\.dx7voice$/i, '');
   const m = /^\d+\.\d+\s+(.+)$/.exec(base);
   return (m ? m[1] : base).trim();
 }
@@ -80,7 +83,11 @@ export function describeSyxFile(bytes: Uint8Array): SyxDescription {
     voices: library.programNames(b),
   }));
   const performanceNames = library.performances.map((p) => p.name);
-  return { banks, performanceNames, selfContained: performanceNames.length > 0 && banks.length > 0 };
+  return {
+    banks,
+    performanceNames,
+    selfContained: performanceNames.length > 0 && banks.length > 0,
+  };
 }
 
 /** Path segment → URL-safe slug (keeps dots for extensions). */

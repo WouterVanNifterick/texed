@@ -1,0 +1,2 @@
+cd texed-ts
+pnpm exec lint-staged

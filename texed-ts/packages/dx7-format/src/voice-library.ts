@@ -182,7 +182,7 @@ export class VoiceLibrary {
 
   /**
    * Store an edited voice buffer (156-byte VMEM + AMEM supplement) into a bank
-   * slot — the "Store into Internal/Cartridge Voice Memory" operation. Creates
+   * slot - the "Store into Internal/Cartridge Voice Memory" operation. Creates
    * the destination bank if it isn't populated yet.
    */
   storeVoice(ref: VoiceRef, vmem: Uint8Array, amem: Uint8Array): void {

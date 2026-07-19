@@ -12,7 +12,7 @@ const patch = (rel: string) =>
   new Uint8Array(readFileSync(join(here, '../../../../../patches', rel)));
 const fx = (name: string) => new Uint8Array(readFileSync(join(here, 'fixtures', name)));
 
-describe('loadSysexFile — ajay.syx', () => {
+describe('loadSysexFile - ajay.syx', () => {
   const result = loadSysexFile(patch('DX7II_Collections/Ajay/ajay.syx'));
 
   it('loads two internal VMEM halves and 32 performances', () => {
@@ -29,7 +29,7 @@ describe('loadSysexFile — ajay.syx', () => {
   });
 });
 
-describe('loadSysexFile — TX7 cassette', () => {
+describe('loadSysexFile - TX7 cassette', () => {
   const bytes = patch('DX7II_Collections/12-op/TX7_Cassette_ADAPTED_DX7iiD_FD_by12op.syx');
   const frames = identifySysex(bytes);
   const result = loadSysexFile(bytes);
@@ -58,7 +58,7 @@ describe('loadSysexFile — TX7 cassette', () => {
   });
 });
 
-describe('loadSysexFile — tx802 regression', () => {
+describe('loadSysexFile - tx802 regression', () => {
   it('loads TX802 AMEM + VMEM from bank dump', () => {
     const result = loadSysexFile(fx('tx802-prg1.syx'));
     expect(result.loaded).toBe(true);
@@ -71,7 +71,7 @@ describe('loadSysexFile — tx802 regression', () => {
   });
 });
 
-describe('dumpBankSysex — AMEM + VMEM round-trip', () => {
+describe('dumpBankSysex - AMEM + VMEM round-trip', () => {
   it('re-loading a dumped bank reproduces every voice and supplement byte', () => {
     const original = loadSysexFile(fx('tx802-prg1.syx')).library;
     const dump = original.dumpBankSysex('internalA');
@@ -96,7 +96,7 @@ describe('dumpBankSysex — AMEM + VMEM round-trip', () => {
   });
 });
 
-describe('loadSysexFile — raw VCED (.Dx7Voice)', () => {
+describe('loadSysexFile - raw VCED (.Dx7Voice)', () => {
   const fs1r = (name: string) =>
     new Uint8Array(
       readFileSync(join(here, '../../../../../patches/DX7 Voices from FS1R/Bank 0', name)),

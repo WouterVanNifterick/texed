@@ -75,7 +75,7 @@ describe('parseDx7iiPerfBlock', () => {
   });
 });
 
-describe('performancesFromFrame — fixtures', () => {
+describe('performancesFromFrame - fixtures', () => {
   it('parses TX802 8952PM performance bank from factory P.SYX', () => {
     const bytes = patchPath('TX802_Factory/original/P.SYX');
     const frames = identifySysex(bytes);

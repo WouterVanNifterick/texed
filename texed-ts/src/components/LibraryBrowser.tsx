@@ -342,7 +342,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
               {manifestPending && <p className="libbrowser-empty">Loading library…</p>}
               {!manifestPending && !manifest && (
                 <p className="libbrowser-empty">
-                  Built-in library unavailable — LOAD or drop your own .syx files.
+                  Built-in library unavailable - LOAD or drop your own .syx files.
                 </p>
               )}
             </div>

@@ -197,7 +197,7 @@ describe('SynthRack', () => {
   });
 });
 
-describe('SynthRack — Store to Voice Memory', () => {
+describe('SynthRack - Store to Voice Memory', () => {
   it('commits the edit buffer into a slot and survives voice reselect', () => {
     const rack = new SynthRack(44100);
     loadRom(rack);
@@ -229,7 +229,7 @@ describe('SynthRack — Store to Voice Memory', () => {
   });
 });
 
-describe('SynthRack — Linked Tone Generators', () => {
+describe('SynthRack - Linked Tone Generators', () => {
   it('a single note reaches only one instrument when linked (slave does not match independently)', () => {
     const linked = new SynthRack(44100);
     linked.setPartConfig(0, { enabled: true, rxChannel: 0 });
@@ -270,7 +270,7 @@ describe('SynthRack — Linked Tone Generators', () => {
   });
 });
 
-describe('SynthRack — forced damp', () => {
+describe('SynthRack - forced damp', () => {
   it('cross-part steal keeps audio continuous (no instant cut)', () => {
     const rack = new SynthRack(44100);
     rack.setPolyphonyCap(2);

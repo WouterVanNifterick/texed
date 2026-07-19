@@ -32,7 +32,7 @@ describe('splitSysex', () => {
   });
 });
 
-describe('identifySysex — golden fixtures', () => {
+describe('identifySysex - golden fixtures', () => {
   it('recognizes a 32-voice VMEM cartridge', () => {
     const [frame] = identifySysex(fx('rom1a.syx'));
     expect(frame.kind).toBe(SysexKind.Cartridge);

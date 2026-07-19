@@ -42,7 +42,7 @@ import type { VoiceRef } from '@texed/dx7-format/voice-library';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 
-// ?hw — hardware editor mode: the UI drives a real DX7/DX7II/TX802 over MIDI
+// ?hw - hardware editor mode: the UI drives a real DX7/DX7II/TX802 over MIDI
 // SysEx instead of the local engine (pick the output in MIDI settings).
 const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 
@@ -272,7 +272,7 @@ export default function App() {
     const bank = synth.partConfigs[synth.selectedPart]?.voice.bank ?? 'internalA';
     synth.requestBankDump(bank, (data) => {
       if (!data) {
-        showLoadMsg(`Bank ${bank} is empty — nothing to save`);
+        showLoadMsg(`Bank ${bank} is empty - nothing to save`);
         return;
       }
       const url = URL.createObjectURL(

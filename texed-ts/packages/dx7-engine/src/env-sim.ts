@@ -16,7 +16,7 @@ import { sar64 } from './fixedpoint';
 import { pitchenvRate, pitchenvTab } from './pitchenv';
 
 const SR = 44100;
-const SR_MUL = 1 << 24; // (44100 / 44100) * 2^24 — identity at the reference rate.
+const SR_MUL = 1 << 24; // (44100 / 44100) * 2^24 - identity at the reference rate.
 
 // One "doubling" of internal level is 2^24, i.e. +6.0206 dB.
 const DB_PER_DOUBLING = 6.020599913279624; // 20*log10(2)
@@ -24,7 +24,7 @@ const LEVEL_OFFSET = 14; // dx7note peekVoiceStatus: amp = 2^(level/2^24 - 14).
 
 export const DB_TOP = 6;
 export const DB_FLOOR = -72;
-/** Linear amplitude at DB_TOP — the top of the linear-amplitude y axis. */
+/** Linear amplitude at DB_TOP - the top of the linear-amplitude y axis. */
 export const AMP_TOP = Math.pow(2, DB_TOP / DB_PER_DOUBLING);
 
 const levellut = [0, 5, 9, 13, 17, 20, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 42, 43, 45, 46];
@@ -49,7 +49,7 @@ function scaleoutlevel(outlevel: number): number {
   return outlevel >= 20 ? 28 + outlevel : levellut[outlevel];
 }
 
-/** Internal Q24 target level for an amp EG stage — mirrors env.ts advance(). */
+/** Internal Q24 target level for an amp EG stage - mirrors env.ts advance(). */
 export function ampTargetLevel(newlevel: number, outlevel: number): number {
   let actuallevel = scaleoutlevel(newlevel) >> 1;
   actuallevel = (actuallevel << 6) + outlevel - 4256;
@@ -147,11 +147,11 @@ function attackBlocks(startLevel: number, target: number, inc: number): number {
   // k = ((17<<24) - level) >> 24 is constant within a level band ((16-k)<<24,
   // (17-k)<<24]; the level rises by k*inc per block. A block starting at level
   // <= bandTop uses this k, so leaving the band takes floor((bandTop-level)/
-  // step)+1 blocks — matching env.ts getsample() block-for-block.
+  // step)+1 blocks - matching env.ts getsample() block-for-block.
   for (let guard = 0; guard < 64; guard++) {
     const k = (CEIL - level) >> 24;
     const step = Math.imul(k, inc);
-    if (step <= 0) break; // cannot progress (rate too low vs ceiling) — treat as done
+    if (step <= 0) break; // cannot progress (rate too low vs ceiling) - treat as done
     const bandTop = (17 - k) << 24;
     if (target <= bandTop) {
       blocks += Math.ceil((target - level) / step);

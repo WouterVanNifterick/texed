@@ -1,5 +1,5 @@
 // Multi-timbral part configuration: pure data shared by the engine, the
-// control protocol, and performance (PCED) parsing. No DSP here — the
+// control protocol, and performance (PCED) parsing. No DSP here - the
 // SynthRack consumes these; a hardware or native host can too.
 
 import { defaultVoiceRef, type VoiceRef } from './voice-library';

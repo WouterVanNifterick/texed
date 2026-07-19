@@ -35,7 +35,7 @@ export function usePersistentState<T extends string>(key: string, initial: T): [
       try {
         localStorage.setItem(key, v);
       } catch {
-        // storage unavailable (private mode) — in-memory only
+        // storage unavailable (private mode) - in-memory only
       }
     },
     [key],

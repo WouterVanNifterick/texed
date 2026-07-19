@@ -23,7 +23,7 @@ describe('fs1rVoiceNameFromFilename', () => {
   });
 });
 
-describe('packFs1rBank — real Bank 0', () => {
+describe('packFs1rBank - real Bank 0', () => {
   const bankDir = join(patchesDir, 'DX7 Voices from FS1R/Bank 0');
   const files: SourceFile[] = readdirSync(bankDir)
     .filter((f) => /\.dx7voice$/i.test(f))

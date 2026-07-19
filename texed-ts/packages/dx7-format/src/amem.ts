@@ -271,7 +271,7 @@ export class VoiceSupplement {
 // DX7II AMS 0–7 is higher resolution over the same depth range as DX7 AMS 0–3
 // (msfa ampmodsenstab). DXConvert/SY77 map DX7 0,1,2,3 → DX7II 0,2,5,7, so
 // AMS 7 equals classic AMS 3 (1<<24). Intermediate steps are linear in the
-// classic depth units 0,66,109,255 — never above 1<<24, or the msfa exp()
+// classic depth units 0,66,109,255 - never above 1<<24, or the msfa exp()
 // curve overshoots and drives operator level negative (harsh digital noise).
 export const extendedAmsTable = [
   0, // 0

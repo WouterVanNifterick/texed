@@ -1,4 +1,5 @@
 dist
 public/library
 pnpm-lock.yaml
+test-results
 *.syx

@@ -8,8 +8,8 @@
 // click a corner label to toggle LIN/EXP for that side.
 
 import { useCallback, useRef } from 'react';
-import { scaleLevel } from '../engine/dx7note';
-import { CURVES } from '../state/params';
+import { scaleLevel } from '@texed/dx7-engine/dx7note';
+import { CURVES } from '@texed/dx7-format/params';
 
 const W = 127;
 const H = 56;

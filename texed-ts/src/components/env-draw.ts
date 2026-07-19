@@ -12,7 +12,7 @@ import {
   DB_FLOOR,
   AMP_TOP,
   type EnvTrace,
-} from '../engine/env-sim';
+} from '@texed/dx7-engine/env-sim';
 import type { EnvTimeScale } from './env-time';
 
 export type YMode = 'db' | 'linear';

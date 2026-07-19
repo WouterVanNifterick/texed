@@ -3,8 +3,8 @@
 
 import { memo, useState } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '../state/params';
-import * as Sup from '../state/supplement';
+import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/params';
+import * as Sup from '@texed/dx7-format/supplement';
 import { helpProps } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
 import { Knob, Cycle, Toggle } from './ui';

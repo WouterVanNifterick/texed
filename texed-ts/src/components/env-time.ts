@@ -6,27 +6,33 @@
 // fastest attack to the slowest release.
 
 import { useMemo } from 'react';
-import { scaleoutlevel } from '../engine/env';
-import { scaleLevel, scaleRate, scaleVelocity } from '../engine/dx7note';
-import { OP, G, opBase } from '../state/params';
+import { scaleoutlevel } from '@texed/dx7-engine/env';
+import { scaleLevel, scaleRate, scaleVelocity } from '@texed/dx7-engine/dx7note';
+import { OP, G, opBase } from '@texed/dx7-format/params';
 import {
   ampStageTimes,
   pitchStageTimes,
   simulateAmpEnv,
   simulatePitchEnv,
   type AmpEnvParams,
-} from '../engine/env-sim';
+} from '@texed/dx7-engine/env-sim';
 
-// Deterministic reference note/velocity: rate scaling and level scaling are
+// Default reference note/velocity: rate scaling and level scaling are
 // note/velocity dependent, so the drawn curve is pinned to one playing context.
+// These are the fallbacks; the actual values are user-editable (see App state).
 export const REF_NOTE = 60;
 export const REF_VELOCITY = 99;
-export const REF_LABEL = 'note 60 · vel 99';
 
 export type TimeMode = 'log' | 'linear';
 
 /** Combined per-operator output level and rate scaling (dx7note.ts init). */
-export function computeAmpParams(voice: Uint8Array, opNum: number, scaleByOutlevel = true): AmpEnvParams {
+export function computeAmpParams(
+  voice: Uint8Array,
+  opNum: number,
+  scaleByOutlevel = true,
+  note = REF_NOTE,
+  velocity = REF_VELOCITY,
+): AmpEnvParams {
   const base = opBase(opNum);
   const rates = [voice[base + OP.egRate(0)], voice[base + OP.egRate(1)], voice[base + OP.egRate(2)], voice[base + OP.egRate(3)]];
   const levels = [voice[base + OP.egLevel(0)], voice[base + OP.egLevel(1)], voice[base + OP.egLevel(2)], voice[base + OP.egLevel(3)]];
@@ -35,7 +41,7 @@ export function computeAmpParams(voice: Uint8Array, opNum: number, scaleByOutlev
   if (scaleByOutlevel) {
     outlevel = scaleoutlevel(voice[base + OP.outputLevel]);
     outlevel += scaleLevel(
-      REF_NOTE,
+      note,
       voice[base + OP.breakPoint],
       voice[base + OP.leftDepth],
       voice[base + OP.rightDepth],
@@ -44,13 +50,13 @@ export function computeAmpParams(voice: Uint8Array, opNum: number, scaleByOutlev
     );
     outlevel = Math.min(127, outlevel);
     outlevel = outlevel << 5;
-    outlevel += scaleVelocity(REF_VELOCITY, voice[base + OP.velocitySens]);
+    outlevel += scaleVelocity(velocity, voice[base + OP.velocitySens]);
     outlevel = Math.max(0, outlevel);
   } else {
     outlevel = scaleoutlevel(99) << 5;
   }
 
-  const rateScaling = scaleRate(REF_NOTE, voice[base + OP.rateScaling]);
+  const rateScaling = scaleRate(note, voice[base + OP.rateScaling]);
   return { rates, levels, outlevel, rateScaling };
 }
 
@@ -123,11 +129,16 @@ function niceLinearTicks(axisMax: number): number[] {
  * Compute the shared scale from the whole voice: gate is just past the slowest
  * time-to-sustain; the axis spans to the slowest release end.
  */
-export function computeEnvTimeScale(voice: Uint8Array, mode: TimeMode): EnvTimeScale {
+export function computeEnvTimeScale(
+  voice: Uint8Array,
+  mode: TimeMode,
+  note = REF_NOTE,
+  velocity = REF_VELOCITY,
+): EnvTimeScale {
   let maxSustain = 0;
   const ampParams: AmpEnvParams[] = [];
   for (let opNum = 1; opNum <= 6; opNum++) {
-    const p = computeAmpParams(voice, opNum);
+    const p = computeAmpParams(voice, opNum, true, note, velocity);
     ampParams.push(p);
     maxSustain = Math.max(maxSustain, ampStageTimes(p)[2]);
   }
@@ -149,9 +160,9 @@ export function computeEnvTimeScale(voice: Uint8Array, mode: TimeMode): EnvTimeS
 }
 
 /** React hook: memoized shared time scale, recomputed only when EG bytes change. */
-export function useEnvTimeScale(voice: Uint8Array, mode: TimeMode): EnvTimeScale {
+export function useEnvTimeScale(voice: Uint8Array, mode: TimeMode, note = REF_NOTE, velocity = REF_VELOCITY): EnvTimeScale {
   const key = useMemo(() => envDepKey(voice), [voice]);
-  return useMemo(() => computeEnvTimeScale(voice, mode), [key, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => computeEnvTimeScale(voice, mode, note, velocity), [key, mode, note, velocity]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** Hash of every byte the seven envelope curves depend on. */

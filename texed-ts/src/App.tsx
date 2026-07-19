@@ -3,11 +3,11 @@ import './App.css';
 import dexedIcon from './assets/dexed-icon.svg';
 import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
-import { setMidiOutConnection, setMidiOutTarget, setMidiOutLive, sendVoiceDump } from './audio/midi-out';
-import { getVoiceName, voiceToSysex, withVoiceName } from './state/params';
-import { acedToSysex } from './engine/amem';
+import { setMidiOutConnection, setMidiOutTarget, setMidiOutLive, sendVoiceDump, hardwarePort } from './audio/midi-out';
+import { getVoiceName, voiceToSysex, withVoiceName } from '@texed/dx7-format/params';
+import { acedToSysex } from '@texed/dx7-format/amem';
 import { trackCc, trackAftertouch } from './state/live-ctrl';
-import { useFileDrop, usePartSelectKeys, usePersistentState, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
+import { useFileDrop, usePartSelectKeys, usePersistentState, usePersistentNumber, useQwertyKeyboard, useStageScale, useTransientMessage } from './hooks';
 import { loadSession, saveSession, SESSION_SCHEMA } from './state/persistence';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
@@ -17,15 +17,20 @@ import { EnvOverlay, type EnvSelection } from './components/EnvOverlay';
 import { useEnvTimeScale, type TimeMode } from './components/env-time';
 import { type YMode } from './components/env-draw';
 import { Segmented } from './components/ui';
+import { RefKeyControl } from './components/RefKeyControl';
 import { PartRack } from './components/PartRack';
 import { LibraryBrowser } from './components/LibraryBrowser';
 import { TopBar } from './components/TopBar';
 import { StoreVoiceDialog } from './components/StoreVoiceDialog';
 import { StoreIcon } from './components/icons';
 import { helpProps } from './state/help';
-import type { VoiceRef } from './engine/voice-library';
+import type { VoiceRef } from '@texed/dx7-format/voice-library';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
+
+// ?hw — hardware editor mode: the UI drives a real DX7/DX7II/TX802 over MIDI
+// SysEx instead of the local engine (pick the output in MIDI settings).
+const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 
 /** Perceptual volume taper: knob 0-99 to master gain. */
 function masterGain(volume: number): number {
@@ -33,7 +38,7 @@ function masterGain(volume: number): number {
 }
 
 export default function App() {
-  const synth = useDexedSynth();
+  const synth = useDexedSynth(HW_MODE ? hardwarePort : undefined);
   const [started, setStarted] = useState(false);
   const [engine, setEngine] = useState(1); // Mark I default
   const [volume, setVolume] = useState(80);
@@ -44,6 +49,9 @@ export default function App() {
   const [opLayout, setOpLayout] = usePersistentState<'grid' | 'stack'>('opLayout', 'grid');
   const [timeMode, setTimeMode] = usePersistentState<TimeMode>('envTimeMode', 'log');
   const [yMode, setYMode] = usePersistentState<YMode>('envYMode', 'db');
+  const [refNote, setRefNote] = usePersistentNumber('envRefNote', 60);
+  const [refVelocity, setRefVelocity] = usePersistentNumber('envRefVelocity', 99);
+  const [refFollow, setRefFollow] = usePersistentState<'on' | 'off'>('envRefFollow', 'off');
   const [midiInputs, setMidiInputs] = useState<string[]>([]);
   const [midiOutputs, setMidiOutputs] = useState<{ id: string; name: string }[]>([]);
   const [midiOutId, setMidiOutId] = usePersistentState<string>('midiOutId', '');
@@ -57,9 +65,16 @@ export default function App() {
 
   useStageScale(1440, 1020);
 
-  const timeScale = useEnvTimeScale(synth.voice, timeMode);
+  const timeScale = useEnvTimeScale(synth.voice, timeMode, refNote, refVelocity);
   const combined = envView === 'combined';
   const stack = opLayout === 'stack';
+
+  // FOLLOW capture reads the toggle through a ref so the note-on callback stays
+  // stable (MIDI is wired once at start and must not be re-registered).
+  const refFollowRef = useRef(false);
+  useEffect(() => {
+    refFollowRef.current = refFollow === 'on';
+  }, [refFollow]);
 
   useEffect(() => {
     if (!synth.loadReport) return;
@@ -88,8 +103,12 @@ export default function App() {
     (note: number, velocity: number, channel = 1) => {
       rackNoteOn(note, velocity, channel);
       setActiveNotes((prev) => new Set(prev).add(note));
+      if (refFollowRef.current) {
+        setRefNote(note);
+        setRefVelocity(velocity);
+      }
     },
-    [rackNoteOn],
+    [rackNoteOn, setRefNote, setRefVelocity],
   );
 
   const noteOff = useCallback(
@@ -141,7 +160,9 @@ export default function App() {
     // forwarding through this connection, restoring the persisted target/toggle.
     setMidiOutConnection(midiRef.current);
     setMidiOutTarget(midiOutId);
-    setMidiOutLive(midiLive === 'on');
+    // In hardware mode every edit already goes out through the port; the live
+    // mirror would duplicate each frame.
+    setMidiOutLive(!HW_MODE && midiLive === 'on');
   }, [synth, engine, volume, noteOn, noteOff, showLoadMsg, midiOutId, midiLive]);
 
   // Persist the session (debounced): every rack mutation flows through the
@@ -172,7 +193,9 @@ export default function App() {
     setMidiOutTarget(midiOutId);
   }, [midiOutId]);
   useEffect(() => {
-    setMidiOutLive(midiLive === 'on');
+    // In hardware mode every edit already goes out through the port; the live
+    // mirror would duplicate each frame.
+    setMidiOutLive(!HW_MODE && midiLive === 'on');
   }, [midiLive]);
 
   const onSendVoice = useCallback(() => {
@@ -371,6 +394,14 @@ export default function App() {
                 { value: 'linear', label: 'LIN', help: 'Linear amplitude axis: matches raw sample output; low levels sit near the floor.' },
               ]}
             />
+            <RefKeyControl
+              note={refNote}
+              velocity={refVelocity}
+              follow={refFollow === 'on'}
+              onNote={setRefNote}
+              onVelocity={setRefVelocity}
+              onToggleFollow={(on) => setRefFollow(on ? 'on' : 'off')}
+            />
           </div>
         </div>
 
@@ -386,6 +417,8 @@ export default function App() {
               subscribeStatus={synth.subscribeStatus}
               hoverOp={hoverOp}
               onHoverOp={setHoverOp}
+              note={refNote}
+              velocity={refVelocity}
             />
           )}
           {[1, 2, 3, 4, 5, 6].map((opNum) => (
@@ -405,6 +438,8 @@ export default function App() {
               yMode={yMode}
               showEnv={!combined}
               flat={stack}
+              note={refNote}
+              velocity={refVelocity}
             />
           ))}
           <GlobalPanel

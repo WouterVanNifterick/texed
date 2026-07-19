@@ -3,8 +3,8 @@
 // a part selects it as the target for the voice editor.
 
 import { useEffect, useState } from 'react';
-import type { PartConfig, ProgramOption } from '../engine/synth-rack';
-import type { VoiceRef } from '../engine/voice-library';
+import type { PartConfig, ProgramOption } from '@texed/dx7-engine/synth-rack';
+import type { VoiceRef } from '@texed/dx7-format/voice-library';
 import { programIndexForVoice } from '../audio/useDexedSynth';
 import type { SynthStatus } from '../audio/useDexedSynth';
 import { Knob, NoteRange, PartSlider } from './ui';

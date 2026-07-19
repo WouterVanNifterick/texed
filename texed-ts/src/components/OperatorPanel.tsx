@@ -4,8 +4,8 @@
 
 import { memo } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { OP, G, opBase, formatOpFreq, formatDetune, OSC_MODES, PARAM_CENTER } from '../state/params';
-import { getAms, setAms, getScalingMode, setScalingMode } from '../state/supplement';
+import { OP, G, opBase, formatOpFreq, formatDetune, OSC_MODES, PARAM_CENTER } from '@texed/dx7-format/params';
+import { getAms, setAms, getScalingMode, setScalingMode } from '@texed/dx7-format/supplement';
 import { algoGraph } from '../state/algo';
 import { helpProps } from '../state/help';
 import { Knob, Cycle, Toggle } from './ui';
@@ -63,6 +63,9 @@ interface OperatorPanelProps {
   showEnv: boolean;
   /** Flat 1×6 layout: lay the panel out horizontally. */
   flat: boolean;
+  /** Reference note/velocity the envelope curve is drawn for. */
+  note: number;
+  velocity: number;
 }
 
 export const OperatorPanel = memo(function OperatorPanel({
@@ -80,6 +83,8 @@ export const OperatorPanel = memo(function OperatorPanel({
   yMode,
   showEnv,
   flat,
+  note,
+  velocity,
 }: OperatorPanelProps) {
   const base = opBase(opNum);
   const opIdx = 6 - opNum; // sysex order, used by the engine status
@@ -133,7 +138,7 @@ export const OperatorPanel = memo(function OperatorPanel({
           kind="amp"
           rates={rates}
           levels={levels}
-          ampParams={computeAmpParams(voice, opNum, !!carrier)}
+          ampParams={computeAmpParams(voice, opNum, !!carrier, note, velocity)}
           timeScale={timeScale}
           yMode={yMode}
           color={OP_COLORS[opNum - 1]}

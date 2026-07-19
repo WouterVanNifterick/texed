@@ -3,7 +3,7 @@
 // the same bit math; the wave itself runs during the delay but its effective
 // modulation depth is gated by the ramp, which is what we draw.
 
-import { lfoSource } from '../engine/lfo';
+import { lfoSource } from '@texed/dx7-engine/lfo';
 
 const W = 120;
 const H = 40;

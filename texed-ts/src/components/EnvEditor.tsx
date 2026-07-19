@@ -14,7 +14,7 @@ import {
   pitchLevelForTarget,
   type AmpEnvParams,
   type EnvTrace,
-} from '../engine/env-sim';
+} from '@texed/dx7-engine/env-sim';
 import type { EnvTimeScale } from './env-time';
 import { makeYMap, curvePoints, fillPoints, px, py, type YMode, type EnvKind, type DrawGeom } from './env-draw';
 

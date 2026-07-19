@@ -8,9 +8,9 @@ import {
   sendVoiceDump,
 } from '../midi-out';
 import type { MidiConnection } from '../midi';
-import { createDefaultAmem } from '../../engine/amem';
-import { identifyFrame, SysexKind } from '../../engine/sysex';
-import { initVoice } from '../../engine/cartridge';
+import { createDefaultAmem } from '@texed/dx7-format/amem';
+import { identifyFrame, SysexKind } from '@texed/dx7-format/sysex';
+import { initVoice } from '@texed/dx7-format/cartridge';
 
 function fakeConn(): { conn: MidiConnection; sent: Uint8Array[] } {
   const sent: Uint8Array[] = [];

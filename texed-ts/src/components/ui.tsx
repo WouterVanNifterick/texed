@@ -225,7 +225,7 @@ export function PartSlider({ value, min, max, onChange, onClick, center = false,
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const MIDI_MAX = 127;
 
-function noteLabel(n: number): string {
+export function noteLabel(n: number): string {
   return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
 }
 

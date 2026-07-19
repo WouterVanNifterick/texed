@@ -4,7 +4,7 @@
 // into public/library/manifest.json and fetched by the app at runtime. Both
 // sides import these types so the schema cannot drift.
 
-import type { VoiceBankId } from '../engine/voice-library';
+import type { VoiceBankId } from '@texed/dx7-format/voice-library';
 
 export const LIBRARY_SCHEMA = 1;
 

@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DexedSynth } from '../audio/useDexedSynth';
-import type { VoiceBankId } from '../engine/voice-library';
+import type { VoiceBankId } from '@texed/dx7-format/voice-library';
 import {
   buildSearchIndex,
   fetchLibraryManifest,

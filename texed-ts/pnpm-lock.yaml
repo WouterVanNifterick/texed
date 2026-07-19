@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@texed/dx7-engine':
+        specifier: workspace:*
+        version: link:packages/dx7-engine
+      '@texed/dx7-format':
+        specifier: workspace:*
+        version: link:packages/dx7-format
+      '@texed/synth-protocol':
+        specifier: workspace:*
+        version: link:packages/synth-protocol
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -42,6 +51,36 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.1))
+
+  apps/cli:
+    dependencies:
+      '@texed/dx7-engine':
+        specifier: workspace:*
+        version: link:../../packages/dx7-engine
+      '@texed/dx7-format':
+        specifier: workspace:*
+        version: link:../../packages/dx7-format
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.3
+      tsx:
+        specifier: ^4.23.1
+        version: 4.23.1
+
+  packages/dx7-engine:
+    dependencies:
+      '@texed/dx7-format':
+        specifier: workspace:*
+        version: link:../dx7-format
+
+  packages/dx7-format: {}
+
+  packages/synth-protocol:
+    dependencies:
+      '@texed/dx7-format':
+        specifier: workspace:*
+        version: link:../dx7-format
 
 packages:
 

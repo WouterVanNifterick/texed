@@ -53,3 +53,4 @@ dexed-juce/
 
 # Local tooling / data (not part of the project)
 tools/
+patches.ignore

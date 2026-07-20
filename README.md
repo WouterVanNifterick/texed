@@ -35,21 +35,19 @@ DX7 voice (splits/layers/mod matrix on supported gear).
 ## Highlights
 
 - **Realtime editing and visualization** on one screen
-- **Accurate envelope visualization, not a schematic.** Envelope curves are computed by replaying
-  the actual DSP envelope generator; drag segments to edit rate and level.
-- **Built-in patch library** — hundreds of factory and community banks (see
-  [docs/patch-library.md](docs/patch-library.md))
-- **Load/save patches** — cartridges and single-voice SysEx
+- **Accurate envelope visualization, not a schematic.** Envelope curves are computed by replaying the actual DSP envelope generator; drag segments to edit rate and level.
+- **Built-in patch library** hundreds of factory and community banks (see [docs/patch-library.md](docs/patch-library.md))
+- **Load/save patches** cartridges and single-voice SysEx
 - **Web MIDI** and **QWERTY** play; optional **hardware editor** over SysEx
-- **Session persistence** — patch and UI state in local storage
-- **Headless CLI** — render MIDI to WAV ([docs/cli.md](docs/cli.md))
+- **Session persistence** patch and UI state in local storage
+- **Headless CLI** render MIDI to WAV ([docs/cli.md](docs/cli.md))
 
 ## Background
 
 Texed is a TypeScript/React port of [Dexed](https://github.com/asb2m10/dexed) (Pascal Gauthier
 and others). Dexed builds on **MSFA** (Raph Levien / Google, 2012).
 
-Dexed plays one DX7 voice accurately but does not support **performances** — patches that combine
+Dexed plays one DX7 voice accurately but does not support **performances** patches that combine
 up to eight DX7 voices as layers, splits, and routed parts. Texed adds that multi-timbral model
 and a web-native editor.
 
@@ -76,7 +74,7 @@ pnpm install
 pnpm dev      # dev server (rebuilds patch library)
 pnpm test     # unit tests
 pnpm build    # production build
-pnpm cli song.mid --syx bank.syx   # headless WAV render — see docs/cli.md
+pnpm cli song.mid --syx bank.syx   # headless WAV render. See docs/cli.md
 ```
 
 Architecture and editing controls: [texed-ts/README.md](texed-ts/README.md). Contributing:
@@ -87,7 +85,7 @@ Architecture and editing controls: [texed-ts/README.md](texed-ts/README.md). Con
 Texed inherits the [Dexed](https://github.com/asb2m10/dexed) lineage and is distributed under
 **GNU GPL v3**. Full license text: [dexed-juce/LICENSE](dexed-juce/LICENSE).
 
-Bundled `.syx` data under `patches/` is third-party/factory content — see
+Bundled `.syx` data under `patches/` is third-party/factory content. See
 [docs/patch-library.md](docs/patch-library.md).
 
 ## Support

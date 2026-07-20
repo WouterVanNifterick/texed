@@ -46,5 +46,5 @@ Implementation reference: `texed-ts/src/audio/hardware-midi-port.ts`.
 
 ## Related reading
 
-- [Using Texed](using-texed.md) — playing and patching in the browser.
-- [texed-ts/README.md](../texed-ts/README.md) — architecture and MIDI adapter layout.
+- [Using Texed](using-texed.md). Playing and patching in the browser.
+- [texed-ts/README.md](../texed-ts/README.md). Architecture and MIDI adapter layout.

@@ -31,9 +31,9 @@ TX802 factory performance sets and their companion voice files).
 
 ## Copyright and redistribution
 
-Patch files are **third-party or factory content** collected for compatibility testing and
-musical use with Texed. They remain subject to their original terms; this repository bundles
-them for convenience in the open-source app. Do not assume unlimited redistribution outside
-this project—check Yamaha and original pack authors’ terms before republishing banks elsewhere.
+Patch files are **third-party or factory content** collected for compatibility testing and musical use with Texed. 
+They remain subject to their original terms; this repository bundles them for convenience in the open-source app. 
+
+Do not assume unlimited redistribution outside this project. 
 
 Application **source code** licensing is described in the root [README](../README.md#license).

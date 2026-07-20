@@ -67,7 +67,7 @@ export function EnvEditor(props: EnvEditorProps) {
   const color = props.color ?? DEFAULT_COLOR[kind];
   const gid = useId();
   const root = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ stage: number } | null>(null);
+  const drag = useRef<{ stage: number; levelOnly: boolean } | null>(null);
 
   const trace: EnvTrace = useMemo(
     () =>
@@ -115,30 +115,35 @@ export function EnvEditor(props: EnvEditorProps) {
     const y01 = clamp((fy * H - PAD) / (H - 2 * PAD), 0, 1);
 
     const L = latest.current;
-    const desiredSec = Math.max(0, L.timeScale.t(x01) - prevNodeTime(d.stage));
     const desiredLevel = L.ymap.y01ToLevel(y01);
 
     if (L.kind === 'amp' && L.ampParams) {
-      const r = rateForStageDuration(L.ampParams, d.stage, desiredSec, L.rates[d.stage]);
       const l = levelForTarget(desiredLevel, L.ampParams.outlevel);
-      if (r !== L.rates[d.stage]) onSetRate(d.stage, r);
+      if (!d.levelOnly) {
+        const desiredSec = Math.max(0, L.timeScale.t(x01) - prevNodeTime(d.stage));
+        const r = rateForStageDuration(L.ampParams, d.stage, desiredSec, L.rates[d.stage]);
+        if (r !== L.rates[d.stage]) onSetRate(d.stage, r);
+      }
       if (l !== L.levels[d.stage]) onSetLevel(d.stage, l);
     } else {
-      const r = pitchRateForStageDuration(L.levels, d.stage, desiredSec, L.rates[d.stage]);
       const l = pitchLevelForTarget(desiredLevel);
-      if (r !== L.rates[d.stage]) onSetRate(d.stage, r);
+      if (!d.levelOnly) {
+        const desiredSec = Math.max(0, L.timeScale.t(x01) - prevNodeTime(d.stage));
+        const r = pitchRateForStageDuration(L.levels, d.stage, desiredSec, L.rates[d.stage]);
+        if (r !== L.rates[d.stage]) onSetRate(d.stage, r);
+      }
       if (l !== L.levels[d.stage]) onSetLevel(d.stage, l);
     }
   }
 
-  const onNodeDown = (e: React.PointerEvent, s: number) => {
+  const onNodeDown = (e: React.PointerEvent, s: number, levelOnly = false) => {
     (e.currentTarget as HTMLElement).focus();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // synthetic pointer ids
     }
-    drag.current = { stage: s };
+    drag.current = { stage: s, levelOnly };
     e.stopPropagation();
   };
 
@@ -240,6 +245,23 @@ export function EnvEditor(props: EnvEditorProps) {
           />
         );
       })}
+      {kind === 'pitch' && (
+        <button
+          type="button"
+          className="env-node level-only"
+          style={{
+            left: `${(px(g, 0) / W) * 100}%`,
+            top: `${(py(g, trace.startLevelQ24) / H) * 100}%`,
+            borderColor: color,
+          }}
+          aria-label="Start level L4"
+          title="Start level L4"
+          onPointerDown={(e) => onNodeDown(e, 3, true)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') onNodeKey(e, 3);
+          }}
+        />
+      )}
       {timeScale.clamped && (
         <span className="env-overflow" title="Envelope extends past the visible time range">
           ›

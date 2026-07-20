@@ -1236,6 +1236,10 @@
   cursor: grabbing;
 }
 
+.env-node.level-only {
+  cursor: ns-resize;
+}
+
 .env-node.unreached {
   border-style: dashed;
   opacity: 0.6;

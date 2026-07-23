@@ -32,8 +32,8 @@
     "@texed/dx7-engine": "workspace:*",
     "@texed/dx7-format": "workspace:*",
     "@texed/synth-protocol": "workspace:*",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -43,12 +43,12 @@
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-react": "^6.0.4",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
-    "lint-staged": "^17.1.0",
-    "oxlint": "^1.74.0",
-    "prettier": "^3.9.5",
+    "lint-staged": "^17.2.0",
+    "oxlint": "^1.75.0",
+    "prettier": "^3.9.6",
     "tsx": "^4.23.1",
     "typescript": "~7.0.2",
     "vite": "^8.1.5",

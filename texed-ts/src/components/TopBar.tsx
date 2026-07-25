@@ -4,13 +4,13 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import dexedIcon from '../assets/dexed-icon.svg';
-import { useStatus, type DexedSynth } from '../audio/useDexedSynth';
+import { useStatus, type Synth } from '../audio/useSynth';
 import { helpProps } from '../state/help';
 import { Knob, Toggle } from './ui';
 import { DownloadIcon, GearIcon } from './icons';
 
 interface TopBarProps {
-  synth: DexedSynth;
+  synth: Synth;
   loadMsg: string | null;
   onLoadFiles: (files: File[]) => void;
   onSaveVoice: () => void;

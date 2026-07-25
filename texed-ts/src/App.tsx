@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import dexedIcon from './assets/dexed-icon.svg';
-import { useDexedSynth, programIndexForVoice } from './audio/useDexedSynth';
+import { useSynth } from './audio/useSynth';
 import { initMidi, type MidiConnection } from './audio/midi';
 import {
   setMidiOutConnection,
@@ -55,7 +55,7 @@ const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 const AUTO_SEND_DEBOUNCE_MS = 250;
 
 export default function App() {
-  const synth = useDexedSynth(HW_MODE ? hardwarePort : undefined);
+  const synth = useSynth(HW_MODE ? hardwarePort : undefined);
   const [started, setStarted] = useState(false);
   // Global system-setup settings live in the engine's edit buffer; mirror them.
   const { engine, volume, polyphony } = synth.settings;
@@ -274,8 +274,9 @@ export default function App() {
   const dragging = useFileDrop(onDrop);
 
   const selectedVoice = synth.partConfigs[synth.selectedPart]?.voice;
-  const programIdx = selectedVoice ? programIndexForVoice(synth.programOptions, selectedVoice) : 0;
-  const program = programIdx >= 0 ? programIdx : 0;
+  // Name shown in the editor is the live edit-buffer name (which may have been
+  // edited away from the bank slot it was loaded from), not the library label.
+  const editBufferName = getVoiceName(synth.voice).trim() || 'INIT VOICE';
 
   const onSaveBank = useCallback(() => {
     const bank = synth.partConfigs[synth.selectedPart]?.voice.bank ?? 'internalA';
@@ -376,23 +377,24 @@ export default function App() {
           <div className="mode-bar-left">
             <select
               className="program-select"
-              value={program}
-              onChange={(e) => onSelectProgram(Number(e.target.value))}
+              // Always show the edit-buffer name as the current value; the bank
+              // options are just a picker for loading a different voice.
+              value="current"
+              onChange={(e) => {
+                if (e.target.value !== 'current') onSelectProgram(Number(e.target.value));
+              }}
               disabled={synth.programOptions.length === 0}
               {...helpProps(
                 'PROGRAM',
-                'Selects a voice for the current part from the loaded banks.',
+                "The voice name in the current part's edit buffer. Pick another entry to load it from a bank.",
               )}
             >
-              {synth.programOptions.length === 0 ? (
-                <option value={0}>INIT VOICE</option>
-              ) : (
-                synth.programOptions.map((opt, i) => (
-                  <option key={i} value={i}>
-                    {opt.label}
-                  </option>
-                ))
-              )}
+              <option value="current">{editBufferName}</option>
+              {synth.programOptions.map((opt, i) => (
+                <option key={i} value={i}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
             <button
               type="button"
@@ -533,6 +535,20 @@ export default function App() {
             yMode={yMode}
             showEnv={!combined}
           />
+
+          {showParts && (
+            <PartRack
+              configs={synth.partConfigs}
+              voiceNames={synth.partVoiceNames}
+              selectedPart={synth.selectedPart}
+              programOptions={synth.programOptions}
+              onSelect={synth.selectPart}
+              onSetPart={synth.setPart}
+              onSetVoiceRef={synth.setVoiceRef}
+              subscribeStatus={synth.subscribeStatus}
+              onClose={() => setShowParts(false)}
+            />
+          )}
         </main>
 
         <Keyboard onNoteOn={noteOn} onNoteOff={noteOff} activeNotes={activeNotes} />
@@ -546,19 +562,6 @@ export default function App() {
           defaultVoice={selectedVoice}
           onConfirm={onStoreConfirm}
           onClose={() => setShowStore(false)}
-        />
-      )}
-
-      {showParts && (
-        <PartRack
-          configs={synth.partConfigs}
-          selectedPart={synth.selectedPart}
-          programOptions={synth.programOptions}
-          onSelect={synth.selectPart}
-          onSetPart={synth.setPart}
-          onSetVoiceRef={synth.setVoiceRef}
-          subscribeStatus={synth.subscribeStatus}
-          onClose={() => setShowParts(false)}
         />
       )}
 

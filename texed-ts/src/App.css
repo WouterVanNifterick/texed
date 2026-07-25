@@ -52,6 +52,7 @@
 }
 
 .editor {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -459,15 +460,15 @@
 
 .part-strip {
   display: flex;
-  gap: 2px;
+  gap: 3px;
 }
 
 .part-btn {
   position: relative;
-  width: 22px;
-  height: 18px;
+  width: 32px;
+  height: 26px;
   padding: 0;
-  font: 10px/1 var(--mono);
+  font: 14px/1 var(--mono);
   font-weight: 700;
   color: var(--dim);
   background: #100e07;
@@ -2109,6 +2110,23 @@ button.start:hover {
   align-items: center;
   justify-content: center;
   background: rgb(0 0 0 / 60%);
+}
+
+/* Region-scoped variant: covers only the editor (middle) area, so the
+   TopBar (performance/engine switching) and the piano keyboard footer stay
+   interactive while the Part Rack is open. Relies on .editor being a
+   positioning context (position: relative). */
+.partrack-overlay--region {
+  position: absolute;
+  z-index: 30;
+  background: rgb(0 0 0 / 35%);
+  backdrop-filter: blur(4px);
+  border-radius: 6px;
+}
+
+.partrack-overlay--region .partrack {
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .partrack {

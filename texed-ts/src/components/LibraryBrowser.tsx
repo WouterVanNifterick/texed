@@ -5,7 +5,7 @@
 // mirrors whatever is in the rack's voice memory.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DexedSynth } from '../audio/useDexedSynth';
+import type { Synth } from '../audio/useSynth';
 import type { VoiceBankId } from '@texed/dx7-format/voice-library';
 import {
   buildSearchIndex,
@@ -24,7 +24,7 @@ const AUDITION_NOTE = 60;
 const SEARCH_LIMIT = 200;
 
 interface LibraryBrowserProps {
-  synth: DexedSynth;
+  synth: Synth;
   showMsg: (msg: string) => void;
   onClose: () => void;
 }

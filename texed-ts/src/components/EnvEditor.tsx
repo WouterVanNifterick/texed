@@ -4,7 +4,7 @@
 // rate (inverted from the engine timing), vertical sets the stage level.
 
 import { useId, useMemo, useRef } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
 import {
   simulateAmpEnv,
   simulatePitchEnv,

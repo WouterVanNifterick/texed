@@ -17,6 +17,7 @@ import { RACK_STATE_SCHEMA } from '@texed/dx7-format/rack-state';
 import { volumeToGain, type GlobalSettings } from '@texed/dx7-format/global-settings';
 import { identifySysex, SysexKind, cartridgeFromSyx } from '@texed/dx7-format/sysex';
 import { amemPayloadFromFrame } from '@texed/dx7-format/amem';
+import { getVoiceName } from '@texed/dx7-format/params';
 import {
   VoiceLibrary,
   defaultVoiceRef,
@@ -421,6 +422,12 @@ export class SynthRack {
 
   getVoiceData(index = this.selected): Uint8Array {
     return this.parts[index].getVoiceData();
+  }
+
+  /** Voice name held in each part's edit buffer (the live 156-byte voice),
+   * independent of the library slot the part was loaded from. */
+  getVoiceNames(): string[] {
+    return this.parts.map((p) => getVoiceName(p.getVoiceData()));
   }
 
   getSupplementData(index = this.selected): Uint8Array {

@@ -3,7 +3,7 @@
 // status updates never re-render the whole panel.
 
 import { memo } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
 import {
   OP,
   G,

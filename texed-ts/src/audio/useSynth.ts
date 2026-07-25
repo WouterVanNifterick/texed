@@ -24,7 +24,7 @@ export interface BankInfo {
   populated: boolean;
 }
 
-export interface DexedSynth {
+export interface Synth {
   start: () => Promise<void>;
   programOptions: ProgramOption[];
   /** The four half-banks with populated flags (mirrors the worklet library). */
@@ -55,6 +55,8 @@ export interface DexedSynth {
   setVolume: (volume: number) => void;
   panic: () => void;
   partConfigs: PartConfig[];
+  /** Voice name in each part's edit buffer (live voice, not the library slot). */
+  partVoiceNames: string[];
   selectedPart: number;
   selectPart: (index: number) => void;
   setPart: (index: number, config: Partial<PartConfig>) => void;
@@ -97,7 +99,7 @@ export function useStatus<T>(
   return value;
 }
 
-export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
+export function useSynth(externalPort?: SynthPort): Synth {
   // The transport is swappable: the default WorkletPort runs the TS engine
   // locally; a hardware-MIDI or native-bridge port can be passed in instead.
   const portRef = useRef<SynthPort | null>(externalPort ?? null);
@@ -120,6 +122,7 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
   const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_GLOBAL_SETTINGS);
   const [microtuningNames, setMicrotuningNames] = useState<string[]>([]);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
+  const [partVoiceNames, setPartVoiceNames] = useState<string[]>([]);
   const [selectedPart, setSelectedPart] = useState(0);
   const [performanceNames, setPerformanceNames] = useState<string[]>([]);
   const [performanceIndex, setPerformanceIndex] = useState(0);
@@ -148,6 +151,7 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
           setMicrotuningNames(m.microtuningNames);
         } else if (m.type === 'parts') {
           setPartConfigs(m.configs);
+          setPartVoiceNames(m.voiceNames);
           setSelectedPart(m.selectedPart);
         } else if (m.type === 'performances') {
           setPerformanceNames(m.names);
@@ -366,7 +370,7 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
 
   // Stable identity between synth-state changes, so consumers can depend on
   // the object (or its methods) without re-running effects every render.
-  return useMemo<DexedSynth>(
+  return useMemo<Synth>(
     () => ({
       start,
       programOptions,
@@ -393,6 +397,7 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       setVolume,
       panic,
       partConfigs,
+      partVoiceNames,
       selectedPart,
       selectPart,
       setPart,
@@ -435,6 +440,7 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       setVolume,
       panic,
       partConfigs,
+      partVoiceNames,
       selectedPart,
       selectPart,
       setPart,

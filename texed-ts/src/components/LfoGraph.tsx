@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { lfoSource } from '@texed/dx7-engine/lfo';
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 const NO_SUB: Subscribe = () => () => {};

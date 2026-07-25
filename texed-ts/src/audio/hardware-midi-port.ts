@@ -39,6 +39,8 @@ export class HardwareMidiPort implements SynthPort {
       type: 'parts',
       configs: Array.from({ length: NUM_PARTS }, (_, i) => defaultPartConfig(i === 0)),
       selectedPart: 0,
+      // Hardware can't be queried for per-part names; fall back to labels.
+      voiceNames: Array.from({ length: NUM_PARTS }, () => ''),
     });
     this.emit({ type: 'programState', options: [], banks: [] });
     this.emit({ type: 'settings', settings: { ...DEFAULT_GLOBAL_SETTINGS }, microtuningNames: [] });

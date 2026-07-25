@@ -9,7 +9,7 @@ import { voiceParamChangeSysex } from '@texed/dx7-format/sysex';
 import { HardwareMidiPort } from './hardware-midi-port';
 import type { MidiConnection } from './midi';
 
-/** Hardware editing port (?hw mode): pass to useDexedSynth to edit a hardware
+/** Hardware editing port (?hw mode): pass to useSynth to edit a hardware
  * synth instead of the local engine. Bound to the same connection and output
  * target as the live mirror below, so the settings UI drives both. */
 export const hardwarePort = new HardwareMidiPort();

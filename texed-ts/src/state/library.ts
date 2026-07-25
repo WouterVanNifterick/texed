@@ -142,7 +142,7 @@ export function buildSearchIndex(manifest: LibraryManifest): LibVoiceHit[] {
   return hits;
 }
 
-/** The synth methods loadPerformanceSet needs (subset of DexedSynth). */
+/** The synth methods loadPerformanceSet needs (subset of Synth). */
 export interface PerformanceLoaderSynth {
   loadBankInto: (
     bank: (typeof VOICE_BANK_ORDER)[number],

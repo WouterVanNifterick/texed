@@ -2,7 +2,7 @@
 // Carriers are filled, modulators outlined, self-feedback shown as a loop.
 // Node brightness reflects static output level plus live envelope amplitude.
 
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
 import { OP, G, opBase } from '@texed/dx7-format/params';
 import { algoGraph } from '../state/algo';
 import { opColor } from '../state/op-colors';

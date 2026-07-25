@@ -233,6 +233,8 @@ export interface PartsMsg {
   type: 'parts';
   configs: PartConfig[];
   selectedPart: number;
+  /** Voice name in each part's edit buffer (live voice, not the library slot). */
+  voiceNames: string[];
 }
 
 export interface PerformancesMsg {

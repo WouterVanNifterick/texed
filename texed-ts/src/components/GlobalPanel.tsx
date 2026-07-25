@@ -2,7 +2,7 @@
 // the pitch envelope and the DX7II AMEM supplement.
 
 import { memo, useState } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
 import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/params';
 import * as Sup from '@texed/dx7-format/supplement';
 import { helpProps } from '../state/help';

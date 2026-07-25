@@ -50,6 +50,7 @@ class DexedProcessor extends AudioWorkletProcessor {
       type: 'parts',
       configs: this.rack.getPartConfigs(),
       selectedPart: this.rack.selectedPart,
+      voiceNames: this.rack.getVoiceNames(),
     });
   }
 
@@ -92,6 +93,7 @@ class DexedProcessor extends AudioWorkletProcessor {
       if (v) {
         this.rack.loadVoiceForPart(this.rack.selectedPart, v);
         this.postVoice();
+        this.postParts();
       }
       return;
     }
@@ -99,6 +101,7 @@ class DexedProcessor extends AudioWorkletProcessor {
     if (result.singleVoice) {
       this.rack.loadVoiceForPart(this.rack.selectedPart, result.singleVoice);
       this.postVoice();
+      this.postParts();
       return;
     }
 
@@ -137,6 +140,8 @@ class DexedProcessor extends AudioWorkletProcessor {
           msg.supplement ? new Uint8Array(msg.supplement) : undefined,
         );
         if (target === this.rack.selectedPart) this.postVoice();
+        // The edit-buffer name may have changed; refresh the rack view.
+        this.postParts();
         break;
       }
       case MsgType.LoadCart:

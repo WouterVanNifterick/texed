@@ -5,12 +5,14 @@
 import { useEffect, useState } from 'react';
 import type { PartConfig, ProgramOption } from '@texed/dx7-engine/synth-rack';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
-import { programIndexForVoice } from '../audio/useDexedSynth';
-import type { SynthStatus } from '../audio/useDexedSynth';
+import { programIndexForVoice } from '../audio/useSynth';
+import type { SynthStatus } from '../audio/useSynth';
 import { Knob, NoteRange, PartSlider } from './ui';
 
 interface PartRackProps {
   configs: PartConfig[];
+  /** Voice name in each part's edit buffer (live voice, not the library slot). */
+  voiceNames: string[];
   selectedPart: number;
   programOptions: ProgramOption[];
   onSelect: (index: number) => void;
@@ -22,6 +24,7 @@ interface PartRackProps {
 
 export function PartRack({
   configs,
+  voiceNames,
   selectedPart,
   programOptions,
   onSelect,
@@ -43,7 +46,7 @@ export function PartRack({
   }, [onClose]);
 
   return (
-    <div className="partrack-overlay" onClick={onClose}>
+    <div className="partrack-overlay partrack-overlay--region" onClick={onClose}>
       <div className="partrack" onClick={(e) => e.stopPropagation()}>
         <div className="partrack-header">
           <span className="partrack-title">PART RACK</span>
@@ -77,8 +80,10 @@ export function PartRack({
             {configs.map((cfg, i) => {
               const selected = i === selectedPart;
               const progIdx = programIndexForVoice(programOptions, cfg.voice);
-              const voiceLabel = cfg.voiceLabel ?? programOptions[progIdx]?.label ?? 'INIT VOICE';
-              const selectValue = progIdx >= 0 ? progIdx : 'unresolved';
+              // Show the live edit-buffer name; fall back to the resolved library
+              // label only if the buffer name has not arrived yet.
+              const originLabel = cfg.voiceLabel ?? programOptions[progIdx]?.label ?? 'INIT VOICE';
+              const editName = voiceNames[i]?.trim() || originLabel;
               const isSlave = i > 0 && cfg.link;
               let masterIdx = i;
               while (masterIdx > 0 && configs[masterIdx].link) masterIdx--;
@@ -137,28 +142,29 @@ export function PartRack({
                       <td>
                         <select
                           className="prog"
-                          value={selectValue}
+                          // The edit-buffer name is the current value; the bank
+                          // list is a picker for loading a different voice.
+                          value="current"
+                          title={
+                            progIdx >= 0
+                              ? `Loaded from ${originLabel}`
+                              : 'Not stored in a loaded bank'
+                          }
                           onChange={(e) => {
                             const val = e.target.value;
-                            if (val === 'unresolved') return;
+                            if (val === 'current') return;
                             const opt = programOptions[Number(val)];
                             if (opt) onSetVoiceRef(opt.ref, i);
                           }}
                           onClick={(e) => e.stopPropagation()}
                           disabled={programOptions.length === 0}
                         >
-                          {programOptions.length === 0 ? (
-                            <option value="unresolved">{voiceLabel}</option>
-                          ) : (
-                            <>
-                              {progIdx < 0 && <option value="unresolved">{voiceLabel}</option>}
-                              {programOptions.map((opt, p) => (
-                                <option key={p} value={p}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </>
-                          )}
+                          <option value="current">{editName}</option>
+                          {programOptions.map((opt, p) => (
+                            <option key={p} value={p}>
+                              {opt.label}
+                            </option>
+                          ))}
                         </select>
                       </td>
                       <td className="td-slider">

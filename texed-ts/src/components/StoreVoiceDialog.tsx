@@ -1,14 +1,14 @@
 // Modal to name a voice and pick a bank slot before storing the edit buffer.
 
 import { useEffect, useMemo, useState } from 'react';
-import type { DexedSynth } from '../audio/useDexedSynth';
-import { programIndexForVoice } from '../audio/useDexedSynth';
+import type { Synth } from '../audio/useSynth';
+import { programIndexForVoice } from '../audio/useSynth';
 import { getVoiceName } from '@texed/dx7-format/params';
 import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
 import { VOICE_BANK_LABELS } from '@texed/dx7-format/voice-library';
 
 interface StoreVoiceDialogProps {
-  synth: DexedSynth;
+  synth: Synth;
   defaultVoice: VoiceRef | undefined;
   onConfirm: (name: string, dest: VoiceRef, destLabel: string) => void;
   onClose: () => void;

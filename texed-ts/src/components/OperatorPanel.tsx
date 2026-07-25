@@ -246,6 +246,7 @@ export const OperatorPanel = memo(function OperatorPanel({
             rightDepth={v(OP.rightDepth)}
             leftCurve={v(OP.leftCurve)}
             rightCurve={v(OP.rightCurve)}
+            color={OP_COLORS[opNum - 1]}
             onChange={(field: ScalingField, value) => setParam(base + OP[field], value)}
           />
         </div>

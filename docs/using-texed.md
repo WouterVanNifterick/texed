@@ -52,7 +52,8 @@ Details of bundled collections live in [patch-library.md](patch-library.md).
 
 - Supported imports include standard DX7 voice dumps and many multi-voice / performance SysEx
   files Texed recognizes (same loader as the CLI — see [cli.md](cli.md)).
-- You can also **drag and drop** `.syx` onto the app after starting.
+- You can also **drag and drop** `.syx` or MiniDexed performance `.ini` files onto the app after starting.
+- **MiniDexed `.ini`:** LOAD and SAVE support 8-TG performance files (`performance.ini`). Routing, volume, pan, note limits, and embedded `VoiceData` apply in Texed; FX and other MiniDexed-only keys are kept on save but not applied while editing.
 
 ## Hardware MIDI editor
 

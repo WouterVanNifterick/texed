@@ -1,7 +1,7 @@
 # Texed
 
 Browser-based FM synthesizer and patch editor: emulates Yamaha **DX7**, **DX7II**, **TX802**,
-and **TX816**-style multi-timbral setups (eight parts, performances, up to 128-voice polyphony).
+and **TX816**-style multi-timbral setups (eight parts, performances, up to 256-voice polyphony).
 
 **Live demo: https://woutervannifterick.github.io/texed/**
 
@@ -22,7 +22,7 @@ More detail: [docs/using-texed.md](docs/using-texed.md). Hardware MIDI editor:
 | Timbrality                      |    1     |   1   |    2     |   8   |   8   |   8   |
 | Load Performances / Banks       |    ❌     |   ❌   |    ✅     |   ✅   |   ✅   |   ✅   |
 | Additional routing + modulation |    ❌     |   ✅   |    ✅     |   ✅   |   ❌   |   ✅   |
-| Polyphony                       |    16    |  16   |    16    |  16   |  128  |  128  |
+| Polyphony                       |    16    |  16   |    16    |  16   |  128  |  256  |
 | MIDI-in Ports                   |    1     |   1   |    1     |   1   |   8   |  all  |
 | MKI operator                    |    ✅     |   ✅   |    ❌     |   ❌   |   ✅   |   ✅   |
 | MKII operator                   |    ❌     |   ✅   |    ✅     |   ✅   |   ❌   |   ✅   |

@@ -11,7 +11,7 @@ import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
 import {
   makeYMap,
-  curvePoints,
+  curveSegments,
   OP_COLORS,
   PITCH_COLOR,
   type YMode,
@@ -70,7 +70,7 @@ export function EnvOverlay({
       key: string;
       sel: EnvSelection;
       color: string;
-      points: string;
+      segments: { points: string; held: boolean }[];
       kind: 'amp' | 'pitch';
     }[] = [];
     for (let opNum = 1; opNum <= 6; opNum++) {
@@ -83,7 +83,7 @@ export function EnvOverlay({
         key: `op${opNum}`,
         sel: opNum,
         color: OP_COLORS[opNum - 1],
-        points: curvePoints(trace, g),
+        segments: curveSegments(trace, g),
         kind: 'amp',
       });
     }
@@ -94,7 +94,7 @@ export function EnvOverlay({
       key: 'pitch',
       sel: 'pitch',
       color: PITCH_COLOR,
-      points: curvePoints(pt, pg),
+      segments: curveSegments(pt, pg),
       kind: 'pitch',
     });
     return out;
@@ -214,17 +214,19 @@ export function EnvOverlay({
           />
           {bg
             .filter((b) => b.sel !== selected)
-            .map((b) => (
-              <polyline
-                key={b.key}
-                className={`env-bg-trace${b.kind === 'pitch' ? ' pitch' : ''}`}
-                points={b.points}
-                style={{ stroke: b.color }}
-                onPointerDown={() => onSelect(b.sel)}
-                onPointerEnter={() => typeof b.sel === 'number' && onHoverOp(b.sel)}
-                onPointerLeave={() => onHoverOp(null)}
-              />
-            ))}
+            .flatMap((b) =>
+              b.segments.map((s, i) => (
+                <polyline
+                  key={`${b.key}-${i}`}
+                  className={`env-bg-trace${b.kind === 'pitch' ? ' pitch' : ''}${s.held ? ' held' : ''}`}
+                  points={s.points}
+                  style={{ stroke: b.color }}
+                  onPointerDown={() => onSelect(b.sel)}
+                  onPointerEnter={() => typeof b.sel === 'number' && onHoverOp(b.sel)}
+                  onPointerLeave={() => onHoverOp(null)}
+                />
+              )),
+            )}
           {/* Paint note/velocity crosshair: note ↔ horizontal, velocity ↔ vertical. */}
           <line className="env-xhair-v" x1={xhairX} y1={0} x2={xhairX} y2={H} />
           <line className="env-xhair-h" x1={0} y1={xhairY} x2={W} y2={xhairY} />

@@ -131,7 +131,7 @@ export function usePartSelectKeys(enabled: boolean, selectPart: (index: number) 
 }
 
 export function patchFiles(files: FileList | File[]): File[] {
-  return Array.from(files).filter((f) => /\.(syx|dx7voice)$/i.test(f.name));
+  return Array.from(files).filter((f) => /\.(syx|mx|dx7voice|ini)$/i.test(f.name));
 }
 
 function isFileDrag(dt: DataTransfer | null): boolean {

@@ -21,67 +21,73 @@ export function Keyboard({
   onNoteOff,
   activeNotes,
 }: KeyboardProps) {
-  const pressed = useRef<number | null>(null);
-  const dragging = useRef(false);
+  // Keyed by pointerId so multiple simultaneous touches (multi-touch on
+  // tablets/phones) each track and glide independently.
+  const pressedByPointer = useRef<Map<number, number>>(new Map());
 
   const notes: number[] = [];
   for (let i = 0; i < octaves * 12; i++) notes.push(startNote + i);
   const whiteNotes = notes.filter((n) => !isBlack(n));
 
   const press = useCallback(
-    (note: number) => {
-      pressed.current = note;
+    (pointerId: number, note: number) => {
+      pressedByPointer.current.set(pointerId, note);
       onNoteOn(note, 100);
     },
     [onNoteOn],
   );
 
   const release = useCallback(
-    (note: number) => {
-      if (pressed.current === note) pressed.current = null;
+    (pointerId: number) => {
+      const note = pressedByPointer.current.get(pointerId);
+      if (note === undefined) return;
+      pressedByPointer.current.delete(pointerId);
       onNoteOff(note);
     },
     [onNoteOff],
   );
 
-  // Release the held key when the pointer goes up anywhere or focus leaves
-  // the window (e.g. program dropdown).
+  // Release every held key when focus leaves the window (e.g. program
+  // dropdown), and release an individual pointer's key when it goes up or
+  // is cancelled anywhere (not just over the key it started on).
   useEffect(() => {
-    const releaseHeld = () => {
-      dragging.current = false;
-      const note = pressed.current;
-      if (note !== null) release(note);
+    const releaseAll = () => {
+      for (const note of pressedByPointer.current.values()) onNoteOff(note);
+      pressedByPointer.current.clear();
     };
-    window.addEventListener('blur', releaseHeld);
-    document.addEventListener('pointerup', releaseHeld);
+    const onDocPointerUp = (e: PointerEvent) => release(e.pointerId);
+    const onDocPointerCancel = (e: PointerEvent) => release(e.pointerId);
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('pointerup', onDocPointerUp);
+    document.addEventListener('pointercancel', onDocPointerCancel);
     return () => {
-      window.removeEventListener('blur', releaseHeld);
-      document.removeEventListener('pointerup', releaseHeld);
+      window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('pointerup', onDocPointerUp);
+      document.removeEventListener('pointercancel', onDocPointerCancel);
     };
-  }, [release]);
+  }, [release, onNoteOff]);
 
   // No pointer capture, so a drag glides across keys (glissando); touch
-  // captures implicitly, so release it explicitly.
+  // captures implicitly, so release it explicitly. Each pointerId glides
+  // independently, so two fingers can glissando two different keys at once.
   const keyHandlers = (note: number) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
-      dragging.current = true;
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
-      press(note);
+      press(e.pointerId, note);
     },
-    onPointerEnter: () => {
-      if (!dragging.current || pressed.current === note) return;
-      if (pressed.current !== null) release(pressed.current);
-      press(note);
+    onPointerEnter: (e: React.PointerEvent<HTMLButtonElement>) => {
+      const current = pressedByPointer.current.get(e.pointerId);
+      if (current === undefined || current === note) return;
+      release(e.pointerId);
+      press(e.pointerId, note);
     },
-    onPointerUp: () => {
-      dragging.current = false;
-      release(note);
+    onPointerUp: (e: React.PointerEvent<HTMLButtonElement>) => {
+      release(e.pointerId);
     },
-    onPointerCancel: () => {
-      dragging.current = false;
-      release(note);
+    onPointerCancel: (e: React.PointerEvent<HTMLButtonElement>) => {
+      release(e.pointerId);
     },
   });
 

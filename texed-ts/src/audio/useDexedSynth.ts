@@ -12,6 +12,7 @@ import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { createDefaultAmem } from '@texed/dx7-format/amem';
 import { voiceRefEquals } from '@texed/dx7-format/voice-library';
+import { DEFAULT_GLOBAL_SETTINGS, type GlobalSettings } from '@texed/dx7-format/global-settings';
 import { WorkletPort } from './worklet-port';
 import { emitVoiceParam, emitSupplement } from './midi-out';
 
@@ -32,7 +33,10 @@ export interface DexedSynth {
   voice: Uint8Array;
   /** 35-byte DX7II AMEM supplement for the selected part's voice. */
   supplement: Uint8Array;
-  masterTuneCents: number;
+  /** Global system-setup settings (engine, volume, polyphony, master tune, micro-tuning). */
+  settings: GlobalSettings;
+  /** Display names of loaded micro-tuning tables; index maps to settings.microtuning. */
+  microtuningNames: string[];
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
   controlChange: (controller: number, value: number, channel?: number) => void;
@@ -45,8 +49,10 @@ export interface DexedSynth {
   setParam: (offset: number, value: number) => void;
   setSupplementParam: (offset: number, value: number) => void;
   setMasterTune: (cents: number) => void;
+  /** Select the active micro-tuning (-1 = standard tuning). */
+  setMicrotuning: (index: number) => void;
   setVoice: (voice: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => void;
-  setMasterGain: (gain: number) => void;
+  setVolume: (volume: number) => void;
   panic: () => void;
   partConfigs: PartConfig[];
   selectedPart: number;
@@ -54,8 +60,18 @@ export interface DexedSynth {
   setPart: (index: number, config: Partial<PartConfig>) => void;
   setPolyphonyCap: (cap: number) => void;
   performanceNames: string[];
+  /** Selected library performance, or -1 when loaded from a file. */
   performanceIndex: number;
+  /** Display name of the currently loaded performance (edit-buffer identity). */
+  performanceName: string;
   selectPerformance: (index: number) => void;
+  /** Load a full performance (8 parts + voices) into the edit buffers from a
+   * non-library source (e.g. a MiniDexed .ini); sets `performanceName`. */
+  loadPerformance: (
+    name: string,
+    parts: Partial<PartConfig>[],
+    voices: (Uint8Array | null)[],
+  ) => void;
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
   /** Request a bank half as SysEx; cb gets null when the bank is empty. */
   requestBankDump: (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => void;
@@ -101,11 +117,13 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
   useEffect(() => {
     supplementRef.current = supplement;
   }, [supplement]);
-  const [masterTuneCents, setMasterTuneCents] = useState(0);
+  const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_GLOBAL_SETTINGS);
+  const [microtuningNames, setMicrotuningNames] = useState<string[]>([]);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
   const [selectedPart, setSelectedPart] = useState(0);
   const [performanceNames, setPerformanceNames] = useState<string[]>([]);
   const [performanceIndex, setPerformanceIndex] = useState(0);
+  const [performanceName, setPerformanceName] = useState('');
 
   const post = useCallback(
     (msg: SynthCommand, transfer?: ArrayBuffer[]) => {
@@ -125,14 +143,16 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
         } else if (m.type === 'voice') {
           setVoiceState(new Uint8Array(m.data));
           setSupplementState(new Uint8Array(m.supplement));
-        } else if (m.type === 'masterTune') {
-          setMasterTuneCents(m.cents);
+        } else if (m.type === 'settings') {
+          setSettings(m.settings);
+          setMicrotuningNames(m.microtuningNames);
         } else if (m.type === 'parts') {
           setPartConfigs(m.configs);
           setSelectedPart(m.selectedPart);
         } else if (m.type === 'performances') {
           setPerformanceNames(m.names);
           setPerformanceIndex(m.index);
+          setPerformanceName(m.name);
         } else if (m.type === 'bankDump') {
           bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
           bankDumpCb.current = null;
@@ -171,7 +191,10 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     [post],
   );
   const setEngine = useCallback(
-    (engine: number) => post({ type: MsgType.SetEngine, engine }),
+    (engine: number) => {
+      setSettings((s) => ({ ...s, engine }));
+      post({ type: MsgType.SetEngine, engine });
+    },
     [post],
   );
   const setProgram = useCallback(
@@ -218,8 +241,16 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
 
   const setMasterTune = useCallback(
     (cents: number) => {
-      setMasterTuneCents(cents);
+      setSettings((s) => ({ ...s, masterTuneCents: cents }));
       post({ type: MsgType.SetMasterTune, cents });
+    },
+    [post],
+  );
+
+  const setMicrotuning = useCallback(
+    (index: number) => {
+      setSettings((s) => ({ ...s, microtuning: index }));
+      post({ type: MsgType.SetMicrotuning, index });
     },
     [post],
   );
@@ -246,8 +277,11 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     [post],
   );
 
-  const setMasterGain = useCallback(
-    (gain: number) => post({ type: MsgType.SetMasterGain, gain }),
+  const setVolume = useCallback(
+    (volume: number) => {
+      setSettings((s) => ({ ...s, volume }));
+      post({ type: MsgType.SetVolume, volume });
+    },
     [post],
   );
   const panic = useCallback(() => post({ type: MsgType.Panic }), [post]);
@@ -261,12 +295,27 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
     [post],
   );
   const setPolyphonyCap = useCallback(
-    (cap: number) => post({ type: MsgType.SetPolyphonyCap, cap }),
+    (cap: number) => {
+      setSettings((s) => ({ ...s, polyphony: cap }));
+      post({ type: MsgType.SetPolyphonyCap, cap });
+    },
     [post],
   );
 
   const selectPerformance = useCallback(
     (index: number) => post({ type: MsgType.SelectPerformance, index }),
+    [post],
+  );
+
+  const loadPerformance = useCallback(
+    (name: string, parts: Partial<PartConfig>[], voices: (Uint8Array | null)[]) => {
+      const payload = voices.map((v) => (v ? new Uint8Array(v) : null));
+      const transfer: ArrayBuffer[] = [];
+      for (const v of payload) {
+        if (v) transfer.push(v.buffer as ArrayBuffer);
+      }
+      post({ type: MsgType.LoadPerformance, name, parts, voices: payload }, transfer);
+    },
     [post],
   );
 
@@ -325,7 +374,8 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       loadReport,
       voice,
       supplement,
-      masterTuneCents,
+      settings,
+      microtuningNames,
       noteOn,
       noteOff,
       controlChange,
@@ -338,8 +388,9 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       setParam,
       setSupplementParam,
       setMasterTune,
+      setMicrotuning,
       setVoice,
-      setMasterGain,
+      setVolume,
       panic,
       partConfigs,
       selectedPart,
@@ -348,7 +399,9 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       setPolyphonyCap,
       performanceNames,
       performanceIndex,
+      performanceName,
       selectPerformance,
+      loadPerformance,
       subscribeStatus,
       requestBankDump,
       storeVoice,
@@ -363,7 +416,8 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       loadReport,
       voice,
       supplement,
-      masterTuneCents,
+      settings,
+      microtuningNames,
       noteOn,
       noteOff,
       controlChange,
@@ -376,8 +430,9 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       setParam,
       setSupplementParam,
       setMasterTune,
+      setMicrotuning,
       setVoice,
-      setMasterGain,
+      setVolume,
       panic,
       partConfigs,
       selectedPart,
@@ -386,7 +441,9 @@ export function useDexedSynth(externalPort?: SynthPort): DexedSynth {
       setPolyphonyCap,
       performanceNames,
       performanceIndex,
+      performanceName,
       selectPerformance,
+      loadPerformance,
       subscribeStatus,
       requestBankDump,
       storeVoice,

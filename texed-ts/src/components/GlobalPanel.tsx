@@ -142,7 +142,12 @@ export const GlobalPanel = memo(function GlobalPanel({
           <span className="panel-title">LFO</span>
           <LfoMeter subscribe={subscribeStatus} />
         </div>
-        <LfoGraph waveform={voice[G.lfoWave]} speed={voice[G.lfoSpeed]} delay={voice[G.lfoDelay]} />
+        <LfoGraph
+          waveform={voice[G.lfoWave]}
+          speed={voice[G.lfoSpeed]}
+          delay={voice[G.lfoDelay]}
+          subscribe={subscribeStatus}
+        />
         <div className="ctl-row">
           <Cycle
             label="WAVE"

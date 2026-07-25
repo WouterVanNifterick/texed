@@ -22,7 +22,7 @@ class DexedProcessor extends AudioWorkletProcessor {
     this.postVoice();
     this.postParts();
     this.postProgramState();
-    this.postMasterTune();
+    this.postSettings();
   }
 
   private post(msg: SynthEvent): void {
@@ -37,8 +37,12 @@ class DexedProcessor extends AudioWorkletProcessor {
     });
   }
 
-  private postMasterTune(): void {
-    this.post({ type: 'masterTune', cents: this.rack.masterTuneCents });
+  private postSettings(): void {
+    this.post({
+      type: 'settings',
+      settings: this.rack.getGlobalSettings(),
+      microtuningNames: this.rack.getMicrotuningNames(),
+    });
   }
 
   private postParts(): void {
@@ -50,8 +54,8 @@ class DexedProcessor extends AudioWorkletProcessor {
   }
 
   private postPerformances(): void {
-    const { names, index } = this.rack.getPerformanceState();
-    this.post({ type: 'performances', names, index });
+    const { names, index, name } = this.rack.getPerformanceState();
+    this.post({ type: 'performances', names, index, name });
   }
 
   private postProgramState(): void {
@@ -78,7 +82,7 @@ class DexedProcessor extends AudioWorkletProcessor {
         this.rack.loadVoiceForPart(this.rack.selectedPart, result.singleVoice);
       }
       this.postVoice();
-      this.postMasterTune();
+      this.postSettings();
       return;
     }
 
@@ -162,13 +166,19 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.SetMasterTune:
         this.rack.applyMasterTuneCents(msg.cents);
-        this.postMasterTune();
+        this.postSettings();
+        break;
+      case MsgType.SetMicrotuning:
+        this.rack.setMicrotuning(msg.index);
+        this.postSettings();
         break;
       case MsgType.SetEngine:
         this.rack.setEngineType(msg.engine as 0 | 1 | 2);
+        this.postSettings();
         break;
-      case MsgType.SetMasterGain:
-        this.rack.setMasterGain(msg.gain);
+      case MsgType.SetVolume:
+        this.rack.setVolume(msg.volume);
+        this.postSettings();
         break;
       case MsgType.Panic:
         this.rack.panic();
@@ -188,6 +198,7 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.SetPolyphonyCap:
         this.rack.setPolyphonyCap(msg.cap);
+        this.postSettings();
         break;
       case MsgType.RequestBankDump:
         this.post({
@@ -198,6 +209,16 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.SelectPerformance:
         this.rack.selectPerformance(msg.index);
+        this.postParts();
+        this.postPerformances();
+        this.postVoice();
+        break;
+      case MsgType.LoadPerformance:
+        this.rack.loadPerformance(
+          msg.name,
+          msg.parts,
+          msg.voices.map((v) => (v ? new Uint8Array(v) : null)),
+        );
         this.postParts();
         this.postPerformances();
         this.postVoice();
@@ -238,7 +259,7 @@ class DexedProcessor extends AudioWorkletProcessor {
           this.postParts();
           this.postPerformances();
           this.postVoice();
-          this.postMasterTune();
+          this.postSettings();
         } catch (err) {
           this.post({
             type: 'loadReport',

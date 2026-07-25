@@ -93,7 +93,15 @@ export class SynthUnit {
     this.part.panic();
   }
 
-  getStatus(): { amps: number[]; steps: number[]; pitchStep: number; lfo: number } {
+  getStatus(): {
+    amps: number[];
+    steps: number[];
+    levels: number[];
+    pitchStep: number;
+    pitchLevel: number;
+    lfo: number;
+    lfoRestart: number;
+  } {
     return this.part.getStatus();
   }
 

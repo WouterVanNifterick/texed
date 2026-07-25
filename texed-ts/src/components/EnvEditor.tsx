@@ -18,7 +18,7 @@ import {
 import type { EnvTimeScale } from './env-time';
 import {
   makeYMap,
-  curvePoints,
+  curveSegments,
   fillPoints,
   px,
   py,
@@ -41,6 +41,7 @@ interface EnvEditorProps {
   timeScale: EnvTimeScale;
   yMode: YMode;
   stage: number; // live active stage 0..4 (highlight)
+  playLevel?: number; // live raw Q24 envelope level, for the playback dot
   onSetRate: (i: number, value: number) => void;
   onSetLevel: (i: number, value: number) => void;
   tall?: boolean;
@@ -84,7 +85,7 @@ export function EnvEditor(props: EnvEditorProps) {
   const latest = useRef({ trace, ampParams, rates, levels, ymap, timeScale, kind });
   latest.current = { trace, ampParams, rates, levels, ymap, timeScale, kind };
 
-  const line = curvePoints(trace, g);
+  const segs = curveSegments(trace, g);
   const fill = fillPoints(trace, g);
 
   // Active-stage highlight: the portion of the curve inside the playing stage.
@@ -96,6 +97,13 @@ export function EnvEditor(props: EnvEditorProps) {
           .map((p) => `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`)
           .join(' ')
       : '';
+
+  // Playback dot: sits on the curve at the live envelope level within the
+  // active stage. Hidden when idle/finished (stage 4) or no live level.
+  const playhead =
+    stage >= 0 && stage <= 3 && props.playLevel != null
+      ? playheadPoint(trace, stage, props.playLevel)
+      : null;
 
   function prevNodeTime(s: number): number {
     const t = latest.current.trace;
@@ -178,6 +186,7 @@ export function EnvEditor(props: EnvEditorProps) {
     <div
       ref={root}
       className={`env-editor${tall ? ' tall' : ''}${className ? ' ' + className : ''}`}
+      style={{ ['--curve' as string]: color }}
       onPointerMove={(e) => drag.current && applyDrag(e.clientX, e.clientY)}
       onPointerUp={() => (drag.current = null)}
       onPointerCancel={() => (drag.current = null)}
@@ -226,8 +235,24 @@ export function EnvEditor(props: EnvEditorProps) {
           className="env-gate"
         />
         <polygon className="graph-fill" fill={`url(#eg-fill-${gid})`} points={fill} />
-        <polyline className="env-shape" points={line} style={{ stroke: color }} />
+        {segs.map((s, i) => (
+          <polyline
+            key={i}
+            className={`env-shape${s.held ? ' held' : ''}`}
+            points={s.points}
+            style={{ stroke: color }}
+          />
+        ))}
         {activePts && <polyline className="env-active" points={activePts} />}
+        {playhead && (
+          <circle
+            className="env-playhead"
+            cx={px(g, playhead.timeSec)}
+            cy={py(g, playhead.levelQ24)}
+            r={2.4}
+            style={{ fill: color }}
+          />
+        )}
       </svg>
       {trace.nodes.map((n) => {
         const leftPct = (px(g, n.timeSec) / W) * 100;
@@ -283,7 +308,12 @@ export function LiveEnvEditor(
     (s) => (rest.kind === 'pitch' ? s.pitchStep : s.steps[opIdx ?? 0]),
     4,
   );
-  return <EnvEditor {...rest} stage={stage} />;
+  const playLevel = useStatus(
+    subscribe,
+    (s) => (rest.kind === 'pitch' ? s.pitchLevel : s.levels[opIdx ?? 0]),
+    0,
+  );
+  return <EnvEditor {...rest} stage={stage} playLevel={playLevel} />;
 }
 
 /** [startSec, endSec] of the given stage for the active-segment highlight. */
@@ -292,4 +322,29 @@ function stageWindow(trace: EnvTrace, stage: number): [number, number] {
   if (stage === 1) return [trace.nodes[0].timeSec, trace.nodes[1].timeSec];
   if (stage === 2) return [trace.nodes[1].timeSec, trace.nodes[2].timeSec];
   return [trace.gateSec, trace.releaseEndSec];
+}
+
+/**
+ * The curve point within the active stage's time window whose level is closest
+ * to the live envelope level — where the playback dot sits. Level is monotonic
+ * within a stage, so the nearest-level point is unambiguous; during a constant
+ * sustain/hold it parks at the sustain node.
+ */
+function playheadPoint(
+  trace: EnvTrace,
+  stage: number,
+  levelQ24: number,
+): { timeSec: number; levelQ24: number } | null {
+  const [from, to] = stageWindow(trace, stage);
+  let best: { timeSec: number; levelQ24: number } | null = null;
+  let bestErr = Infinity;
+  for (const p of trace.curve) {
+    if (p.timeSec < from - 1e-6 || p.timeSec > to + 1e-6) continue;
+    const err = Math.abs(p.levelQ24 - levelQ24);
+    if (err < bestErr) {
+      bestErr = err;
+      best = p;
+    }
+  }
+  return best;
 }

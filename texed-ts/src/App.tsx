@@ -39,6 +39,11 @@ import { StoreVoiceDialog } from './components/StoreVoiceDialog';
 import { StoreIcon } from './components/icons';
 import { helpProps } from './state/help';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
+import {
+  parseMiniDexedIni,
+  serializeMiniDexedIni,
+  type MiniDexedExtras,
+} from '@texed/dx7-format/minidexed-ini';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 
@@ -46,16 +51,14 @@ const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 // SysEx instead of the local engine (pick the output in MIDI settings).
 const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 
-/** Perceptual volume taper: knob 0-99 to master gain. */
-function masterGain(volume: number): number {
-  return (volume / 99) ** 2;
-}
+// Auto-send: how long edits must settle before the full voice dump goes out.
+const AUTO_SEND_DEBOUNCE_MS = 250;
 
 export default function App() {
   const synth = useDexedSynth(HW_MODE ? hardwarePort : undefined);
   const [started, setStarted] = useState(false);
-  const [engine, setEngine] = useState(1); // Mark I default
-  const [volume, setVolume] = useState(80);
+  // Global system-setup settings live in the engine's edit buffer; mirror them.
+  const { engine, volume, polyphony } = synth.settings;
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [selectedOp, setSelectedOp] = useState<EnvSelection>(1);
@@ -73,12 +76,13 @@ export default function App() {
   const [midiOutputs, setMidiOutputs] = useState<{ id: string; name: string }[]>([]);
   const [midiOutId, setMidiOutId] = usePersistentState<string>('midiOutId', '');
   const [midiLive, setMidiLive] = usePersistentState<'on' | 'off'>('midiLiveSend', 'off');
+  const [autoSend, setAutoSend] = usePersistentState<'on' | 'off'>('midiAutoSend', 'off');
   const [showParts, setShowParts] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showStore, setShowStore] = useState(false);
-  const [polyphony, setPolyphony] = useState(32);
   const midiRef = useRef<MidiConnection | null>(null);
   const [loadMsg, showLoadMsg] = useTransientMessage();
+  const [miniDexedExtras, setMiniDexedExtras] = useState<MiniDexedExtras | null>(null);
 
   useStageScale(1440, 1020);
 
@@ -140,18 +144,11 @@ export default function App() {
   const handleStart = useCallback(async () => {
     await synth.start();
     setStarted(true);
-    synth.setEngine(engine);
-    synth.setMasterGain(masterGain(volume));
 
     const saved = await loadSession();
     if (saved) {
+      // setFullState restores parts, edit buffers and global settings together.
       synth.setFullState(saved.rack);
-      setVolume(saved.ui.volume);
-      synth.setMasterGain(masterGain(saved.ui.volume));
-      setEngine(saved.ui.engine);
-      synth.setEngine(saved.ui.engine);
-      setPolyphony(saved.ui.polyphony);
-      synth.setPolyphonyCap(saved.ui.polyphony);
       showLoadMsg('Session restored');
     }
 
@@ -177,10 +174,11 @@ export default function App() {
     // In hardware mode every edit already goes out through the port; the live
     // mirror would duplicate each frame.
     setMidiOutLive(!HW_MODE && midiLive === 'on');
-  }, [synth, engine, volume, noteOn, noteOff, showLoadMsg, midiOutId, midiLive]);
+  }, [synth, noteOn, noteOff, showLoadMsg, midiOutId, midiLive]);
 
-  // Persist the session (debounced): every rack mutation flows through the
-  // synth's mirrored state, so the synth object identity is the change signal.
+  // Persist the session (debounced): every rack mutation (including global
+  // settings) flows through the synth's mirrored state, so the synth object
+  // identity is the change signal.
   useEffect(() => {
     if (!started) return;
     const t = window.setTimeout(() => {
@@ -189,12 +187,11 @@ export default function App() {
           schema: SESSION_SCHEMA,
           savedAt: Date.now(),
           rack,
-          ui: { volume, engine, polyphony },
         });
       });
     }, 1500);
     return () => window.clearTimeout(t);
-  }, [started, synth, volume, engine, polyphony]);
+  }, [started, synth]);
 
   useQwertyKeyboard(started, noteOn, noteOff);
   usePartSelectKeys(started, synth.selectPart);
@@ -216,21 +213,15 @@ export default function App() {
     sendVoiceDump(synth.voice, synth.supplement);
   }, [synth]);
 
-  const onEngine = useCallback(
-    (next: number) => {
-      setEngine(next);
-      synth.setEngine(next);
-    },
-    [synth],
-  );
-
-  const onVolume = useCallback(
-    (v: number) => {
-      setVolume(v);
-      synth.setMasterGain(masterGain(v));
-    },
-    [synth],
-  );
+  // Auto-send: after edits settle, push the full ACED + VCED dump. Each new
+  // voice/supplement reference restarts the timer (cleanup = debounce), so a
+  // slider drag sends once, not per frame. Skipped in ?hw mode (edits already
+  // stream through the hardware port).
+  useEffect(() => {
+    if (HW_MODE || autoSend !== 'on' || !midiOutId) return;
+    const t = setTimeout(() => sendVoiceDump(synth.voice, synth.supplement), AUTO_SEND_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [autoSend, midiOutId, synth.voice, synth.supplement]);
 
   const onSelectProgram = useCallback(
     (idx: number) => {
@@ -240,18 +231,36 @@ export default function App() {
     [synth],
   );
 
+  const applyMiniDexedIni = useCallback(
+    (text: string, fileName: string) => {
+      const { name: iniName, parts, voices, extras } = parseMiniDexedIni(text);
+      setMiniDexedExtras(extras);
+      const name = iniName || fileName.replace(/\.ini$/i, '');
+      synth.loadPerformance(name, parts, voices);
+      showLoadMsg(`Loaded MiniDexed performance · ${name}`);
+    },
+    [synth, showLoadMsg],
+  );
+
   const onLoadFiles = useCallback(
     async (files: File[]) => {
       if (!files.length) return;
-      synth.loadCart(await new Blob(files).arrayBuffer());
+      const iniFiles = files.filter((f) => /\.ini$/i.test(f.name));
+      const syxFiles = files.filter((f) => !/\.ini$/i.test(f.name));
+      for (const f of iniFiles) {
+        applyMiniDexedIni(await f.text(), f.name);
+      }
+      if (syxFiles.length) {
+        synth.loadCart(await new Blob(syxFiles).arrayBuffer());
+      }
     },
-    [synth],
+    [synth, applyMiniDexedIni],
   );
 
   const onDrop = useCallback(
     (files: File[]) => {
       if (!files.length) {
-        showLoadMsg('No .syx or .Dx7Voice files in drop');
+        showLoadMsg('No .syx, .ini, or .Dx7Voice files in drop');
         return;
       }
       void (async () => {
@@ -296,6 +305,23 @@ export default function App() {
     [synth, showLoadMsg],
   );
 
+  const onSavePerformance = useCallback(() => {
+    synth.getFullState((state) => {
+      const text = serializeMiniDexedIni({
+        name: state.performanceName,
+        parts: state.parts,
+        voices: state.editBuffers.map((eb) => eb.voice),
+        extras: miniDexedExtras,
+      });
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'performance.ini';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }, [synth, miniDexedExtras]);
+
   const onSaveVoice = useCallback(() => {
     // Single voice = DX7II additional data (ACED) followed by the voice (VCED),
     // the same pair the DX7II transmits for the current voice.
@@ -323,19 +349,17 @@ export default function App() {
           onLoadFiles={onLoadFiles}
           onSaveVoice={onSaveVoice}
           onSaveBank={onSaveBank}
+          onSavePerformance={onSavePerformance}
           engine={engine}
           engineNames={ENGINES}
-          onEngine={onEngine}
+          onEngine={synth.setEngine}
           onShowParts={() => setShowParts(true)}
           onShowLibrary={() => setShowLibrary(true)}
           polyphony={polyphony}
-          onPolyphony={(n) => {
-            setPolyphony(n);
-            synth.setPolyphonyCap(n);
-          }}
+          onPolyphony={synth.setPolyphonyCap}
           volume={volume}
-          onVolume={onVolume}
-          masterTuneCents={synth.masterTuneCents}
+          onVolume={synth.setVolume}
+          masterTuneCents={synth.settings.masterTuneCents}
           onMasterTune={synth.setMasterTune}
           midiInputs={midiInputs}
           midiOutputs={midiOutputs}
@@ -343,6 +367,8 @@ export default function App() {
           onMidiOut={setMidiOutId}
           midiLive={midiLive === 'on'}
           onMidiLive={(on) => setMidiLive(on ? 'on' : 'off')}
+          autoSend={autoSend === 'on'}
+          onAutoSend={(on) => setAutoSend(on ? 'on' : 'off')}
           onSendVoice={onSendVoice}
         />
 
@@ -542,7 +568,7 @@ export default function App() {
 
       {dragging && (
         <div className="drop-overlay" aria-hidden>
-          Drop .syx or .Dx7Voice files to load
+          Drop .syx, .ini, or .Dx7Voice files to load
         </div>
       )}
 
@@ -561,9 +587,9 @@ export default function App() {
 
             <ul className="start-features">
               <li>Dexed core</li>
-              <li>128-voice polyphony</li>
+              <li>256-voice polyphony</li>
               <li>Loads TX802 / TX816 multi-timbral performances</li>
-              <li>Drag &amp; drop .syx files</li>
+              <li>Drag &amp; drop .syx or MiniDexed .ini files</li>
               <li>Live interactive envelope editing</li>
               <li>100% free &amp; open source</li>
             </ul>

@@ -15,6 +15,7 @@ interface TopBarProps {
   onLoadFiles: (files: File[]) => void;
   onSaveVoice: () => void;
   onSaveBank: () => void;
+  onSavePerformance: () => void;
   engine: number;
   engineNames: string[];
   onEngine: (n: number) => void;
@@ -32,6 +33,8 @@ interface TopBarProps {
   onMidiOut: (id: string) => void;
   midiLive: boolean;
   onMidiLive: (on: boolean) => void;
+  autoSend: boolean;
+  onAutoSend: (on: boolean) => void;
   onSendVoice: () => void;
 }
 
@@ -60,6 +63,7 @@ export function TopBar({
   onLoadFiles,
   onSaveVoice,
   onSaveBank,
+  onSavePerformance,
   engine,
   engineNames,
   onEngine,
@@ -77,6 +81,8 @@ export function TopBar({
   onMidiOut,
   midiLive,
   onMidiLive,
+  autoSend,
+  onAutoSend,
   onSendVoice,
 }: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -138,7 +144,7 @@ export function TopBar({
       <span className="bar-divider" aria-hidden />
 
       <div className="bar-group">
-        {synth.performanceNames.length > 0 && (
+        {(synth.performanceName || synth.performanceNames.length > 0) && (
           <label
             className="perf-ctl"
             {...helpProps(
@@ -151,6 +157,10 @@ export function TopBar({
               value={synth.performanceIndex}
               onChange={(e) => synth.selectPerformance(Number(e.target.value))}
             >
+              {synth.performanceIndex < 0 && (
+                // Loaded from a file: show its name as the current selection.
+                <option value={-1}>{synth.performanceName || 'INIT'}</option>
+              )}
               {synth.performanceNames.map((perfName, i) => (
                 <option key={i} value={i}>
                   {String(i + 1).padStart(2, '0')} {perfName || 'INIT'}
@@ -178,7 +188,7 @@ export function TopBar({
           onClick={() => fileRef.current?.click()}
           {...helpProps(
             'LOAD',
-            'Loads .syx (VMEM banks, AMEM, single VCED voices, performances) or raw .Dx7Voice files - or drop them anywhere.',
+            'Loads .syx, MiniDexed performance .ini, or raw .Dx7Voice files - or drop them anywhere.',
           )}
         >
           LOAD
@@ -186,7 +196,7 @@ export function TopBar({
         <input
           ref={fileRef}
           type="file"
-          accept=".syx,.Dx7Voice"
+          accept=".syx,.Dx7Voice,.ini"
           multiple
           hidden
           onChange={(e) => {
@@ -206,7 +216,7 @@ export function TopBar({
             aria-label="Save"
             {...helpProps(
               'SAVE',
-              'Save the current voice (ACED + VCED) or the whole 32-voice bank (VMEM + AMEM) as a .syx file.',
+              'Save voice or bank as .syx, or the 8-part rack as a MiniDexed performance .ini.',
             )}
           >
             <DownloadIcon />
@@ -234,6 +244,17 @@ export function TopBar({
               >
                 Save bank
                 <span className="dl-menu-sub">32 voices · VMEM + AMEM</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setDlOpen(false);
+                  onSavePerformance();
+                }}
+              >
+                Save performance
+                <span className="dl-menu-sub">MiniDexed · 8 TG performance.ini</span>
               </button>
             </div>
           )}
@@ -348,13 +369,36 @@ export function TopBar({
               >
                 <span className="settings-row-label">Polyphony</span>
                 <select value={polyphony} onChange={(e) => onPolyphony(Number(e.target.value))}>
-                  {[8, 16, 24, 32, 48, 64, 96, 128].map((n) => (
+                  {[8, 16, 24, 32, 48, 64, 96, 128, 192, 256].map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
                   ))}
                 </select>
               </label>
+
+              {synth.microtuningNames.length > 0 && (
+                <label
+                  className="settings-row"
+                  {...helpProps(
+                    'MICRO TUNE',
+                    'DX7II micro-tuning table applied to all parts. Standard is 12-tone equal temperament.',
+                  )}
+                >
+                  <span className="settings-row-label">Micro tune</span>
+                  <select
+                    value={synth.settings.microtuning}
+                    onChange={(e) => synth.setMicrotuning(Number(e.target.value))}
+                  >
+                    <option value={-1}>Standard</option>
+                    {synth.microtuningNames.map((name, i) => (
+                      <option key={i} value={i}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <label
                 className="settings-row"
@@ -381,6 +425,16 @@ export function TopBar({
                   on={midiLive}
                   onChange={onMidiLive}
                   help="Stream VCED/ACED parameter changes to the MIDI output as you edit."
+                />
+              </div>
+
+              <div className="settings-row">
+                <span className="settings-row-label">Auto-send</span>
+                <Toggle
+                  label="AUTO"
+                  on={autoSend}
+                  onChange={onAutoSend}
+                  help="Automatically send the full voice (ACED + VCED) to the MIDI output shortly after you stop editing."
                 />
               </div>
             </div>

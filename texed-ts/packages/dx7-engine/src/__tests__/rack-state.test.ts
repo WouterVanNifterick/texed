@@ -23,6 +23,9 @@ describe('SynthRack.getFullState / restoreFullState', () => {
     rack.setPartConfig(1, { enabled: true, rxChannel: 2, volume: 0.5, pan: -0.3 });
     rack.selectPart(1);
     rack.applyMasterTuneCents(23);
+    rack.setEngineType(2);
+    rack.setVolume(55);
+    rack.setPolyphonyCap(64);
     rack.setVoiceParamForPart(0, 0, 42); // unsaved edit on part 0's buffer
 
     const state = rack.getFullState();
@@ -47,6 +50,14 @@ describe('SynthRack.getFullState / restoreFullState', () => {
     expect(fresh.getPartConfig(0).voice).toEqual({ bank: 'internalA', program: 7 });
     expect(fresh.selectedPart).toBe(1);
     expect(fresh.masterTuneCents).toBe(23);
+    // Global system-setup settings round-trip in the snapshot.
+    expect(fresh.getGlobalSettings()).toEqual({
+      engine: 2,
+      volume: 55,
+      polyphony: 64,
+      masterTuneCents: 23,
+      microtuning: -1,
+    });
     // Unsaved edit buffer wins over the bank slot on restore.
     expect(fresh.getVoiceData(0)[0]).toBe(42);
   });

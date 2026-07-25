@@ -82,6 +82,39 @@ export function curvePoints(trace: EnvTrace, g: DrawGeom): string {
     .join(' ');
 }
 
+/**
+ * The curve split into solid vs "held" runs. A segment is held/indefinite when
+ * it starts at or after the sustain and is visually horizontal — i.e. the
+ * sustain plateau ([sustainSec, gateSec]) or a non-decaying release. The
+ * `>= sustainSec` guard keeps asymptotically-flat attack tops solid. Adjacent
+ * runs share their boundary vertex so the polylines stay visually connected.
+ */
+export function curveSegments(trace: EnvTrace, g: DrawGeom): { points: string; held: boolean }[] {
+  const pts = trace.curve;
+  if (pts.length === 0) return [];
+  const xy = (p: { timeSec: number; levelQ24: number }) =>
+    `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`;
+  const held = (a: (typeof pts)[number], b: (typeof pts)[number]) =>
+    a.timeSec >= trace.sustainSec - 1e-6 &&
+    Math.abs(py(g, b.levelQ24) - py(g, a.levelQ24)) < 0.4 && // visually horizontal
+    px(g, b.timeSec) - px(g, a.timeSec) > 0.3; // with real horizontal extent
+
+  const out: { points: string; held: boolean }[] = [];
+  let run = [xy(pts[0])];
+  let runHeld = pts.length > 1 ? held(pts[0], pts[1]) : false;
+  for (let i = 1; i < pts.length; i++) {
+    const segHeld = held(pts[i - 1], pts[i]);
+    if (segHeld !== runHeld) {
+      out.push({ points: run.join(' '), held: runHeld });
+      run = [xy(pts[i - 1])]; // repeat the boundary vertex to connect runs
+      runHeld = segHeld;
+    }
+    run.push(xy(pts[i]));
+  }
+  out.push({ points: run.join(' '), held: runHeld });
+  return out;
+}
+
 /** Filled polygon (curve closed to the baseline). */
 export function fillPoints(trace: EnvTrace, g: DrawGeom): string {
   const y0 = g.pad + g.ymap.baseline01 * (g.H - 2 * g.pad);

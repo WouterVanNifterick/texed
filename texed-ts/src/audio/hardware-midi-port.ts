@@ -10,6 +10,7 @@ import { voiceToSysex } from '@texed/dx7-format/params';
 import { acedToSysex, createDefaultAmem } from '@texed/dx7-format/amem';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { NUM_PARTS, defaultPartConfig } from '@texed/dx7-format/part-config';
+import { DEFAULT_GLOBAL_SETTINGS } from '@texed/dx7-format/global-settings';
 import type { MidiConnection } from './midi';
 
 export class HardwareMidiPort implements SynthPort {
@@ -40,7 +41,7 @@ export class HardwareMidiPort implements SynthPort {
       selectedPart: 0,
     });
     this.emit({ type: 'programState', options: [], banks: [] });
-    this.emit({ type: 'masterTune', cents: 0 });
+    this.emit({ type: 'settings', settings: { ...DEFAULT_GLOBAL_SETTINGS }, microtuningNames: [] });
   }
 
   send(cmd: SynthCommand): void {

@@ -6,12 +6,15 @@
 // SynthRack behaves like the single-timbre SynthUnit.
 
 import { PluginFx } from './plugin-fx';
-import { Part, EngineType } from './part';
+import { Part, EngineType, MAX_ACTIVE_NOTES } from './part';
+import { createStandardTuning, createMicroTuning } from './tuning';
+import { decodeMicrotuning } from '@texed/dx7-format/microtuning';
 import { initSynthTables } from './synth-unit';
 import type { ParsedPerformance } from '@texed/dx7-format/performance';
 import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import type { RackState } from '@texed/dx7-format/rack-state';
 import { RACK_STATE_SCHEMA } from '@texed/dx7-format/rack-state';
+import { volumeToGain, type GlobalSettings } from '@texed/dx7-format/global-settings';
 import { identifySysex, SysexKind, cartridgeFromSyx } from '@texed/dx7-format/sysex';
 import { amemPayloadFromFrame } from '@texed/dx7-format/amem';
 import {
@@ -50,8 +53,11 @@ export interface RackStatus {
   selectedPart: number;
   amps: number[];
   steps: number[];
+  levels: number[];
   pitchStep: number;
+  pitchLevel: number;
   lfo: number;
+  lfoRestart: number;
   partActivity: number[];
   totalActive: number;
 }
@@ -64,10 +70,17 @@ export class SynthRack {
   private library = new VoiceLibrary();
 
   private polyphonyCap = DEFAULT_POLYPHONY;
-  private masterGain = 0.8;
+  private engineType_: EngineType = EngineType.MarkI;
+  private volume_ = 80;
+  private masterGain = volumeToGain(80);
   private selected = 0;
   private lastLoadReport: LoadReport | null = null;
   private masterTuneCents_ = 0;
+  /** Active micro-tuning index into the library tables, or -1 for standard. */
+  private microtuningIndex_ = -1;
+  /** Name of the currently loaded performance (edit-buffer identity). Set by
+   * every load path; independent of the library performance index. */
+  private performanceName_ = '';
 
   private scratch = new Float32Array(128);
 
@@ -77,6 +90,7 @@ export class SynthRack {
       this.parts.push(new Part());
       this.configs.push(defaultPartConfig(i === 0));
     }
+    this.setEngineType(this.engineType_);
     this.setSampleRate(sampleRate);
   }
 
@@ -95,15 +109,57 @@ export class SynthRack {
   }
 
   setEngineType(type: EngineType): void {
+    this.engineType_ = type;
     for (const p of this.parts) p.setEngineType(type);
   }
 
   setPolyphonyCap(n: number): void {
-    this.polyphonyCap = Math.max(1, Math.min(NUM_PARTS * 16, Math.floor(n)));
+    this.polyphonyCap = Math.max(1, Math.min(NUM_PARTS * MAX_ACTIVE_NOTES, Math.floor(n)));
   }
 
-  setMasterGain(gain: number): void {
-    this.masterGain = gain;
+  /** Set master volume from the 0..99 knob; the perceptual taper yields gain. */
+  setVolume(volume: number): void {
+    this.volume_ = Math.max(0, Math.min(99, Math.round(volume)));
+    this.masterGain = volumeToGain(this.volume_);
+  }
+
+  /** The whole global "system setup" edit buffer as one struct. */
+  getGlobalSettings(): GlobalSettings {
+    return {
+      engine: this.engineType_,
+      volume: this.volume_,
+      polyphony: this.polyphonyCap,
+      masterTuneCents: this.masterTuneCents_,
+      microtuning: this.microtuningIndex_,
+    };
+  }
+
+  /** Apply a (partial) global-settings snapshot, e.g. on session restore.
+   * Micro-tuning is applied last, so it reads the just-set master tune; callers
+   * must have populated `voiceLibrary.microtunings` first. */
+  applyGlobalSettings(g: Partial<GlobalSettings>): void {
+    if (g.engine !== undefined) this.setEngineType(g.engine as EngineType);
+    if (g.volume !== undefined) this.setVolume(g.volume);
+    if (g.polyphony !== undefined) this.setPolyphonyCap(g.polyphony);
+    if (g.masterTuneCents !== undefined) this.applyMasterTuneCents(g.masterTuneCents);
+    if (g.microtuning !== undefined) this.setMicrotuning(g.microtuning);
+  }
+
+  /** Display names for the loaded micro-tuning tables (DX7II blobs are unnamed). */
+  getMicrotuningNames(): string[] {
+    return this.library.microtunings.map((_, i) => `Micro ${i + 1}`);
+  }
+
+  /** Select the active micro-tuning (index into the loaded tables; -1 = standard)
+   * and apply it to every part, preserving the current master tune. */
+  setMicrotuning(index: number): void {
+    const blobs = this.library.microtunings;
+    const units = index >= 0 && index < blobs.length ? decodeMicrotuning(blobs[index]) : null;
+    this.microtuningIndex_ = units ? index : -1;
+    for (const p of this.parts) {
+      p.setTuning(units ? createMicroTuning(units) : createStandardTuning());
+      p.setMasterTuneCents(this.masterTuneCents_);
+    }
   }
 
   selectPart(index: number): void {
@@ -198,6 +254,27 @@ export class SynthRack {
     return this.masterTuneCents_;
   }
 
+  get performanceName(): string {
+    return this.performanceName_;
+  }
+
+  /**
+   * Unified performance load: populate the 8 part configs and voice edit
+   * buffers, and set the performance identity. Used by every load that is not a
+   * library-dropdown pick (MiniDexed .ini, dropped files, etc.). The library
+   * performance index goes to -1 to mark "not a library performance".
+   */
+  loadPerformance(name: string, parts: Partial<PartConfig>[], voices: (Uint8Array | null)[]): void {
+    for (let i = 0; i < NUM_PARTS; i++) {
+      const patch = parts[i];
+      if (patch && Object.keys(patch).length > 0) this.setPartConfig(i, patch);
+      const voice = voices[i];
+      if (voice) this.loadVoiceForPart(i, voice);
+    }
+    this.performanceName_ = name;
+    this.library.performanceIndex = -1;
+  }
+
   loadVoiceForPart(index: number, patch: Uint8Array, supplement?: Uint8Array): void {
     if (index < 0 || index >= NUM_PARTS) return;
     if (supplement) this.parts[index].loadVoiceSlot(patch, supplement);
@@ -227,9 +304,11 @@ export class SynthRack {
       banks,
       performances: copyPerformances(this.library.performances),
       performanceIndex: this.library.performanceIndex,
+      performanceName: this.performanceName_,
       parts: this.configs.map((c) => ({ ...c, voice: { ...c.voice } })),
       selectedPart: this.selected,
-      masterTuneCents: this.masterTuneCents_,
+      global: this.getGlobalSettings(),
+      microtunings: this.library.microtunings.map((m) => m.slice()),
       editBuffers: this.parts.map((p) => ({
         voice: p.getVoiceData(),
         supplement: p.getSupplementData(),
@@ -239,7 +318,9 @@ export class SynthRack {
 
   /** Restore a getFullState snapshot. Throws on schema mismatch or bad data. */
   restoreFullState(state: RackState): void {
-    if (!state || state.schema !== RACK_STATE_SCHEMA) {
+    // Accept the current schema and older ones (new fields default below);
+    // reject only unknown/newer snapshots we cannot interpret.
+    if (!state || typeof state.schema !== 'number' || state.schema > RACK_STATE_SCHEMA) {
       throw new Error('unsupported rack state schema');
     }
     this.library.clear();
@@ -255,10 +336,12 @@ export class SynthRack {
       }
     }
     this.library.performances = copyPerformances(state.performances);
-    this.library.performanceIndex = Math.max(
-      0,
-      Math.min(state.performances.length - 1, state.performanceIndex),
-    );
+    // -1 means "not a library performance" (loaded from a file); otherwise clamp.
+    this.library.performanceIndex =
+      state.performanceIndex < 0
+        ? -1
+        : Math.max(0, Math.min(state.performances.length - 1, state.performanceIndex));
+    this.performanceName_ = state.performanceName ?? '';
     for (let i = 0; i < NUM_PARTS; i++) {
       const src = state.parts[i];
       const { voiceLabel: _label, ...cfg } = src ?? defaultPartConfig(i === 0);
@@ -267,7 +350,13 @@ export class SynthRack {
     if (state.selectedPart >= 0 && state.selectedPart < NUM_PARTS) {
       this.selected = state.selectedPart;
     }
-    this.applyMasterTuneCents(state.masterTuneCents);
+    // Micro-tuning tables must be in place before applyGlobalSettings selects one.
+    this.library.microtunings = (state.microtunings ?? []).map((m) => m.slice());
+    // Global settings (schema 2+); fall back to the v1 top-level masterTuneCents.
+    const legacy = state as unknown as { masterTuneCents?: number };
+    this.applyGlobalSettings(
+      state.global ?? { masterTuneCents: legacy.masterTuneCents ?? 0, microtuning: -1 },
+    );
     // Edit buffers last so unsaved edits win over the bank slot contents.
     state.editBuffers?.forEach((eb, i) => {
       if (i < NUM_PARTS && eb?.voice?.length >= 156 && eb?.supplement?.length >= 35) {
@@ -285,6 +374,7 @@ export class SynthRack {
     const perfs = this.library.performances;
     if (index < 0 || index >= perfs.length) return;
     this.library.performanceIndex = index;
+    this.performanceName_ = perfs[index].name;
     const { parts } = perfs[index];
     for (let i = 0; i < NUM_PARTS; i++) {
       this.setPartConfig(i, { ...defaultPartConfig(false), ...parts[i] });
@@ -296,10 +386,11 @@ export class SynthRack {
     }
   }
 
-  getPerformanceState(): { names: string[]; index: number } {
+  getPerformanceState(): { names: string[]; index: number; name: string } {
     return {
       names: this.library.performances.map((p) => p.name),
       index: this.library.performanceIndex,
+      name: this.performanceName_,
     };
   }
 
@@ -391,7 +482,7 @@ export class SynthRack {
   }
 
   private enforceCap(needed: number): void {
-    let guard = NUM_PARTS * 16 + needed;
+    let guard = NUM_PARTS * MAX_ACTIVE_NOTES + needed;
     while (this.totalActiveVoices() + needed > this.polyphonyCap && guard-- > 0) {
       let bestPart = -1;
       let bestSeq = Infinity;
@@ -492,8 +583,11 @@ export class SynthRack {
       selectedPart: this.selected,
       amps: s.amps,
       steps: s.steps,
+      levels: s.levels,
       pitchStep: s.pitchStep,
+      pitchLevel: s.pitchLevel,
       lfo: s.lfo,
+      lfoRestart: s.lfoRestart,
       partActivity,
       totalActive: partActivity.reduce((a, b) => a + b, 0),
     };

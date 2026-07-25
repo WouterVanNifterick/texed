@@ -6,8 +6,9 @@ import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
 import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
 import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import type { RackState } from '@texed/dx7-format/rack-state';
+import type { GlobalSettings } from '@texed/dx7-format/global-settings';
 
-export type { VoiceRef, VoiceBankId, RackState };
+export type { VoiceRef, VoiceBankId, RackState, GlobalSettings };
 
 export const MsgType = {
   NoteOn: 'noteOn',
@@ -19,15 +20,17 @@ export const MsgType = {
   LoadCart: 'loadCart',
   SetVoiceRef: 'setVoiceRef',
   SetEngine: 'setEngine',
-  SetMasterGain: 'setMasterGain',
+  SetVolume: 'setVolume',
   SetParam: 'setParam',
   SetSupplementParam: 'setSupplementParam',
   SetMasterTune: 'setMasterTune',
+  SetMicrotuning: 'setMicrotuning',
   Panic: 'panic',
   SelectPart: 'selectPart',
   SetPart: 'setPart',
   SetPolyphonyCap: 'setPolyphonyCap',
   SelectPerformance: 'selectPerformance',
+  LoadPerformance: 'loadPerformance',
   RequestBankDump: 'requestBankDump',
   StoreVoice: 'storeVoice',
   LoadBankInto: 'loadBankInto',
@@ -96,13 +99,23 @@ export interface SelectPerformanceMsg {
   type: typeof MsgType.SelectPerformance;
   index: number;
 }
+/** Load a full performance into the edit buffers from a non-library source
+ * (e.g. a MiniDexed .ini). Populates 8 part configs + voice buffers and sets
+ * the performance name; the library performance index becomes -1. */
+export interface LoadPerformanceMsg {
+  type: typeof MsgType.LoadPerformance;
+  name: string;
+  parts: Partial<PartConfig>[];
+  /** 8 entries; each a 156-byte unpacked voice, or null to leave that part's buffer. */
+  voices: (Uint8Array | null)[];
+}
 export interface SetEngineMsg {
   type: typeof MsgType.SetEngine;
   engine: number; // EngineType
 }
-export interface SetMasterGainMsg {
-  type: typeof MsgType.SetMasterGain;
-  gain: number;
+export interface SetVolumeMsg {
+  type: typeof MsgType.SetVolume;
+  volume: number; // 0..99 knob; engine applies the perceptual taper
 }
 export interface SetParamMsg {
   type: typeof MsgType.SetParam;
@@ -117,6 +130,10 @@ export interface SetSupplementParamMsg {
 export interface SetMasterTuneMsg {
   type: typeof MsgType.SetMasterTune;
   cents: number;
+}
+export interface SetMicrotuningMsg {
+  type: typeof MsgType.SetMicrotuning;
+  index: number; // into the loaded micro-tuning tables, or -1 for standard tuning
 }
 export interface PanicMsg {
   type: typeof MsgType.Panic;
@@ -156,15 +173,17 @@ export type SynthCommand =
   | LoadCartMsg
   | SetVoiceRefMsg
   | SetEngineMsg
-  | SetMasterGainMsg
+  | SetVolumeMsg
   | SetParamMsg
   | SetSupplementParamMsg
   | SetMasterTuneMsg
+  | SetMicrotuningMsg
   | PanicMsg
   | SelectPartMsg
   | SetPartMsg
   | SetPolyphonyCapMsg
   | SelectPerformanceMsg
+  | LoadPerformanceMsg
   | RequestBankDumpMsg
   | StoreVoiceMsg
   | LoadBankIntoMsg
@@ -186,18 +205,24 @@ export interface VoiceMsg {
   data: Uint8Array; // 156 bytes
   supplement: Uint8Array; // 35-byte DX7II AMEM supplement
 }
-/** Current master tune (from a loaded 8973S setup or the UI), sent after loads/tune changes. */
-export interface MasterTuneMsg {
-  type: 'masterTune';
-  cents: number;
+/** Current global system-setup settings (engine, volume, polyphony, master
+ * tune), sent after loads/session restore and any settings change. */
+export interface SettingsMsg {
+  type: 'settings';
+  settings: GlobalSettings;
+  /** Display names of the loaded micro-tuning tables (for the selector UI). */
+  microtuningNames: string[];
 }
 /** Periodic realtime status for UI meters (~30 Hz). */
 export interface StatusMsg {
   type: 'status';
   amps: number[]; // per-op envelope output 0..1, sysex op order
   steps: number[]; // per-op envelope stage 0..4
+  levels: number[]; // per-op raw Q24 amp-envelope level (maps onto the plotted curve)
   pitchStep: number;
+  pitchLevel: number; // raw Q24-per-octave pitch-envelope level
   lfo: number; // 0..1
+  lfoRestart: number; // increments each time the LFO is (re)triggered
   selectedPart: number;
   partActivity: number[]; // sounding voice count per part
   totalActive: number;
@@ -213,7 +238,10 @@ export interface PartsMsg {
 export interface PerformancesMsg {
   type: 'performances';
   names: string[];
+  /** Selected library performance, or -1 when loaded from a file. */
   index: number;
+  /** Display name of the currently loaded performance (edit-buffer identity). */
+  name: string;
 }
 
 /** Serialized AMEM + VMEM SysEx for one bank half (response to RequestBankDump). */
@@ -234,7 +262,7 @@ export type SynthEvent =
   | ProgramStateMsg
   | LoadReportMsg
   | VoiceMsg
-  | MasterTuneMsg
+  | SettingsMsg
   | StatusMsg
   | PartsMsg
   | PerformancesMsg

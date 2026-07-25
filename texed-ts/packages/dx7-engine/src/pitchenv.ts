@@ -89,4 +89,9 @@ export class PitchEnv {
   getPosition(): number {
     return this.ix;
   }
+
+  /** Current Q24-per-octave level (matches env-sim's pitch curve units). */
+  getLevel(): number {
+    return this.level;
+  }
 }

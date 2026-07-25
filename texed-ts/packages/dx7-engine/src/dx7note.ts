@@ -104,7 +104,11 @@ const pegRangeShift = [0, 2, 3, 4];
 export interface VoiceStatus {
   amp: number[];
   ampStep: number[];
+  /** Raw Q24 amp-envelope level per op (maps directly onto the plotted curve). */
+  level: number[];
   pitchStep: number;
+  /** Raw Q24-per-octave pitch-envelope level. */
+  pitchLevel: number;
 }
 
 export class Dx7Note {
@@ -447,8 +451,10 @@ export class Dx7Note {
     for (let i = 0; i < 6; i++) {
       status.amp[i] = Exp2.lookup(this.params[i].levelIn - 14 * (1 << 24));
       status.ampStep[i] = this.env[i].getPosition();
+      status.level[i] = this.params[i].levelIn;
     }
     status.pitchStep = this.pitchenv.getPosition();
+    status.pitchLevel = this.pitchenv.getLevel();
   }
 
   transferState(src: Dx7Note): void {

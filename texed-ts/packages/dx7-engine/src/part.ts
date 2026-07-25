@@ -25,7 +25,7 @@ import { initVoice } from '@texed/dx7-format/cartridge';
 import { G } from '@texed/dx7-format/voice-layout';
 import { VoiceSupplement, createDefaultAmem, AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
 
-export const MAX_ACTIVE_NOTES = 16;
+export const MAX_ACTIVE_NOTES = 32;
 
 export const EngineType = { Modern: 0, MarkI: 1, Opl: 2 } as const;
 export type EngineType = (typeof EngineType)[keyof typeof EngineType];
@@ -74,10 +74,15 @@ export class Part {
 
   private lastLfoValue = 0;
   private lastLfoDelay = 0;
+  // Increments each time the LFO is (re)triggered, so the UI can restart its
+  // LFO position sweep at the exact note-on that restarted the LFO.
+  private lfoRestartSeq = 0;
   private peekStatus: VoiceStatus = {
     amp: [0, 0, 0, 0, 0, 0],
     ampStep: [0, 0, 0, 0, 0, 0],
+    level: [0, 0, 0, 0, 0, 0],
     pitchStep: 0,
+    pitchLevel: 0,
   };
 
   private extraBuf = new Float32Array(N);
@@ -172,6 +177,14 @@ export class Part {
     this.tuningState.setMasterTuneCents(cents);
     for (const v of this.voices) {
       v.dx7Note.setTuningState(this.tuningState);
+    }
+  }
+
+  /** Swap the whole tuning table (standard or a micro-tuning). */
+  setTuning(state: TuningState): void {
+    this.tuningState = state;
+    for (const v of this.voices) {
+      v.dx7Note.setTuningState(state);
     }
   }
 
@@ -278,7 +291,10 @@ export class Part {
         }
       }
     }
-    if (triggerLfo) this.lfo.keydown();
+    if (triggerLfo) {
+      this.lfo.keydown();
+      this.lfoRestartSeq++;
+    }
 
     // DX7II unison poly: stack four detuned voices per note (hardware plays
     // 4 notes of the 16-voice pool per key in single mode).
@@ -505,7 +521,15 @@ export class Part {
 
   // ==== Status ====
 
-  getStatus(): { amps: number[]; steps: number[]; pitchStep: number; lfo: number } {
+  getStatus(): {
+    amps: number[];
+    steps: number[];
+    levels: number[];
+    pitchStep: number;
+    pitchLevel: number;
+    lfo: number;
+    lfoRestart: number;
+  } {
     let voice: Voice | null = this.voices[this.lastActiveVoice].live
       ? this.voices[this.lastActiveVoice]
       : null;
@@ -519,20 +543,32 @@ export class Part {
     }
     const amps = [0, 0, 0, 0, 0, 0];
     const steps = [4, 4, 4, 4, 4, 4];
+    const levels = [0, 0, 0, 0, 0, 0];
     let pitchStep = 4;
+    let pitchLevel = 0;
     if (voice) {
       voice.dx7Note.peekVoiceStatus(this.peekStatus);
       for (let op = 0; op < 6; op++) {
         const a = this.peekStatus.amp[op];
         amps[op] = a > 1024 ? Math.min(1, (Math.log2(a) - 10) / 16) : 0;
         steps[op] = this.peekStatus.ampStep[op];
+        levels[op] = this.peekStatus.level[op];
       }
       pitchStep = this.peekStatus.pitchStep;
+      pitchLevel = this.peekStatus.pitchLevel;
     }
     // Scale the LFO excursion by the delay ramp so the meter reflects the
     // modulation that actually reaches the voices.
     const ramp = this.lastLfoDelay / (1 << 24);
-    return { amps, steps, pitchStep, lfo: 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp };
+    return {
+      amps,
+      steps,
+      levels,
+      pitchStep,
+      pitchLevel,
+      lfo: 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp,
+      lfoRestart: this.lfoRestartSeq,
+    };
   }
 
   /**

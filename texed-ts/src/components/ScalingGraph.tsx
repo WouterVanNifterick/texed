@@ -35,6 +35,8 @@ interface ScalingGraphProps {
   leftCurve: number;
   rightCurve: number;
   onChange: (field: ScalingField, value: number) => void;
+  /** Operator color for the curve fill (stroke follows --op via CSS). */
+  color?: string;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -60,6 +62,7 @@ export function ScalingGraph({
   leftCurve,
   rightCurve,
   onChange,
+  color = '#ffb454',
 }: ScalingGraphProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<DragState | null>(null);
@@ -178,9 +181,9 @@ export function ScalingGraph({
             x2={0}
             y2={H}
           >
-            <stop offset="0%" stopColor="#ffb454" stopOpacity={0.45} />
-            <stop offset="50%" stopColor="#ffb454" stopOpacity={0.04} />
-            <stop offset="100%" stopColor="#ffb454" stopOpacity={0.45} />
+            <stop offset="0%" stopColor={color} stopOpacity={0.45} />
+            <stop offset="50%" stopColor={color} stopOpacity={0.04} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.45} />
           </linearGradient>
         </defs>
         {[12, 36, 60, 84, 108].map((n) => (

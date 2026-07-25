@@ -164,9 +164,9 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
-  color: var(--dim);
-  background: transparent;
-  border: 1px solid transparent;
+  color: var(--text);
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid var(--line);
   border-radius: 4px;
   cursor: pointer;
   transition:
@@ -177,6 +177,8 @@
 
 .seg:hover {
   color: var(--text);
+  background: rgb(255 255 255 / 9%);
+  border-color: var(--dim);
 }
 
 .seg.on {
@@ -1080,7 +1082,7 @@
 
 .scale-curve {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--op, var(--accent));
   stroke-width: 1.8;
   vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 0 2px rgb(255 180 84 / 40%));
@@ -1172,7 +1174,14 @@
   stroke: #5a6175;
   stroke-width: 1.6;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 2px rgb(110 231 160 / 25%));
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--curve, var(--green)) 45%, transparent));
+}
+
+/* Held / indefinite horizontal segments (sustain plateau, non-decaying
+   release) render dotted to distinguish them from timed ramps. */
+.env-shape.held,
+.env-bg-trace.held {
+  stroke-dasharray: 1.5 2.5;
 }
 
 .env-active {
@@ -1180,8 +1189,27 @@
   stroke: #fff;
   stroke-width: 2.4;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 3px var(--accent));
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--curve, var(--accent)) 70%, transparent));
   pointer-events: none;
+}
+
+/* Live playback dots following the envelope / LFO curves. */
+.env-playhead {
+  fill: var(--curve, var(--accent));
+  stroke: #0d1017;
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--curve, var(--accent)) 85%, transparent));
+}
+
+.lfo-playhead {
+  fill: var(--accent);
+  stroke: #0d1017;
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 85%, transparent));
 }
 
 .env-grid {
@@ -1214,7 +1242,7 @@
   height: 11px;
   margin: -6px 0 0 -6px;
   padding: 0;
-  border: 2px solid var(--green);
+  border: 2px solid var(--curve, var(--green));
   border-radius: 50%;
   background: #0d1017;
   cursor: grab;

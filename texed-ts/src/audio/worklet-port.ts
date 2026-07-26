@@ -1,6 +1,6 @@
 // SynthPort backed by the local TS engine running in an AudioWorklet.
 
-import workletUrl from '../worklet/dexed-processor.ts?worker&url';
+import workletUrl from '../worklet/texed-processor.ts?worker&url';
 import type { SynthCommand, SynthEvent } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 
@@ -16,7 +16,7 @@ export class WorkletPort implements SynthPort {
     }
     const ctx = new AudioContext();
     await ctx.audioWorklet.addModule(workletUrl);
-    const node = new AudioWorkletNode(ctx, 'dexed-processor', {
+    const node = new AudioWorkletNode(ctx, 'texed-processor', {
       numberOfInputs: 0,
       numberOfOutputs: 1,
       outputChannelCount: [2],

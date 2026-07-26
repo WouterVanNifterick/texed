@@ -1,4 +1,4 @@
-// Dexed AudioWorkletProcessor: hosts a multi-timbral SynthRack and renders
+// AudioWorkletProcessor: hosts a multi-timbral SynthRack and renders
 // stereo audio. A fresh rack has only part 0 enabled (omni), so single-timbre
 // use is unchanged; enabling more parts gives TX802/TX816 behavior.
 
@@ -20,7 +20,7 @@ function splitRecords(raw: Uint8Array, size: number): Uint8Array[] {
   return out;
 }
 
-class DexedProcessor extends AudioWorkletProcessor {
+class TexedProcessor extends AudioWorkletProcessor {
   private rack: SynthRack;
   private statusCountdown = STATUS_INTERVAL;
 
@@ -299,4 +299,4 @@ class DexedProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('dexed-processor', DexedProcessor as unknown as AudioWorkletProcessorCtor);
+registerProcessor('texed-processor', TexedProcessor as unknown as AudioWorkletProcessorCtor);

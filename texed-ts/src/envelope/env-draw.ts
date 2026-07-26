@@ -18,11 +18,6 @@ import type { EnvTimeScale } from './env-time';
 export type YMode = 'db' | 'linear';
 export type EnvKind = 'amp' | 'pitch';
 
-// Per-operator colors live in state/op-colors so the algorithm diagram and
-// panel headers share the exact same palette; re-exported here for the drawing
-// modules that already import from env-draw.
-export { OP_COLORS, PITCH_COLOR, opColor } from '../state/op-colors';
-
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 // Pitch EG spans about ±4 octaves (pitchenvTab 127<<19 ≈ 3.97 octaves).

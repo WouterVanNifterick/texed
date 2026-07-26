@@ -6,9 +6,9 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import dexedIcon from '../assets/dexed-icon.svg';
 import { useStatus, type Synth } from '../audio/useSynth';
 import { helpProps } from '../state/help';
-import { Knob } from './Knob';
-import { Toggle } from './Toggle';
-import { DownloadIcon, GearIcon } from './icons';
+import { Knob } from '../ui/Knob';
+import { Toggle } from '../ui/Toggle';
+import { DownloadIcon, GearIcon } from '../ui/icons';
 
 interface TopBarProps {
   synth: Synth;

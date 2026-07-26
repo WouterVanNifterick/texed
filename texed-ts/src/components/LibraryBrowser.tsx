@@ -17,7 +17,7 @@ import {
 } from '../state/library';
 import type { LibBank, LibPerfSet, LibraryManifest } from '@texed/dx7-format/library-manifest';
 import { helpProps } from '../state/help';
-import { Segmented } from './Segmented';
+import { Segmented } from '../ui/Segmented';
 
 const LOADED_ID = '__loaded';
 const AUDITION_NOTE = 60;

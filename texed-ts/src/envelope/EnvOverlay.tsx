@@ -9,14 +9,8 @@ import { OP, G, opBase, noteName } from '@texed/dx7-format/voice';
 import { helpProps, setHelp } from '../state/help';
 import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
-import {
-  makeYMap,
-  curveSegments,
-  OP_COLORS,
-  PITCH_COLOR,
-  type YMode,
-  type DrawGeom,
-} from './env-draw';
+import { makeYMap, curveSegments, type YMode, type DrawGeom } from './env-draw';
+import { opColor, PITCH_COLOR } from '../ui/op-colors';
 import { LiveEnvEditor } from './EnvEditor';
 
 const W = 100;
@@ -81,7 +75,7 @@ export function EnvOverlay({
       out.push({
         key: `op${opNum}`,
         sel: opNum,
-        color: OP_COLORS[opNum - 1],
+        color: opColor(opNum),
         segments: curveSegments(trace, g),
         kind: 'amp',
       });
@@ -137,7 +131,7 @@ export function EnvOverlay({
               ampParams={computeAmpParams(voice, opNum, true, note, velocity)}
               timeScale={timeScale}
               yMode={yMode}
-              color={OP_COLORS[opNum - 1]}
+              color={opColor(opNum)}
               className="env-overlay-fg"
               subscribe={subscribeStatus}
               opIdx={6 - opNum}
@@ -157,7 +151,7 @@ export function EnvOverlay({
               key={opNum}
               type="button"
               className={`env-chip${selected === opNum ? ' on' : ''}${hoverOp === opNum ? ' hover' : ''}`}
-              style={{ ['--chip' as string]: OP_COLORS[opNum - 1] }}
+              style={{ ['--chip' as string]: opColor(opNum) }}
               onClick={() => onSelect(opNum)}
               onPointerEnter={() => {
                 onHoverOp(opNum);

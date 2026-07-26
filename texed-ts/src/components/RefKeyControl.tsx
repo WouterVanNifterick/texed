@@ -5,7 +5,7 @@
 
 import { noteName } from '@texed/dx7-format/voice';
 import { helpProps } from '../state/help';
-import { Toggle } from './Toggle';
+import { Toggle } from '../ui/Toggle';
 
 interface RefKeyControlProps {
   note: number;

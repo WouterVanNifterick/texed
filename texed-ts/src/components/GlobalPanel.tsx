@@ -7,14 +7,15 @@ import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7
 import * as Sup from '@texed/dx7-format/supplement';
 import { helpProps } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
-import { Knob } from './Knob';
-import { Cycle } from './Cycle';
-import { Toggle } from './Toggle';
+import { Knob } from '../ui/Knob';
+import { Cycle } from '../ui/Cycle';
+import { Toggle } from '../ui/Toggle';
 import { AlgoDisplay } from './AlgoDisplay';
-import { LiveEnvEditor } from './EnvEditor';
-import { PITCH_COLOR, type YMode } from './env-draw';
-import { type EnvTimeScale } from './env-time';
-import { type EnvSelection } from './EnvOverlay';
+import { LiveEnvEditor } from '../envelope/EnvEditor';
+import { type YMode } from '../envelope/env-draw';
+import { PITCH_COLOR } from '../ui/op-colors';
+import { type EnvTimeScale } from '../envelope/env-time';
+import { type EnvSelection } from '../envelope/EnvOverlay';
 import { LfoGraph } from './LfoGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;

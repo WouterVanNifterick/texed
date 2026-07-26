@@ -5,7 +5,7 @@
 import { useStatus, type SynthStatus } from '../audio/useSynth';
 import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { algoGraph } from '../state/algo';
-import { opColor } from '../state/op-colors';
+import { opColor } from '../ui/op-colors';
 
 const CELL = 26;
 const BOX = 17;

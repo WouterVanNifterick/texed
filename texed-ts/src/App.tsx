@@ -404,7 +404,6 @@ export default function App() {
             onSelect={setSelectedOp}
             timeScale={timeScale}
             yMode={yMode}
-            showEnv={!combined}
           />
 
           {showParts && (

@@ -1,103 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  MsgType,
-  type SynthCommand,
-  type StatusMsg,
-  type RackState,
-} from '@texed/synth-protocol/protocol';
+// The main-thread mirror of the rack: holds React state, applies the events the
+// synth sends back, and exposes the action object built in synth-actions.ts.
+//
+// The authoritative patch state lives in the worklet, not here. See
+// docs/architecture.md for why, and for the edit round trip.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { RackState } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
-import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
+import { voiceRefEquals, type VoiceRef } from '@texed/dx7-format/voice-library';
 import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { createDefaultAmem } from '@texed/dx7-format/amem';
-import { voiceRefEquals } from '@texed/dx7-format/voice-library';
 import { DEFAULT_GLOBAL_SETTINGS, type GlobalSettings } from '@texed/dx7-format/global-settings';
 import { WorkletPort } from './worklet-port';
-import { emitVoiceParam, emitSupplement } from './midi-out';
+import { createSynthActions } from './synth-actions';
+import type { BankInfo, Synth, SynthStatus } from './synth-types';
 
-export type SynthStatus = Omit<StatusMsg, 'type'>;
+export type { BankInfo, Synth, SynthActions, SynthData, SynthStatus } from './synth-types';
 
-export interface BankInfo {
-  id: VoiceBankId;
-  label: string;
-  populated: boolean;
-}
-
-/**
- * Everything that mutates the rack or reads it back asynchronously. Every member
- * is stable for the lifetime of the hook, so these are safe as effect
- * dependencies and as props to memoized components.
- */
-export interface SynthActions {
-  start: () => Promise<void>;
-  noteOn: (note: number, velocity: number, channel?: number) => void;
-  noteOff: (note: number, channel?: number) => void;
-  controlChange: (controller: number, value: number, channel?: number) => void;
-  pitchBend: (value: number, channel?: number) => void;
-  aftertouch: (value: number, channel?: number) => void;
-  setEngine: (engine: number) => void;
-  setProgram: (index: number) => void;
-  setVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
-  loadCart: (data: ArrayBuffer) => void;
-  setParam: (offset: number, value: number) => void;
-  setSupplementParam: (offset: number, value: number) => void;
-  setMasterTune: (cents: number) => void;
-  /** Select the active micro-tuning (-1 = standard tuning). */
-  setMicrotuning: (index: number) => void;
-  setVoice: (voice: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => void;
-  setVolume: (volume: number) => void;
-  panic: () => void;
-  selectPart: (index: number) => void;
-  setPart: (index: number, config: Partial<PartConfig>) => void;
-  setPolyphonyCap: (cap: number) => void;
-  selectPerformance: (index: number) => void;
-  /** Load a full performance (8 parts + voices) into the edit buffers from a
-   * non-library source (e.g. a MiniDexed .ini); sets `performanceName`. */
-  loadPerformance: (
-    name: string,
-    parts: Partial<PartConfig>[],
-    voices: (Uint8Array | null)[],
-  ) => void;
-  subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
-  /** Request a bank half as SysEx; cb gets null when the bank is empty. */
-  requestBankDump: (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => void;
-  /** Commit the selected part's edit buffer into a voice slot (defaults to its current voice ref). */
-  storeVoice: (dest?: VoiceRef) => void;
-  /** Replace one half-bank with concatenated 156-byte voices (+ optional 35-byte AMEMs). */
-  loadBankInto: (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => void;
-  /** Snapshot the whole rack (banks, performances, parts, edit buffers). */
-  getFullState: (cb: (state: RackState) => void) => void;
-  /** Restore a getFullState snapshot. */
-  setFullState: (state: RackState) => void;
-}
-
-/** The main-thread mirror of the rack. Each member changes as the rack changes. */
-export interface SynthData {
-  programOptions: ProgramOption[];
-  /** The four half-banks with populated flags (mirrors the worklet library). */
-  banks: BankInfo[];
-  loadReport: LoadReport | null;
-  voice: Uint8Array;
-  /** 35-byte DX7II AMEM supplement for the selected part's voice. */
-  supplement: Uint8Array;
-  /** Global system-setup settings (engine, volume, polyphony, master tune, micro-tuning). */
-  settings: GlobalSettings;
-  /** Display names of loaded micro-tuning tables; index maps to settings.microtuning. */
-  microtuningNames: string[];
-  partConfigs: PartConfig[];
-  /** Voice name in each part's edit buffer (live voice, not the library slot). */
-  partVoiceNames: string[];
-  selectedPart: number;
-  performanceNames: string[];
-  /** Selected library performance, or -1 when loaded from a file. */
-  performanceIndex: number;
-  /** Display name of the currently loaded performance (edit-buffer identity). */
-  performanceName: string;
-}
-
-export interface Synth extends SynthActions, SynthData {}
-
+/** Subscribe to one slice of the ~31 Hz status stream without re-rendering a parent. */
 export function useStatus<T>(
   subscribe: (cb: (s: SynthStatus) => void) => () => void,
   selector: (s: SynthStatus) => T,
@@ -116,25 +38,12 @@ export function useSynth(externalPort?: SynthPort): Synth {
   const portRef = useRef<SynthPort | null>(externalPort ?? null);
   if (portRef.current === null) portRef.current = new WorkletPort();
   const port = portRef.current;
-  const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
-  // Meter frames arrive faster than they can usefully be drawn, so only the
-  // newest one is kept and fanned out once per animation frame. A hidden tab
-  // stops getting frames, so the ~25 meter components stop re-rendering too.
-  const pendingStatus = useRef<SynthStatus | null>(null);
-  const statusFrame = useRef(0);
-  const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
-  const fullStateCb = useRef<((state: RackState) => void) | null>(null);
+
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
   const [banks, setBanks] = useState<BankInfo[]>([]);
   const [loadReport, setLoadReport] = useState<LoadReport | null>(null);
-  const [voice, setVoiceState] = useState<Uint8Array>(() => initVoice());
-  const [supplement, setSupplementState] = useState<Uint8Array>(() => createDefaultAmem());
-  // Mirrors `supplement` so live ACED emission can build a patched copy without a
-  // stale-closure read; chained synchronously in setSupplementParam for rapid edits.
-  const supplementRef = useRef(supplement);
-  useEffect(() => {
-    supplementRef.current = supplement;
-  }, [supplement]);
+  const [voice, setVoice] = useState<Uint8Array>(initVoice);
+  const [supplement, setSupplement] = useState<Uint8Array>(createDefaultAmem);
   const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_GLOBAL_SETTINGS);
   const [microtuningNames, setMicrotuningNames] = useState<string[]>([]);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
@@ -144,51 +53,83 @@ export function useSynth(externalPort?: SynthPort): Synth {
   const [performanceIndex, setPerformanceIndex] = useState(0);
   const [performanceName, setPerformanceName] = useState('');
 
-  const post = useCallback(
-    (msg: SynthCommand, transfer?: ArrayBuffer[]) => {
-      port.send(msg, transfer);
-    },
+  const supplementRef = useRef(supplement);
+  supplementRef.current = supplement;
+  const programOptionsRef = useRef(programOptions);
+  programOptionsRef.current = programOptions;
+  const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
+  const fullStateCb = useRef<((state: RackState) => void) | null>(null);
+  const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
+
+  // Meter frames arrive faster than they can usefully be drawn, so only the
+  // newest is kept and fanned out once per animation frame. A hidden tab stops
+  // getting frames, so the meter components stop re-rendering with it.
+  const pendingStatus = useRef<SynthStatus | null>(null);
+  const statusFrame = useRef(0);
+
+  const actions = useMemo(
+    () =>
+      createSynthActions(port, {
+        setVoice,
+        setSupplement,
+        setSettings,
+        supplement: supplementRef,
+        programOptions: programOptionsRef,
+        bankDumpCb,
+        fullStateCb,
+        statusSubs,
+      }),
     [port],
   );
 
-  const flushStatus = useCallback(() => {
-    statusFrame.current = 0;
-    const s = pendingStatus.current;
-    if (!s) return;
-    pendingStatus.current = null;
-    for (const cb of statusSubs.current) cb(s);
-  }, []);
-
   useEffect(() => {
+    const flushStatus = () => {
+      statusFrame.current = 0;
+      const s = pendingStatus.current;
+      if (!s) return;
+      pendingStatus.current = null;
+      for (const cb of statusSubs.current) cb(s);
+    };
+
     const unsubscribe = port.onEvent((m) => {
-      if (m.type === 'programState') {
-        setProgramOptions(m.options);
-        setBanks(m.banks);
-      } else if (m.type === 'loadReport') {
-        setLoadReport(m.report);
-      } else if (m.type === 'voice') {
-        setVoiceState(new Uint8Array(m.data));
-        setSupplementState(new Uint8Array(m.supplement));
-      } else if (m.type === 'settings') {
-        setSettings(m.settings);
-        setMicrotuningNames(m.microtuningNames);
-      } else if (m.type === 'parts') {
-        setPartConfigs(m.configs);
-        setPartVoiceNames(m.voiceNames);
-        setSelectedPart(m.selectedPart);
-      } else if (m.type === 'performances') {
-        setPerformanceNames(m.names);
-        setPerformanceIndex(m.index);
-        setPerformanceName(m.name);
-      } else if (m.type === 'bankDump') {
-        bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
-        bankDumpCb.current = null;
-      } else if (m.type === 'fullState') {
-        fullStateCb.current?.(m.state);
-        fullStateCb.current = null;
-      } else if (m.type === 'status') {
-        pendingStatus.current = m;
-        statusFrame.current ||= requestAnimationFrame(flushStatus);
+      switch (m.type) {
+        case 'programState':
+          setProgramOptions(m.options);
+          setBanks(m.banks);
+          break;
+        case 'loadReport':
+          setLoadReport(m.report);
+          break;
+        case 'voice':
+          setVoice(new Uint8Array(m.data));
+          setSupplement(new Uint8Array(m.supplement));
+          break;
+        case 'settings':
+          setSettings(m.settings);
+          setMicrotuningNames(m.microtuningNames);
+          break;
+        case 'parts':
+          setPartConfigs(m.configs);
+          setPartVoiceNames(m.voiceNames);
+          setSelectedPart(m.selectedPart);
+          break;
+        case 'performances':
+          setPerformanceNames(m.names);
+          setPerformanceIndex(m.index);
+          setPerformanceName(m.name);
+          break;
+        case 'bankDump':
+          bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
+          bankDumpCb.current = null;
+          break;
+        case 'fullState':
+          fullStateCb.current?.(m.state);
+          fullStateCb.current = null;
+          break;
+        case 'status':
+          pendingStatus.current = m;
+          statusFrame.current ||= requestAnimationFrame(flushStatus);
+          break;
       }
     });
     return () => {
@@ -196,278 +137,9 @@ export function useSynth(externalPort?: SynthPort): Synth {
       if (statusFrame.current) cancelAnimationFrame(statusFrame.current);
       statusFrame.current = 0;
     };
-  }, [port, flushStatus]);
+  }, [port]);
 
-  const start = useCallback(() => port.start(), [port]);
-
-  const noteOn = useCallback(
-    (note: number, velocity: number, channel = 1) =>
-      post({ type: MsgType.NoteOn, note, velocity, channel }),
-    [post],
-  );
-  const noteOff = useCallback(
-    (note: number, channel = 1) => post({ type: MsgType.NoteOff, note, channel }),
-    [post],
-  );
-  const controlChange = useCallback(
-    (controller: number, value: number, channel?: number) =>
-      post({ type: MsgType.Cc, controller, value, channel }),
-    [post],
-  );
-  const pitchBend = useCallback(
-    (value: number, channel?: number) => post({ type: MsgType.PitchBend, value, channel }),
-    [post],
-  );
-  const aftertouch = useCallback(
-    (value: number, channel?: number) => post({ type: MsgType.Aftertouch, value, channel }),
-    [post],
-  );
-  const setEngine = useCallback(
-    (engine: number) => {
-      setSettings((s) => ({ ...s, engine }));
-      post({ type: MsgType.SetEngine, engine });
-    },
-    [post],
-  );
-  // Read through a ref so the callback stays stable as the option list changes.
-  const programOptionsRef = useRef(programOptions);
-  programOptionsRef.current = programOptions;
-  const setProgram = useCallback(
-    (index: number) => {
-      const opt = programOptionsRef.current[index];
-      if (opt) post({ type: MsgType.SetVoiceRef, voice: opt.ref });
-    },
-    [post],
-  );
-  const setVoiceRef = useCallback(
-    (ref: VoiceRef, partIndex?: number) =>
-      post({ type: MsgType.SetVoiceRef, voice: ref, partIndex }),
-    [post],
-  );
-  const loadCart = useCallback(
-    (data: ArrayBuffer) => post({ type: MsgType.LoadCart, data }, [data]),
-    [post],
-  );
-
-  const setParam = useCallback(
-    (offset: number, value: number) => {
-      setVoiceState((prev) => {
-        const next = new Uint8Array(prev);
-        next[offset] = value;
-        return next;
-      });
-      post({ type: MsgType.SetParam, offset, value });
-      emitVoiceParam(offset, value);
-    },
-    [post],
-  );
-
-  const setSupplementParam = useCallback(
-    (offset: number, value: number) => {
-      const next = new Uint8Array(supplementRef.current);
-      next[offset] = value;
-      supplementRef.current = next;
-      setSupplementState(next);
-      post({ type: MsgType.SetSupplementParam, offset, value });
-      emitSupplement(next);
-    },
-    [post],
-  );
-
-  const setMasterTune = useCallback(
-    (cents: number) => {
-      setSettings((s) => ({ ...s, masterTuneCents: cents }));
-      post({ type: MsgType.SetMasterTune, cents });
-    },
-    [post],
-  );
-
-  const setMicrotuning = useCallback(
-    (index: number) => {
-      setSettings((s) => ({ ...s, microtuning: index }));
-      post({ type: MsgType.SetMicrotuning, index });
-    },
-    [post],
-  );
-
-  const setVoice = useCallback(
-    (v: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => {
-      // Only mirror into the editor state when the target is the edited part.
-      if (opts?.partIndex === undefined) {
-        setVoiceState(v);
-        if (opts?.supplement) setSupplementState(opts.supplement);
-      }
-      const buf = v.slice().buffer as ArrayBuffer;
-      const transfer: ArrayBuffer[] = [buf];
-      let supplement: ArrayBuffer | undefined;
-      if (opts?.supplement) {
-        supplement = opts.supplement.slice().buffer as ArrayBuffer;
-        transfer.push(supplement);
-      }
-      post(
-        { type: MsgType.LoadVoice, data: buf, supplement, partIndex: opts?.partIndex },
-        transfer,
-      );
-    },
-    [post],
-  );
-
-  const setVolume = useCallback(
-    (volume: number) => {
-      setSettings((s) => ({ ...s, volume }));
-      post({ type: MsgType.SetVolume, volume });
-    },
-    [post],
-  );
-  const panic = useCallback(() => post({ type: MsgType.Panic }), [post]);
-
-  const selectPart = useCallback(
-    (index: number) => post({ type: MsgType.SelectPart, index }),
-    [post],
-  );
-  const setPart = useCallback(
-    (index: number, config: Partial<PartConfig>) => post({ type: MsgType.SetPart, index, config }),
-    [post],
-  );
-  const setPolyphonyCap = useCallback(
-    (cap: number) => {
-      setSettings((s) => ({ ...s, polyphony: cap }));
-      post({ type: MsgType.SetPolyphonyCap, cap });
-    },
-    [post],
-  );
-
-  const selectPerformance = useCallback(
-    (index: number) => post({ type: MsgType.SelectPerformance, index }),
-    [post],
-  );
-
-  const loadPerformance = useCallback(
-    (name: string, parts: Partial<PartConfig>[], voices: (Uint8Array | null)[]) => {
-      const payload = voices.map((v) => (v ? new Uint8Array(v) : null));
-      const transfer: ArrayBuffer[] = [];
-      for (const v of payload) {
-        if (v) transfer.push(v.buffer as ArrayBuffer);
-      }
-      post({ type: MsgType.LoadPerformance, name, parts, voices: payload }, transfer);
-    },
-    [post],
-  );
-
-  const requestBankDump = useCallback(
-    (bank: VoiceBankId, cb: (data: Uint8Array | null) => void) => {
-      bankDumpCb.current = cb;
-      post({ type: MsgType.RequestBankDump, bank });
-    },
-    [post],
-  );
-
-  const storeVoice = useCallback(
-    (dest?: VoiceRef) => post({ type: MsgType.StoreVoice, dest }),
-    [post],
-  );
-
-  const loadBankInto = useCallback(
-    (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => {
-      const vbuf = voices.slice().buffer as ArrayBuffer;
-      const transfer: ArrayBuffer[] = [vbuf];
-      let sbuf: ArrayBuffer | undefined;
-      if (supplements) {
-        sbuf = supplements.slice().buffer as ArrayBuffer;
-        transfer.push(sbuf);
-      }
-      post({ type: MsgType.LoadBankInto, bank, voices: vbuf, supplements: sbuf }, transfer);
-    },
-    [post],
-  );
-
-  const getFullState = useCallback(
-    (cb: (state: RackState) => void) => {
-      fullStateCb.current = cb;
-      post({ type: MsgType.GetFullState });
-    },
-    [post],
-  );
-
-  const setFullState = useCallback(
-    (state: RackState) => post({ type: MsgType.SetFullState, state }),
-    [post],
-  );
-
-  const subscribeStatus = useCallback((cb: (s: SynthStatus) => void) => {
-    statusSubs.current.add(cb);
-    return () => statusSubs.current.delete(cb);
-  }, []);
-
-  // Every action closes over `post` (which closes over a ref-held port) or
-  // nothing at all, so this memo is built once and its members keep their
-  // identity for the lifetime of the hook.
-  const actions = useMemo<SynthActions>(
-    () => ({
-      start,
-      noteOn,
-      noteOff,
-      controlChange,
-      pitchBend,
-      aftertouch,
-      setEngine,
-      setProgram,
-      setVoiceRef,
-      loadCart,
-      setParam,
-      setSupplementParam,
-      setMasterTune,
-      setMicrotuning,
-      setVoice,
-      setVolume,
-      panic,
-      selectPart,
-      setPart,
-      setPolyphonyCap,
-      selectPerformance,
-      loadPerformance,
-      subscribeStatus,
-      requestBankDump,
-      storeVoice,
-      loadBankInto,
-      getFullState,
-      setFullState,
-    }),
-    [
-      start,
-      noteOn,
-      noteOff,
-      controlChange,
-      pitchBend,
-      aftertouch,
-      setEngine,
-      setProgram,
-      setVoiceRef,
-      loadCart,
-      setParam,
-      setSupplementParam,
-      setMasterTune,
-      setMicrotuning,
-      setVoice,
-      setVolume,
-      panic,
-      selectPart,
-      setPart,
-      setPolyphonyCap,
-      selectPerformance,
-      loadPerformance,
-      subscribeStatus,
-      requestBankDump,
-      storeVoice,
-      loadBankInto,
-      getFullState,
-      setFullState,
-    ],
-  );
-
-  // Changes whenever the mirrored rack state changes, which is what consumers
-  // render from. Actions are spread in so `synth.setParam` stays convenient.
-  return useMemo<Synth>(
+  return useMemo(
     () => ({
       ...actions,
       programOptions,

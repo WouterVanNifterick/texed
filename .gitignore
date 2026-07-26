@@ -47,6 +47,7 @@ out/
 .claude/
 .cursor/
 .vscode/
+.idea/
 
 # JUCE reference tree (separate repo, kept locally only)
 dexed-juce/

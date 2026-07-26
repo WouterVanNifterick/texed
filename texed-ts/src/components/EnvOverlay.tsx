@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import type { SynthStatus } from '../audio/useSynth';
-import { OP, G, opBase } from '@texed/dx7-format/params';
+import { OP, G, opBase, noteName } from '@texed/dx7-format/params';
 import { helpProps, setHelp } from '../state/help';
 import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
@@ -18,7 +18,6 @@ import {
   type DrawGeom,
 } from './env-draw';
 import { LiveEnvEditor } from './EnvEditor';
-import { noteLabel } from './ui';
 
 const W = 100;
 const H = 100;
@@ -238,7 +237,7 @@ export function EnvOverlay({
           style={{ left: `${(xhairX / W) * 100}%` }}
           aria-hidden
         >
-          {noteLabel(note)}
+          {noteName(note)}
         </span>
         <span className="env-xhair-label vel" style={{ top: `${(xhairY / H) * 100}%` }} aria-hidden>
           v{velocity}

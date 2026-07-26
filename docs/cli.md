@@ -49,4 +49,4 @@ pnpm cli song.mid --rate 44100 --program 0
 
 Source: `texed-ts/apps/cli/src/main.ts` (argument parsing and render loop).
 
-For workspace layout and packages, see [texed-ts/README.md](../texed-ts/README.md).
+For workspace layout and packages, see [Architecture](architecture.md).

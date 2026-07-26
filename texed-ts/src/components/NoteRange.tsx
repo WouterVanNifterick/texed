@@ -1,11 +1,7 @@
 import { useCallback, useRef } from 'react';
+import { noteName } from '@texed/dx7-format/params';
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const MIDI_MAX = 127;
-
-export function noteLabel(n: number): string {
-  return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
-}
 
 function notePct(n: number): number {
   return (n / MIDI_MAX) * 100;
@@ -117,6 +113,10 @@ export function NoteRange({ low, high, onChange, label }: NoteRangeProps) {
   const fills = rangeFills(low, high);
 
   return (
+    // The two handlers only stop the containing part row from selecting while
+    // the range is being dragged. The real controls are the labelled slider
+    // buttons inside, so this group needs no keyboard handling of its own.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <div
       className="note-range"
       role="group"
@@ -142,7 +142,7 @@ export function NoteRange({ low, high, onChange, label }: NoteRangeProps) {
           aria-valuemin={0}
           aria-valuemax={MIDI_MAX}
           aria-valuenow={low}
-          aria-valuetext={noteLabel(low)}
+          aria-valuetext={noteName(low)}
           aria-label="Low note"
           onPointerDown={(e) => onThumbPointerDown('low', e)}
           onPointerMove={onPointerMove}
@@ -157,7 +157,7 @@ export function NoteRange({ low, high, onChange, label }: NoteRangeProps) {
           aria-valuemin={0}
           aria-valuemax={MIDI_MAX}
           aria-valuenow={high}
-          aria-valuetext={noteLabel(high)}
+          aria-valuetext={noteName(high)}
           aria-label="High note"
           onPointerDown={(e) => onThumbPointerDown('high', e)}
           onPointerMove={onPointerMove}

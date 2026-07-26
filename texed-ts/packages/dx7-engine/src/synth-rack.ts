@@ -84,6 +84,19 @@ export class SynthRack {
   private performanceName_ = '';
 
   private scratch = new Float32Array(128);
+  // See getStatus: reused so the audio thread does not allocate to report state.
+  private status: RackStatus = {
+    selectedPart: 0,
+    amps: [],
+    steps: [],
+    levels: [],
+    pitchStep: 4,
+    pitchLevel: 0,
+    lfo: 0,
+    lfoRestart: 0,
+    partActivity: new Array(NUM_PARTS).fill(0),
+    totalActive: 0,
+  };
 
   constructor(sampleRate: number) {
     initSynthTables(sampleRate);
@@ -583,21 +596,32 @@ export class SynthRack {
     for (const p of this.parts) p.panic();
   }
 
+  /**
+   * Rack-wide meter state. Called from the audio thread, so it fills and returns
+   * a reused object (whose arrays alias the selected part's) instead of
+   * allocating. Callers must read the result before the next render; hold a copy
+   * if you need a snapshot.
+   */
   getStatus(): RackStatus {
     const s = this.parts[this.selected].getStatus();
-    const partActivity = this.parts.map((p) => p.activeVoiceCount());
-    return {
-      selectedPart: this.selected,
-      amps: s.amps,
-      steps: s.steps,
-      levels: s.levels,
-      pitchStep: s.pitchStep,
-      pitchLevel: s.pitchLevel,
-      lfo: s.lfo,
-      lfoRestart: s.lfoRestart,
-      partActivity,
-      totalActive: partActivity.reduce((a, b) => a + b, 0),
-    };
+    const status = this.status;
+    const activity = status.partActivity;
+    let total = 0;
+    for (let i = 0; i < NUM_PARTS; i++) {
+      const n = this.parts[i].activeVoiceCount();
+      activity[i] = n;
+      total += n;
+    }
+    status.selectedPart = this.selected;
+    status.amps = s.amps;
+    status.steps = s.steps;
+    status.levels = s.levels;
+    status.pitchStep = s.pitchStep;
+    status.pitchLevel = s.pitchLevel;
+    status.lfo = s.lfo;
+    status.lfoRestart = s.lfoRestart;
+    status.totalActive = total;
+    return status;
   }
 
   render(outL: Float32Array, outR: Float32Array, numSamples: number): void {

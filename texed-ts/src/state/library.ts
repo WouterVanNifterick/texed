@@ -6,28 +6,46 @@ import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
 import { voiceFromRawVced } from '@texed/dx7-format/sysex';
 import { AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
 import { VOICE_BANK_ORDER, type VoiceLibrary } from '@texed/dx7-format/voice-library';
+import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice-layout';
 import {
   isLibraryManifest,
   type LibBank,
   type LibPerfSet,
   type LibraryManifest,
-} from './library-manifest';
+} from '@texed/dx7-format/library-manifest';
 
-const VCED_SIZE = 155;
-const VOICE_SIZE = 156;
+/** A VCED is the voice without the operator on/off byte the editor adds. */
+const VCED_SIZE = VOICE_SIZE - 1;
 
 function libraryUrl(file: string): string {
   return `${import.meta.env.BASE_URL}library/${file}`;
 }
 
-let manifestPromise: Promise<LibraryManifest | null> | null = null;
+export interface ManifestResult {
+  manifest: LibraryManifest | null;
+  /** Why the library is missing, for the UI to report. Null on success. */
+  error: string | null;
+}
 
-/** Fetch the manifest once; resolves null when unavailable (app still works). */
-export function fetchLibraryManifest(): Promise<LibraryManifest | null> {
+let manifestPromise: Promise<ManifestResult> | null = null;
+
+/**
+ * Fetch the manifest once. A missing library is not fatal (the app still loads
+ * dropped .syx files), so this resolves with a reason instead of rejecting.
+ */
+export function fetchLibraryManifest(): Promise<ManifestResult> {
   manifestPromise ??= fetch(libraryUrl('manifest.json'))
-    .then((r) => (r.ok ? r.json() : null))
-    .then((json) => (isLibraryManifest(json) ? json : null))
-    .catch(() => null);
+    .then(async (r) => {
+      if (!r.ok) return { manifest: null, error: `library manifest ${r.status}` };
+      const json: unknown = await r.json();
+      return isLibraryManifest(json)
+        ? { manifest: json, error: null }
+        : { manifest: null, error: 'library manifest is malformed' };
+    })
+    .catch((err: unknown) => ({
+      manifest: null,
+      error: err instanceof Error ? err.message : 'library manifest unreachable',
+    }));
   return manifestPromise;
 }
 
@@ -168,9 +186,9 @@ export async function loadPerformanceSet(
     const lib = await getParsedSyx(set.requiresBankFiles[i]);
     const source = lib.populatedBanks()[0];
     if (!source) continue;
-    const voices = new Uint8Array(32 * VOICE_SIZE);
-    const supplements = new Uint8Array(32 * AMEM_SLOT_SIZE);
-    for (let p = 0; p < 32; p++) {
+    const voices = new Uint8Array(VOICES_PER_BANK * VOICE_SIZE);
+    const supplements = new Uint8Array(VOICES_PER_BANK * AMEM_SLOT_SIZE);
+    for (let p = 0; p < VOICES_PER_BANK; p++) {
       const slot = lib.resolve({ bank: source, program: p });
       if (slot) {
         voices.set(slot.vmem.subarray(0, VOICE_SIZE), p * VOICE_SIZE);

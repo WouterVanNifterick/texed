@@ -3,6 +3,12 @@
 // unpacking. Single source of truth shared by the engine and the UI state
 // layer (state/params.ts re-exports these).
 
+/** Length of one unpacked, editable voice: 6 × 21 operator bytes + 30 global. */
+export const VOICE_SIZE = 156;
+
+/** Voices in one half-bank of voice memory (INT 1-32, INT 33-64, ...). */
+export const VOICES_PER_BANK = 32;
+
 /** Byte offset of the 21-parameter block for UI operator `opNum` (1..6). */
 export function opBase(opNum: number): number {
   return (6 - opNum) * 21;

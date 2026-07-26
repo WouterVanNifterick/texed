@@ -3,16 +3,25 @@
 // use is unchanged; enabling more parts gives TX802/TX816 behavior.
 
 import { SynthRack } from '@texed/dx7-engine/synth-rack';
+import { AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
+import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice-layout';
 import { identifySysex, SysexKind, voiceFromVced } from '@texed/dx7-format/sysex';
 import { loadSysexFile, applySystemSetupToParts } from '@texed/dx7-format/sysex-loader';
 import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
 
 const STATUS_INTERVAL = 12;
 
+/** Split a concatenated dump into at most one bank's worth of fixed-size records. */
+function splitRecords(raw: Uint8Array, size: number): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  for (let i = 0; i + size <= raw.length && out.length < VOICES_PER_BANK; i += size) {
+    out.push(raw.subarray(i, i + size));
+  }
+  return out;
+}
+
 class DexedProcessor extends AudioWorkletProcessor {
   private rack: SynthRack;
-  private outL = new Float32Array(128);
-  private outR = new Float32Array(128);
   private statusCountdown = STATUS_INTERVAL;
 
   constructor() {
@@ -236,18 +245,10 @@ class DexedProcessor extends AudioWorkletProcessor {
         break;
       case MsgType.LoadBankInto: {
         const raw = new Uint8Array(msg.voices);
-        const voices: Uint8Array[] = [];
-        for (let i = 0; i + 156 <= raw.length && voices.length < 32; i += 156) {
-          voices.push(raw.subarray(i, i + 156));
-        }
-        let amems: Uint8Array[] | undefined;
-        if (msg.supplements) {
-          const rawA = new Uint8Array(msg.supplements);
-          amems = [];
-          for (let i = 0; i + 35 <= rawA.length && amems.length < 32; i += 35) {
-            amems.push(rawA.subarray(i, i + 35));
-          }
-        }
+        const voices = splitRecords(raw, VOICE_SIZE);
+        const amems = msg.supplements
+          ? splitRecords(new Uint8Array(msg.supplements), AMEM_SLOT_SIZE)
+          : undefined;
         this.rack.loadBankInto(msg.bank, voices, amems);
         this.postProgramState();
         this.postParts();
@@ -282,22 +283,13 @@ class DexedProcessor extends AudioWorkletProcessor {
   }
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
-    const output = outputs[0];
-    if (!output || output.length === 0) return true;
-    const numFrames = output[0].length;
+    const left = outputs[0]?.[0];
+    if (!left) return true;
 
-    if (this.outL.length !== numFrames) {
-      this.outL = new Float32Array(numFrames);
-      this.outR = new Float32Array(numFrames);
-    }
-    this.rack.render(this.outL, this.outR, numFrames);
-
-    const left = output[0];
-    const right = output[1] ?? output[0];
-    for (let i = 0; i < numFrames; i++) {
-      left[i] = this.outL[i];
-      right[i] = this.outR[i];
-    }
+    // Rendering straight into the output saves a full block copy per callback.
+    // The node is always created with a stereo output; the fallback only keeps a
+    // mono host from writing out of bounds.
+    this.rack.render(left, outputs[0][1] ?? left, left.length);
 
     if (--this.statusCountdown <= 0) {
       this.statusCountdown = STATUS_INTERVAL;

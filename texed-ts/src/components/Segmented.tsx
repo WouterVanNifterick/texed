@@ -17,12 +17,13 @@ export function Segmented<T extends string>({
   return (
     <div className="segmented">
       {label && <span className="segmented-label">{label}</span>}
-      <div className="segmented-group">
+      <div className="segmented-group" role="group" aria-label={label}>
         {options.map((o) => (
           <button
             key={o.value}
             type="button"
             className={`seg${value === o.value ? ' on' : ''}`}
+            aria-pressed={value === o.value}
             onClick={() => onChange(o.value)}
             {...(o.help ? helpProps(o.label, o.help) : undefined)}
           >

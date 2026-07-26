@@ -60,7 +60,7 @@ describe('packFs1rBank - real Bank 0', () => {
 
 describe('describeSyxFile', () => {
   it('describes a TX802 factory voice bank', () => {
-    const bytes = new Uint8Array(readFileSync(join(patchesDir, 'TX802_Factory/original/A1.SYX')));
+    const bytes = new Uint8Array(readFileSync(join(patchesDir, 'TX802_Factory/A1.SYX')));
     const desc = describeSyxFile(bytes);
     expect(desc.banks.length).toBe(1);
     expect(desc.banks[0].voices.length).toBe(32);
@@ -78,7 +78,7 @@ describe('describeSyxFile', () => {
   });
 
   it('describes the TX802 factory performance file (perfs only)', () => {
-    const bytes = new Uint8Array(readFileSync(join(patchesDir, 'TX802_Factory/original/P.SYX')));
+    const bytes = new Uint8Array(readFileSync(join(patchesDir, 'TX802_Factory/P.SYX')));
     const desc = describeSyxFile(bytes);
     expect(desc.banks.length).toBe(0);
     expect(desc.performanceNames.length).toBe(64);

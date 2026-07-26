@@ -51,6 +51,13 @@ export function usePersistentNumber(key: string, initial: number): [number, (v: 
   return [Number.isFinite(num) ? num : initial, set];
 }
 
+/** Boolean variant of usePersistentState (stored as 'on'/'off' under the hood). */
+export function usePersistentFlag(key: string, initial: boolean): [boolean, (v: boolean) => void] {
+  const [str, setStr] = usePersistentState<'on' | 'off'>(key, initial ? 'on' : 'off');
+  const set = useCallback((v: boolean) => setStr(v ? 'on' : 'off'), [setStr]);
+  return [str === 'on', set];
+}
+
 const QWERTY_MAP: Record<string, number> = {
   a: 0,
   w: 1,
@@ -206,16 +213,30 @@ export function useFileDrop(onDrop: (files: File[]) => void): boolean {
   return dragging;
 }
 
-/** Scales the fixed-size stage to fit the window, like a resizable plugin UI. */
-export function useStageScale(stageWidth: number, stageHeight: number): void {
+/**
+ * Scales the fixed-size stage to fit the window, like a resizable plugin UI.
+ *
+ * Shrinking without a floor makes the controls unusable (a phone lands near
+ * 0.27, which is a 10px knob), so the scale stops at `minScale` and the stage
+ * scrolls instead. Returns whether that floor is in effect, so the caller can
+ * say why the layout no longer fits.
+ */
+export function useStageScale(stageWidth: number, stageHeight: number, minScale = 0): boolean {
+  const [clamped, setClamped] = useState(false);
+
   useEffect(() => {
-    const update = () =>
-      document.documentElement.style.setProperty(
-        '--stage-scale',
-        String(Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight)),
-      );
+    const update = () => {
+      const fit = Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight);
+      const scale = Math.max(fit, minScale);
+      document.documentElement.style.setProperty('--stage-scale', String(scale));
+      // Drives the scrollable layout in App.css.
+      document.documentElement.classList.toggle('stage-clamped', scale > fit);
+      setClamped(scale > fit);
+    };
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [stageWidth, stageHeight]);
+  }, [stageWidth, stageHeight, minScale]);
+
+  return clamped;
 }

@@ -11,7 +11,7 @@ import { Porta } from './porta';
 import { Sin } from './sin';
 import { Exp2, Tanh } from './exp2';
 import { PluginFx } from './plugin-fx';
-import { Part, MAX_ACTIVE_NOTES, EngineType } from './part';
+import { Part, MAX_ACTIVE_NOTES, EngineType, type PartStatus } from './part';
 
 export { MAX_ACTIVE_NOTES, EngineType };
 
@@ -93,15 +93,7 @@ export class SynthUnit {
     this.part.panic();
   }
 
-  getStatus(): {
-    amps: number[];
-    steps: number[];
-    levels: number[];
-    pitchStep: number;
-    pitchLevel: number;
-    lfo: number;
-    lfoRestart: number;
-  } {
+  getStatus(): PartStatus {
     return this.part.getStatus();
   }
 

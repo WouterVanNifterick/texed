@@ -11,8 +11,13 @@ interface ToggleProps {
 export function Toggle({ label, on, onChange, help }: ToggleProps) {
   return (
     <div className="cycle" {...(help ? helpProps(label, help) : undefined)}>
-      <button type="button" className={`toggle${on ? ' on' : ''}`} onClick={() => onChange(!on)}>
-        <span className="led" />
+      <button
+        type="button"
+        className={`toggle${on ? ' on' : ''}`}
+        aria-pressed={on}
+        onClick={() => onChange(!on)}
+      >
+        <span className="led" aria-hidden />
         {label}
       </button>
     </div>

@@ -30,6 +30,17 @@ export const MAX_ACTIVE_NOTES = 32;
 export const EngineType = { Modern: 0, MarkI: 1, Opl: 2 } as const;
 export type EngineType = (typeof EngineType)[keyof typeof EngineType];
 
+/** Live envelope and LFO state for one part, as shown on the meters. */
+export interface PartStatus {
+  amps: number[];
+  steps: number[];
+  levels: number[];
+  pitchStep: number;
+  pitchLevel: number;
+  lfo: number;
+  lfoRestart: number;
+}
+
 interface Voice {
   dx7Note: Dx7Note;
   midiNote: number;
@@ -83,6 +94,16 @@ export class Part {
     level: [0, 0, 0, 0, 0, 0],
     pitchStep: 0,
     pitchLevel: 0,
+  };
+  // See getStatus: reused so the audio thread does not allocate to report state.
+  private status: PartStatus = {
+    amps: [0, 0, 0, 0, 0, 0],
+    steps: [4, 4, 4, 4, 4, 4],
+    levels: [0, 0, 0, 0, 0, 0],
+    pitchStep: 4,
+    pitchLevel: 0,
+    lfo: 0,
+    lfoRestart: 0,
   };
 
   private extraBuf = new Float32Array(N);
@@ -521,15 +542,12 @@ export class Part {
 
   // ==== Status ====
 
-  getStatus(): {
-    amps: number[];
-    steps: number[];
-    levels: number[];
-    pitchStep: number;
-    pitchLevel: number;
-    lfo: number;
-    lfoRestart: number;
-  } {
+  /**
+   * Current envelope/LFO state for the meters. Called from the audio thread, so
+   * it fills and returns a reused object instead of allocating. Callers must read
+   * the result before the next render; hold a copy if you need a snapshot.
+   */
+  getStatus(): PartStatus {
     let voice: Voice | null = this.voices[this.lastActiveVoice].live
       ? this.voices[this.lastActiveVoice]
       : null;
@@ -541,11 +559,7 @@ export class Part {
         }
       }
     }
-    const amps = [0, 0, 0, 0, 0, 0];
-    const steps = [4, 4, 4, 4, 4, 4];
-    const levels = [0, 0, 0, 0, 0, 0];
-    let pitchStep = 4;
-    let pitchLevel = 0;
+    const { amps, steps, levels } = this.status;
     if (voice) {
       voice.dx7Note.peekVoiceStatus(this.peekStatus);
       for (let op = 0; op < 6; op++) {
@@ -554,21 +568,23 @@ export class Part {
         steps[op] = this.peekStatus.ampStep[op];
         levels[op] = this.peekStatus.level[op];
       }
-      pitchStep = this.peekStatus.pitchStep;
-      pitchLevel = this.peekStatus.pitchLevel;
+      this.status.pitchStep = this.peekStatus.pitchStep;
+      this.status.pitchLevel = this.peekStatus.pitchLevel;
+    } else {
+      for (let op = 0; op < 6; op++) {
+        amps[op] = 0;
+        steps[op] = 4;
+        levels[op] = 0;
+      }
+      this.status.pitchStep = 4;
+      this.status.pitchLevel = 0;
     }
     // Scale the LFO excursion by the delay ramp so the meter reflects the
     // modulation that actually reaches the voices.
     const ramp = this.lastLfoDelay / (1 << 24);
-    return {
-      amps,
-      steps,
-      levels,
-      pitchStep,
-      pitchLevel,
-      lfo: 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp,
-      lfoRestart: this.lfoRestartSeq,
-    };
+    this.status.lfo = 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp;
+    this.status.lfoRestart = this.lfoRestartSeq;
+    return this.status;
   }
 
   /**

@@ -61,8 +61,19 @@ export function StoreVoiceDialog({
   };
 
   return (
-    <div className="partrack-overlay" onClick={onClose}>
-      <div className="partrack store-dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="partrack-overlay">
+      <button
+        type="button"
+        className="overlay-dismiss"
+        aria-label="Cancel storing the voice"
+        onClick={onClose}
+      />
+      <div
+        className="partrack store-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Store voice"
+      >
         <div className="partrack-header">
           <span className="partrack-title">STORE VOICE</span>
         </div>

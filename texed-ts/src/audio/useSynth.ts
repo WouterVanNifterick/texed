@@ -24,19 +24,13 @@ export interface BankInfo {
   populated: boolean;
 }
 
-export interface Synth {
+/**
+ * Everything that mutates the rack or reads it back asynchronously. Every member
+ * is stable for the lifetime of the hook, so these are safe as effect
+ * dependencies and as props to memoized components.
+ */
+export interface SynthActions {
   start: () => Promise<void>;
-  programOptions: ProgramOption[];
-  /** The four half-banks with populated flags (mirrors the worklet library). */
-  banks: BankInfo[];
-  loadReport: LoadReport | null;
-  voice: Uint8Array;
-  /** 35-byte DX7II AMEM supplement for the selected part's voice. */
-  supplement: Uint8Array;
-  /** Global system-setup settings (engine, volume, polyphony, master tune, micro-tuning). */
-  settings: GlobalSettings;
-  /** Display names of loaded micro-tuning tables; index maps to settings.microtuning. */
-  microtuningNames: string[];
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
   controlChange: (controller: number, value: number, channel?: number) => void;
@@ -54,18 +48,9 @@ export interface Synth {
   setVoice: (voice: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => void;
   setVolume: (volume: number) => void;
   panic: () => void;
-  partConfigs: PartConfig[];
-  /** Voice name in each part's edit buffer (live voice, not the library slot). */
-  partVoiceNames: string[];
-  selectedPart: number;
   selectPart: (index: number) => void;
   setPart: (index: number, config: Partial<PartConfig>) => void;
   setPolyphonyCap: (cap: number) => void;
-  performanceNames: string[];
-  /** Selected library performance, or -1 when loaded from a file. */
-  performanceIndex: number;
-  /** Display name of the currently loaded performance (edit-buffer identity). */
-  performanceName: string;
   selectPerformance: (index: number) => void;
   /** Load a full performance (8 parts + voices) into the edit buffers from a
    * non-library source (e.g. a MiniDexed .ini); sets `performanceName`. */
@@ -87,6 +72,32 @@ export interface Synth {
   setFullState: (state: RackState) => void;
 }
 
+/** The main-thread mirror of the rack. Each member changes as the rack changes. */
+export interface SynthData {
+  programOptions: ProgramOption[];
+  /** The four half-banks with populated flags (mirrors the worklet library). */
+  banks: BankInfo[];
+  loadReport: LoadReport | null;
+  voice: Uint8Array;
+  /** 35-byte DX7II AMEM supplement for the selected part's voice. */
+  supplement: Uint8Array;
+  /** Global system-setup settings (engine, volume, polyphony, master tune, micro-tuning). */
+  settings: GlobalSettings;
+  /** Display names of loaded micro-tuning tables; index maps to settings.microtuning. */
+  microtuningNames: string[];
+  partConfigs: PartConfig[];
+  /** Voice name in each part's edit buffer (live voice, not the library slot). */
+  partVoiceNames: string[];
+  selectedPart: number;
+  performanceNames: string[];
+  /** Selected library performance, or -1 when loaded from a file. */
+  performanceIndex: number;
+  /** Display name of the currently loaded performance (edit-buffer identity). */
+  performanceName: string;
+}
+
+export interface Synth extends SynthActions, SynthData {}
+
 export function useStatus<T>(
   subscribe: (cb: (s: SynthStatus) => void) => () => void,
   selector: (s: SynthStatus) => T,
@@ -106,6 +117,11 @@ export function useSynth(externalPort?: SynthPort): Synth {
   if (portRef.current === null) portRef.current = new WorkletPort();
   const port = portRef.current;
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
+  // Meter frames arrive faster than they can usefully be drawn, so only the
+  // newest one is kept and fanned out once per animation frame. A hidden tab
+  // stops getting frames, so the ~25 meter components stop re-rendering too.
+  const pendingStatus = useRef<SynthStatus | null>(null);
+  const statusFrame = useRef(0);
   const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
   const fullStateCb = useRef<((state: RackState) => void) | null>(null);
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
@@ -135,40 +151,52 @@ export function useSynth(externalPort?: SynthPort): Synth {
     [port],
   );
 
-  useEffect(
-    () =>
-      port.onEvent((m) => {
-        if (m.type === 'programState') {
-          setProgramOptions(m.options);
-          setBanks(m.banks);
-        } else if (m.type === 'loadReport') {
-          setLoadReport(m.report);
-        } else if (m.type === 'voice') {
-          setVoiceState(new Uint8Array(m.data));
-          setSupplementState(new Uint8Array(m.supplement));
-        } else if (m.type === 'settings') {
-          setSettings(m.settings);
-          setMicrotuningNames(m.microtuningNames);
-        } else if (m.type === 'parts') {
-          setPartConfigs(m.configs);
-          setPartVoiceNames(m.voiceNames);
-          setSelectedPart(m.selectedPart);
-        } else if (m.type === 'performances') {
-          setPerformanceNames(m.names);
-          setPerformanceIndex(m.index);
-          setPerformanceName(m.name);
-        } else if (m.type === 'bankDump') {
-          bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
-          bankDumpCb.current = null;
-        } else if (m.type === 'fullState') {
-          fullStateCb.current?.(m.state);
-          fullStateCb.current = null;
-        } else if (m.type === 'status') {
-          for (const cb of statusSubs.current) cb(m);
-        }
-      }),
-    [port],
-  );
+  const flushStatus = useCallback(() => {
+    statusFrame.current = 0;
+    const s = pendingStatus.current;
+    if (!s) return;
+    pendingStatus.current = null;
+    for (const cb of statusSubs.current) cb(s);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = port.onEvent((m) => {
+      if (m.type === 'programState') {
+        setProgramOptions(m.options);
+        setBanks(m.banks);
+      } else if (m.type === 'loadReport') {
+        setLoadReport(m.report);
+      } else if (m.type === 'voice') {
+        setVoiceState(new Uint8Array(m.data));
+        setSupplementState(new Uint8Array(m.supplement));
+      } else if (m.type === 'settings') {
+        setSettings(m.settings);
+        setMicrotuningNames(m.microtuningNames);
+      } else if (m.type === 'parts') {
+        setPartConfigs(m.configs);
+        setPartVoiceNames(m.voiceNames);
+        setSelectedPart(m.selectedPart);
+      } else if (m.type === 'performances') {
+        setPerformanceNames(m.names);
+        setPerformanceIndex(m.index);
+        setPerformanceName(m.name);
+      } else if (m.type === 'bankDump') {
+        bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
+        bankDumpCb.current = null;
+      } else if (m.type === 'fullState') {
+        fullStateCb.current?.(m.state);
+        fullStateCb.current = null;
+      } else if (m.type === 'status') {
+        pendingStatus.current = m;
+        statusFrame.current ||= requestAnimationFrame(flushStatus);
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (statusFrame.current) cancelAnimationFrame(statusFrame.current);
+      statusFrame.current = 0;
+    };
+  }, [port, flushStatus]);
 
   const start = useCallback(() => port.start(), [port]);
 
@@ -201,12 +229,15 @@ export function useSynth(externalPort?: SynthPort): Synth {
     },
     [post],
   );
+  // Read through a ref so the callback stays stable as the option list changes.
+  const programOptionsRef = useRef(programOptions);
+  programOptionsRef.current = programOptions;
   const setProgram = useCallback(
     (index: number) => {
-      const opt = programOptions[index];
+      const opt = programOptionsRef.current[index];
       if (opt) post({ type: MsgType.SetVoiceRef, voice: opt.ref });
     },
-    [post, programOptions],
+    [post],
   );
   const setVoiceRef = useCallback(
     (ref: VoiceRef, partIndex?: number) =>
@@ -368,18 +399,12 @@ export function useSynth(externalPort?: SynthPort): Synth {
     return () => statusSubs.current.delete(cb);
   }, []);
 
-  // Stable identity between synth-state changes, so consumers can depend on
-  // the object (or its methods) without re-running effects every render.
-  return useMemo<Synth>(
+  // Every action closes over `post` (which closes over a ref-held port) or
+  // nothing at all, so this memo is built once and its members keep their
+  // identity for the lifetime of the hook.
+  const actions = useMemo<SynthActions>(
     () => ({
       start,
-      programOptions,
-      banks,
-      loadReport,
-      voice,
-      supplement,
-      settings,
-      microtuningNames,
       noteOn,
       noteOff,
       controlChange,
@@ -396,15 +421,9 @@ export function useSynth(externalPort?: SynthPort): Synth {
       setVoice,
       setVolume,
       panic,
-      partConfigs,
-      partVoiceNames,
-      selectedPart,
       selectPart,
       setPart,
       setPolyphonyCap,
-      performanceNames,
-      performanceIndex,
-      performanceName,
       selectPerformance,
       loadPerformance,
       subscribeStatus,
@@ -416,13 +435,6 @@ export function useSynth(externalPort?: SynthPort): Synth {
     }),
     [
       start,
-      programOptions,
-      banks,
-      loadReport,
-      voice,
-      supplement,
-      settings,
-      microtuningNames,
       noteOn,
       noteOff,
       controlChange,
@@ -439,15 +451,9 @@ export function useSynth(externalPort?: SynthPort): Synth {
       setVoice,
       setVolume,
       panic,
-      partConfigs,
-      partVoiceNames,
-      selectedPart,
       selectPart,
       setPart,
       setPolyphonyCap,
-      performanceNames,
-      performanceIndex,
-      performanceName,
       selectPerformance,
       loadPerformance,
       subscribeStatus,
@@ -456,6 +462,43 @@ export function useSynth(externalPort?: SynthPort): Synth {
       loadBankInto,
       getFullState,
       setFullState,
+    ],
+  );
+
+  // Changes whenever the mirrored rack state changes, which is what consumers
+  // render from. Actions are spread in so `synth.setParam` stays convenient.
+  return useMemo<Synth>(
+    () => ({
+      ...actions,
+      programOptions,
+      banks,
+      loadReport,
+      voice,
+      supplement,
+      settings,
+      microtuningNames,
+      partConfigs,
+      partVoiceNames,
+      selectedPart,
+      performanceNames,
+      performanceIndex,
+      performanceName,
+    }),
+    [
+      actions,
+      programOptions,
+      banks,
+      loadReport,
+      voice,
+      supplement,
+      settings,
+      microtuningNames,
+      partConfigs,
+      partVoiceNames,
+      selectedPart,
+      performanceNames,
+      performanceIndex,
+      performanceName,
     ],
   );
 }

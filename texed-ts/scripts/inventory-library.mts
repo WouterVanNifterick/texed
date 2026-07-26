@@ -81,10 +81,15 @@ function formatHex(n: number | undefined): string {
 
 /** Strip NULs / other controls so inventory markdown stays text-safe. */
 function cleanName(name: string): string {
-  return name
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trimEnd();
+  return (
+    name
+      // Voice names come straight out of SysEx, so control bytes are exactly
+      // what needs matching here.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trimEnd()
+  );
 }
 
 function cleanNames(names: string[]): string[] {

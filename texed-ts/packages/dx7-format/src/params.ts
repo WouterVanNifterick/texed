@@ -43,8 +43,14 @@ export function formatOpFreq(voice: Uint8Array, base: number): string {
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+/** Scientific pitch name for a MIDI note number, so 60 is C4 and 0 is C-1. */
+export function noteName(midi: number): string {
+  return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+/** Transpose is stored as semitones above C1, so 12 reads as C2. */
 export function formatTranspose(value: number): string {
-  return `${NOTE_NAMES[value % 12]}${Math.floor(value / 12) + 1}`;
+  return noteName(value + 24);
 }
 
 /** Signed semitone offset from middle C (stored 24 = 0). */

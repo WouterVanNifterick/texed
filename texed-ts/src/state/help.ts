@@ -26,10 +26,18 @@ export function useHelpEntry(): HelpEntry | null {
   return useSyncExternalStore(subscribe, () => current);
 }
 
-/** Spread onto any element to publish help text while the pointer is over it. */
+/**
+ * Spread onto any element to publish help text while it is hovered or focused.
+ * Focus is included so keyboard users get the same descriptions; the events
+ * bubble from the focusable child when spread onto a wrapper.
+ */
 export function helpProps(title: string, text: string) {
+  const show = () => setHelp({ title, text });
+  const hide = () => setHelp(null);
   return {
-    onPointerEnter: () => setHelp({ title, text }),
-    onPointerLeave: () => setHelp(null),
+    onPointerEnter: show,
+    onPointerLeave: hide,
+    onFocus: show,
+    onBlur: hide,
   };
 }

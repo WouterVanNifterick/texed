@@ -9,7 +9,7 @@
 
 import { useCallback, useRef } from 'react';
 import { scaleLevel } from '@texed/dx7-engine/dx7note';
-import { CURVES } from '@texed/dx7-format/params';
+import { CURVES, noteName } from '@texed/dx7-format/params';
 
 const W = 127;
 const H = 56;
@@ -18,12 +18,9 @@ const H = 56;
 const MAX_SCALE = 128;
 const BP_HIT = 8; // half-width of the break point grab strip, viewBox units
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
 /** DX7-style break point label: 0 = A-1 ... 99 = C8. */
 function bpLabel(bp: number): string {
-  const n = bp + 9;
-  return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
+  return noteName(bp + 9);
 }
 
 export type ScalingField = 'breakPoint' | 'leftDepth' | 'rightDepth' | 'leftCurve' | 'rightCurve';

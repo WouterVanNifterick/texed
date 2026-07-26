@@ -12,7 +12,7 @@ import {
   slugifyPath,
   type SourceFile,
 } from './patch-library-core.mts';
-import type { LibBank, LibCollection, LibPerfSet } from '../src/state/library-manifest';
+import type { LibBank, LibCollection, LibPerfSet } from '@texed/dx7-format/library-manifest';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const PATCHES_DIR = path.resolve(scriptDir, '..', '..', 'patches');
@@ -39,16 +39,10 @@ const COLLECTIONS: CollectionSpec[] = [
     dir: 'TX802_Factory',
     kind: 'syx',
     perfBankMap: {
-      'original/P.SYX': [
-        'original/A1.SYX',
-        'original/A2.SYX',
-        'original/B1.SYX',
-        'original/B2.SYX',
-      ],
-      'fmori/perf_1-64.syx': ['fmori/voice_1-32.syx', 'fmori/voice_33-64.syx'],
+      'P.SYX': ['A1.SYX', 'A2.SYX', 'B1.SYX', 'B2.SYX'],
     },
   },
-  { id: 'dexed', name: 'DeXed', dir: 'DeXed', kind: 'syx' },
+  { id: 'dexed', name: 'Dexed', dir: 'Dexed', kind: 'syx' },
   { id: 'tx802-collections', name: 'TX802 Collections', dir: 'TX802_Collections', kind: 'syx' },
   { id: 'dx7iifd-factory', name: 'DX7IIFD Factory', dir: 'DX7IIFD_Factory', kind: 'syx' },
   { id: 'dx7s-factory', name: 'DX7s Factory', dir: 'DX7s_Factory', kind: 'syx' },

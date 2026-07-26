@@ -15,7 +15,7 @@ import {
   loadPerformanceSet,
   type LibVoiceHit,
 } from '../state/library';
-import type { LibBank, LibPerfSet, LibraryManifest } from '../state/library-manifest';
+import type { LibBank, LibPerfSet, LibraryManifest } from '@texed/dx7-format/library-manifest';
 import { helpProps } from '../state/help';
 import { Segmented } from './ui';
 
@@ -45,13 +45,14 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   const voiceListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchLibraryManifest().then((m) => {
+    fetchLibraryManifest().then(({ manifest: m, error }) => {
       setManifest(m);
       setManifestPending(false);
+      if (error) showMsg(`Built-in library unavailable · ${error}`);
       if (m && m.collections.length > 0)
         setColId((cur) => (cur === LOADED_ID ? m.collections[0].id : cur));
     });
-  }, []);
+  }, [showMsg]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -230,8 +231,14 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   );
 
   return (
-    <div className="libbrowser-overlay" onClick={onClose}>
-      <div className="libbrowser" onClick={(e) => e.stopPropagation()}>
+    <div className="libbrowser-overlay">
+      <button
+        type="button"
+        className="overlay-dismiss"
+        aria-label="Close library"
+        onClick={onClose}
+      />
+      <div className="libbrowser" role="dialog" aria-modal="true" aria-label="Patch library">
         <div className="libbrowser-header">
           <span className="libbrowser-title">LIBRARY</span>
           <Segmented
@@ -321,8 +328,20 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
           </div>
         )}
 
+        {/* The columns form one composite widget: a single tab stop that moves
+            its selection with the arrow keys and auditions with Enter, with
+            every entry also reachable as a real button. That needs a focusable
+            container, which the two rules below would otherwise forbid. */}
         {tab === 'voices' && !searchResults && (
-          <div className="libbrowser-columns" tabIndex={0} onKeyDown={onListKeyDown}>
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
+          <div
+            className="libbrowser-columns"
+            role="group"
+            aria-label="Voice browser"
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+            tabIndex={0}
+            onKeyDown={onListKeyDown}
+          >
             <div className="libbrowser-col libbrowser-col-collections">
               <div className="libbrowser-colhead">COLLECTIONS</div>
               {collections.map((c) => (

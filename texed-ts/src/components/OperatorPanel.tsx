@@ -122,12 +122,19 @@ export const OperatorPanel = memo(function OperatorPanel({
   const levels = [v(4), v(5), v(6), v(7)];
 
   return (
+    // Pointing at or into the panel selects the operator for the combined view.
+    // Focus bubbles from the controls inside, so tabbing gets there too; the
+    // panel itself holds no controls of its own that need a keyboard handler.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <section
       className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${selected ? ' selected' : ''}${flat ? ' flat' : ''}`}
       style={{ ['--op' as string]: OP_COLORS[opNum - 1] }}
+      aria-label={`Operator ${opNum}`}
+      aria-current={selected}
       onPointerEnter={() => onHover(opNum)}
       onPointerLeave={() => onHover(null)}
       onPointerDown={onSelect}
+      onFocus={onSelect}
     >
       <div className="panel-head">
         <button

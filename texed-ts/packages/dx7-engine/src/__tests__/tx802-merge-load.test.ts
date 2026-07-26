@@ -6,7 +6,7 @@ import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
 import { SynthRack } from '../synth-rack';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const factory = join(here, '../../../../../patches/TX802_Factory/original');
+const factory = join(here, '../../../../../patches/TX802_Factory');
 const load = (name: string) => new Uint8Array(readFileSync(join(factory, name)));
 
 describe('TX802 incremental load', () => {

@@ -77,13 +77,13 @@ pnpm build    # production build
 pnpm cli song.mid --syx bank.syx   # headless WAV render. See docs/cli.md
 ```
 
-Architecture and editing controls: [texed-ts/README.md](texed-ts/README.md). Contributing:
+Architecture: [docs/architecture.md](docs/architecture.md). Contributing:
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
 Texed inherits the [Dexed](https://github.com/asb2m10/dexed) lineage and is distributed under
-**GNU GPL v3**. Full license text: [dexed-juce/LICENSE](dexed-juce/LICENSE).
+**GNU GPL v3**. Full license text: [LICENSE](LICENSE).
 
 Bundled `.syx` data under `patches/` is third-party/factory content. See
 [docs/patch-library.md](docs/patch-library.md).

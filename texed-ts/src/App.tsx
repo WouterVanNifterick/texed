@@ -2,27 +2,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import dexedIcon from './assets/dexed-icon.svg';
 import { useSynth } from './audio/useSynth';
-import { initMidi, type MidiConnection } from './audio/midi';
-import {
-  setMidiOutConnection,
-  setMidiOutTarget,
-  setMidiOutLive,
-  sendVoiceDump,
-  hardwarePort,
-} from './audio/midi-out';
-import { getVoiceName, voiceToSysex, withVoiceName } from '@texed/dx7-format/params';
-import { acedToSysex } from '@texed/dx7-format/amem';
-import { trackCc, trackAftertouch } from './state/live-ctrl';
+import type { MidiConnection } from './audio/midi';
+import { useMidiIo } from './audio/useMidiIo';
+import { hardwarePort } from './audio/midi-out';
+import { getVoiceName, withVoiceName } from '@texed/dx7-format/params';
 import {
   useFileDrop,
   usePartSelectKeys,
+  usePersistentFlag,
   usePersistentState,
   usePersistentNumber,
   useQwertyKeyboard,
   useStageScale,
   useTransientMessage,
 } from './hooks';
-import { loadSession, saveSession, SESSION_SCHEMA } from './state/persistence';
+import { useSession } from './state/useSession';
+import { usePatchFiles } from './state/usePatchFiles';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
 import { OperatorPanel } from './components/OperatorPanel';
@@ -39,20 +34,12 @@ import { StoreVoiceDialog } from './components/StoreVoiceDialog';
 import { StoreIcon } from './components/icons';
 import { helpProps } from './state/help';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
-import {
-  parseMiniDexedIni,
-  serializeMiniDexedIni,
-  type MiniDexedExtras,
-} from '@texed/dx7-format/minidexed-ini';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 
 // ?hw - hardware editor mode: the UI drives a real DX7/DX7II/TX802 over MIDI
 // SysEx instead of the local engine (pick the output in MIDI settings).
 const HW_MODE = new URLSearchParams(window.location.search).has('hw');
-
-// Auto-send: how long edits must settle before the full voice dump goes out.
-const AUTO_SEND_DEBOUNCE_MS = 250;
 
 export default function App() {
   const synth = useSynth(HW_MODE ? hardwarePort : undefined);
@@ -71,20 +58,17 @@ export default function App() {
   const [yMode, setYMode] = usePersistentState<YMode>('envYMode', 'db');
   const [refNote, setRefNote] = usePersistentNumber('envRefNote', 60);
   const [refVelocity, setRefVelocity] = usePersistentNumber('envRefVelocity', 99);
-  const [refFollow, setRefFollow] = usePersistentState<'on' | 'off'>('envRefFollow', 'off');
-  const [midiInputs, setMidiInputs] = useState<string[]>([]);
-  const [midiOutputs, setMidiOutputs] = useState<{ id: string; name: string }[]>([]);
-  const [midiOutId, setMidiOutId] = usePersistentState<string>('midiOutId', '');
-  const [midiLive, setMidiLive] = usePersistentState<'on' | 'off'>('midiLiveSend', 'off');
-  const [autoSend, setAutoSend] = usePersistentState<'on' | 'off'>('midiAutoSend', 'off');
+  const [refFollow, setRefFollow] = usePersistentFlag('envRefFollow', false);
   const [showParts, setShowParts] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showStore, setShowStore] = useState(false);
   const midiRef = useRef<MidiConnection | null>(null);
   const [loadMsg, showLoadMsg] = useTransientMessage();
-  const [miniDexedExtras, setMiniDexedExtras] = useState<MiniDexedExtras | null>(null);
 
-  useStageScale(1440, 1020);
+  // Floor chosen so the smallest controls (4px envelope labels at 0.27) stay
+  // readable; below it the stage pans instead of shrinking further.
+  const stageClamped = useStageScale(1440, 1020, 0.62);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
 
   const timeScale = useEnvTimeScale(synth.voice, timeMode, refNote, refVelocity);
   const combined = envView === 'combined';
@@ -94,7 +78,7 @@ export default function App() {
   // stable (MIDI is wired once at start and must not be re-registered).
   const refFollowRef = useRef(false);
   useEffect(() => {
-    refFollowRef.current = refFollow === 'on';
+    refFollowRef.current = refFollow;
   }, [refFollow]);
 
   useEffect(() => {
@@ -141,57 +125,16 @@ export default function App() {
     [rackNoteOff],
   );
 
+  const midi = useMidiIo({ synth, noteOn, noteOff, hardwareMode: HW_MODE });
+  const session = useSession(synth, started);
+  const files = usePatchFiles(synth, showLoadMsg);
+
   const handleStart = useCallback(async () => {
     await synth.start();
     setStarted(true);
-
-    const saved = await loadSession();
-    if (saved) {
-      // setFullState restores parts, edit buffers and global settings together.
-      synth.setFullState(saved.rack);
-      showLoadMsg('Session restored');
-    }
-
-    midiRef.current = await initMidi({
-      noteOn,
-      noteOff,
-      controlChange: (controller, value, channel) => {
-        trackCc(controller, value);
-        synth.controlChange(controller, value, channel);
-      },
-      pitchBend: synth.pitchBend,
-      aftertouch: (value, channel) => {
-        trackAftertouch(value);
-        synth.aftertouch(value, channel);
-      },
-      inputsChanged: setMidiInputs,
-      outputsChanged: setMidiOutputs,
-    });
-    // Route all outgoing SysEx (voice dumps, live param changes) and note
-    // forwarding through this connection, restoring the persisted target/toggle.
-    setMidiOutConnection(midiRef.current);
-    setMidiOutTarget(midiOutId);
-    // In hardware mode every edit already goes out through the port; the live
-    // mirror would duplicate each frame.
-    setMidiOutLive(!HW_MODE && midiLive === 'on');
-  }, [synth, noteOn, noteOff, showLoadMsg, midiOutId, midiLive]);
-
-  // Persist the session (debounced): every rack mutation (including global
-  // settings) flows through the synth's mirrored state, so the synth object
-  // identity is the change signal.
-  useEffect(() => {
-    if (!started) return;
-    const t = window.setTimeout(() => {
-      synth.getFullState((rack) => {
-        void saveSession({
-          schema: SESSION_SCHEMA,
-          savedAt: Date.now(),
-          rack,
-        });
-      });
-    }, 1500);
-    return () => window.clearTimeout(t);
-  }, [started, synth]);
+    if (await session.restore()) showLoadMsg('Session restored');
+    midiRef.current = await midi.connect();
+  }, [synth, session, midi, showLoadMsg]);
 
   useQwertyKeyboard(started, noteOn, noteOff);
   usePartSelectKeys(started, synth.selectPart);
@@ -199,29 +142,6 @@ export default function App() {
   useEffect(() => {
     return () => midiRef.current?.close();
   }, []);
-
-  useEffect(() => {
-    setMidiOutTarget(midiOutId);
-  }, [midiOutId]);
-  useEffect(() => {
-    // In hardware mode every edit already goes out through the port; the live
-    // mirror would duplicate each frame.
-    setMidiOutLive(!HW_MODE && midiLive === 'on');
-  }, [midiLive]);
-
-  const onSendVoice = useCallback(() => {
-    sendVoiceDump(synth.voice, synth.supplement);
-  }, [synth]);
-
-  // Auto-send: after edits settle, push the full ACED + VCED dump. Each new
-  // voice/supplement reference restarts the timer (cleanup = debounce), so a
-  // slider drag sends once, not per frame. Skipped in ?hw mode (edits already
-  // stream through the hardware port).
-  useEffect(() => {
-    if (HW_MODE || autoSend !== 'on' || !midiOutId) return;
-    const t = setTimeout(() => sendVoiceDump(synth.voice, synth.supplement), AUTO_SEND_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [autoSend, midiOutId, synth.voice, synth.supplement]);
 
   const onSelectProgram = useCallback(
     (idx: number) => {
@@ -231,44 +151,18 @@ export default function App() {
     [synth],
   );
 
-  const applyMiniDexedIni = useCallback(
-    (text: string, fileName: string) => {
-      const { name: iniName, parts, voices, extras } = parseMiniDexedIni(text);
-      setMiniDexedExtras(extras);
-      const name = iniName || fileName.replace(/\.ini$/i, '');
-      synth.loadPerformance(name, parts, voices);
-      showLoadMsg(`Loaded MiniDexed performance · ${name}`);
-    },
-    [synth, showLoadMsg],
-  );
-
-  const onLoadFiles = useCallback(
-    async (files: File[]) => {
-      if (!files.length) return;
-      const iniFiles = files.filter((f) => /\.ini$/i.test(f.name));
-      const syxFiles = files.filter((f) => !/\.ini$/i.test(f.name));
-      for (const f of iniFiles) {
-        applyMiniDexedIni(await f.text(), f.name);
-      }
-      if (syxFiles.length) {
-        synth.loadCart(await new Blob(syxFiles).arrayBuffer());
-      }
-    },
-    [synth, applyMiniDexedIni],
-  );
-
   const onDrop = useCallback(
-    (files: File[]) => {
-      if (!files.length) {
+    (dropped: File[]) => {
+      if (!dropped.length) {
         showLoadMsg('No .syx, .ini, or .Dx7Voice files in drop');
         return;
       }
       void (async () => {
         if (!started) await handleStart();
-        await onLoadFiles(files);
+        await files.loadFiles(dropped);
       })();
     },
-    [started, handleStart, onLoadFiles, showLoadMsg],
+    [started, handleStart, files, showLoadMsg],
   );
 
   const dragging = useFileDrop(onDrop);
@@ -277,24 +171,6 @@ export default function App() {
   // Name shown in the editor is the live edit-buffer name (which may have been
   // edited away from the bank slot it was loaded from), not the library label.
   const editBufferName = getVoiceName(synth.voice).trim() || 'INIT VOICE';
-
-  const onSaveBank = useCallback(() => {
-    const bank = synth.partConfigs[synth.selectedPart]?.voice.bank ?? 'internalA';
-    synth.requestBankDump(bank, (data) => {
-      if (!data) {
-        showLoadMsg(`Bank ${bank} is empty - nothing to save`);
-        return;
-      }
-      const url = URL.createObjectURL(
-        new Blob([data.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' }),
-      );
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${bank}.syx`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  }, [synth, showLoadMsg]);
 
   const onStoreConfirm = useCallback(
     (name: string, dest: VoiceRef, destLabel: string) => {
@@ -306,51 +182,16 @@ export default function App() {
     [synth, showLoadMsg],
   );
 
-  const onSavePerformance = useCallback(() => {
-    synth.getFullState((state) => {
-      const text = serializeMiniDexedIni({
-        name: state.performanceName,
-        parts: state.parts,
-        voices: state.editBuffers.map((eb) => eb.voice),
-        extras: miniDexedExtras,
-      });
-      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'performance.ini';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  }, [synth, miniDexedExtras]);
-
-  const onSaveVoice = useCallback(() => {
-    // Single voice = DX7II additional data (ACED) followed by the voice (VCED),
-    // the same pair the DX7II transmits for the current voice.
-    const aced = acedToSysex(synth.supplement);
-    const vced = voiceToSysex(synth.voice);
-    const syx = new Uint8Array(aced.length + vced.length);
-    syx.set(aced, 0);
-    syx.set(vced, aced.length);
-    const url = URL.createObjectURL(
-      new Blob([syx.buffer as ArrayBuffer], { type: 'application/octet-stream' }),
-    );
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${getVoiceName(synth.voice).trim() || 'voice'}.syx`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [synth]);
-
   return (
     <div className="app-root" onContextMenu={(e) => e.preventDefault()}>
       <div className="rack">
         <TopBar
           synth={synth}
           loadMsg={loadMsg}
-          onLoadFiles={onLoadFiles}
-          onSaveVoice={onSaveVoice}
-          onSaveBank={onSaveBank}
-          onSavePerformance={onSavePerformance}
+          onLoadFiles={files.loadFiles}
+          onSaveVoice={files.saveVoice}
+          onSaveBank={files.saveBank}
+          onSavePerformance={files.savePerformance}
           engine={engine}
           engineNames={ENGINES}
           onEngine={synth.setEngine}
@@ -362,15 +203,15 @@ export default function App() {
           onVolume={synth.setVolume}
           masterTuneCents={synth.settings.masterTuneCents}
           onMasterTune={synth.setMasterTune}
-          midiInputs={midiInputs}
-          midiOutputs={midiOutputs}
-          midiOutId={midiOutId}
-          onMidiOut={setMidiOutId}
-          midiLive={midiLive === 'on'}
-          onMidiLive={(on) => setMidiLive(on ? 'on' : 'off')}
-          autoSend={autoSend === 'on'}
-          onAutoSend={(on) => setAutoSend(on ? 'on' : 'off')}
-          onSendVoice={onSendVoice}
+          midiInputs={midi.inputs}
+          midiOutputs={midi.outputs}
+          midiOutId={midi.outId}
+          onMidiOut={midi.setOutId}
+          midiLive={midi.live}
+          onMidiLive={midi.setLive}
+          autoSend={midi.autoSend}
+          onAutoSend={midi.setAutoSend}
+          onSendVoice={midi.sendVoice}
         />
 
         <div className="mode-bar">
@@ -476,10 +317,10 @@ export default function App() {
             <RefKeyControl
               note={refNote}
               velocity={refVelocity}
-              follow={refFollow === 'on'}
+              follow={refFollow}
               onNote={setRefNote}
               onVelocity={setRefVelocity}
-              onToggleFollow={(on) => setRefFollow(on ? 'on' : 'off')}
+              onToggleFollow={setRefFollow}
             />
           </div>
         </div>
@@ -572,6 +413,15 @@ export default function App() {
       {dragging && (
         <div className="drop-overlay" aria-hidden>
           Drop .syx, .ini, or .Dx7Voice files to load
+        </div>
+      )}
+
+      {stageClamped && !noticeDismissed && (
+        <div className="small-screen-notice" role="status">
+          <span>This editor is built for a larger screen. Scroll to reach the rest of it.</span>
+          <button type="button" onClick={() => setNoticeDismissed(true)}>
+            Got it
+          </button>
         </div>
       )}
 

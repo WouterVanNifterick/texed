@@ -26,7 +26,7 @@ export function PartSlider({
     : { left: '0%', width: `${pct}%` };
 
   return (
-    <div className={`part-slider${center ? ' part-slider--center' : ''}`}>
+    <div className="part-slider">
       <div className="part-slider-track" aria-hidden />
       {center ? <div className="part-slider-center" aria-hidden /> : null}
       <div className="part-slider-fill" aria-hidden style={fillStyle} />

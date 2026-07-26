@@ -29,7 +29,7 @@ Formatting: `pnpm format:check` (or `pnpm format` to fix).
 | Headless render CLI | `texed-ts/apps/cli/` |
 | Bundled patch library | `patches/` + `texed-ts/scripts/build-patch-library.mts` |
 
-Architecture overview: [texed-ts/README.md](texed-ts/README.md).
+Architecture overview: [docs/architecture.md](docs/architecture.md).
 
 User-facing behavior: [docs/using-texed.md](docs/using-texed.md).
 

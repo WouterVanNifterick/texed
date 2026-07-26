@@ -5,7 +5,7 @@
 // envelope has reached its sustain before release, and the axis spans from the
 // fastest attack to the slowest release.
 
-import { useMemo } from 'react';
+import { useRef } from 'react';
 import { scaleoutlevel } from '@texed/dx7-engine/env';
 import { scaleLevel, scaleRate, scaleVelocity } from '@texed/dx7-engine/dx7note';
 import { OP, G, opBase } from '@texed/dx7-format/params';
@@ -185,18 +185,26 @@ export function computeEnvTimeScale(
   return makeScale(mode, gateSec, maxReleaseEnd);
 }
 
-/** React hook: memoized shared time scale, recomputed only when EG bytes change. */
+/**
+ * React hook: shared time scale, recomputed only when the EG bytes change.
+ *
+ * Every parameter edit hands down a fresh `voice` array, so a `useMemo` on
+ * `voice` would recompute on each keystroke anywhere in the editor. Caching on
+ * the value of the bytes the curves actually depend on limits the work to edits
+ * that can change the result.
+ */
 export function useEnvTimeScale(
   voice: Uint8Array,
   mode: TimeMode,
   note = REF_NOTE,
   velocity = REF_VELOCITY,
 ): EnvTimeScale {
-  const key = useMemo(() => envDepKey(voice), [voice]);
-  return useMemo(
-    () => computeEnvTimeScale(voice, mode, note, velocity),
-    [key, mode, note, velocity],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  const key = `${envDepKey(voice)}|${mode}|${note}|${velocity}`;
+  const cached = useRef<{ key: string; value: EnvTimeScale } | null>(null);
+  if (cached.current?.key !== key) {
+    cached.current = { key, value: computeEnvTimeScale(voice, mode, note, velocity) };
+  }
+  return cached.current.value;
 }
 
 /** Hash of every byte the seven envelope curves depend on. */

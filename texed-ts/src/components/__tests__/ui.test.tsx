@@ -1,15 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Cycle, Knob, Toggle, noteLabel } from '../ui';
-
-describe('noteLabel', () => {
-  it('maps MIDI notes to names', () => {
-    expect(noteLabel(60)).toBe('C4');
-    expect(noteLabel(0)).toBe('C-1');
-    expect(noteLabel(127)).toBe('G9');
-  });
-});
+import { Cycle, Knob, Toggle } from '../ui';
 
 describe('Knob', () => {
   function renderKnob(overrides: Partial<Parameters<typeof Knob>[0]> = {}) {

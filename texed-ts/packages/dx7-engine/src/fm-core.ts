@@ -11,6 +11,9 @@ export { FmOperatorFlags, algorithms, isCarrier } from '@texed/dx7-format/algori
 export class FmCore {
   protected buf0 = new Int32Array(N);
   protected buf1 = new Int32Array(N);
+  // Reused across render calls: this runs on the audio thread, which must not
+  // allocate. Safe because there is one core per part and render never nests.
+  protected hasContents = [true, false, false];
 
   render(
     output: Int32Array,
@@ -21,7 +24,10 @@ export class FmCore {
   ): void {
     const kLevelThresh = 1120;
     const alg = algorithms[algorithm];
-    const hasContents = [true, false, false];
+    const hasContents = this.hasContents;
+    hasContents[0] = true;
+    hasContents[1] = false;
+    hasContents[2] = false;
     for (let op = 0; op < 6; op++) {
       const flags = alg[op];
       let add = (flags & FmOperatorFlags.OUT_BUS_ADD) !== 0;

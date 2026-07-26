@@ -9,7 +9,7 @@ import {
   LIBRARY_SCHEMA,
   type LibCollection,
   type LibraryManifest,
-} from '../src/state/library-manifest';
+} from '@texed/dx7-format/library-manifest';
 
 export interface SourceFile {
   /** Path relative to the collection root, forward slashes. */

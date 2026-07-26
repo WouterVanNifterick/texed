@@ -3,7 +3,7 @@
 // a part selects it as the target for the voice editor.
 
 import { useEffect, useState } from 'react';
-import type { PartConfig, ProgramOption } from '@texed/dx7-engine/synth-rack';
+import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 import { programIndexForVoice } from '../audio/useSynth';
 import type { SynthStatus } from '../audio/useSynth';
@@ -46,8 +46,14 @@ export function PartRack({
   }, [onClose]);
 
   return (
-    <div className="partrack-overlay partrack-overlay--region" onClick={onClose}>
-      <div className="partrack" onClick={(e) => e.stopPropagation()}>
+    <div className="partrack-overlay partrack-overlay--region">
+      <button
+        type="button"
+        className="overlay-dismiss"
+        aria-label="Close part rack"
+        onClick={onClose}
+      />
+      <div className="partrack" role="dialog" aria-modal="true" aria-label="Part rack">
         <div className="partrack-header">
           <span className="partrack-title">PART RACK</span>
           <button type="button" className="partrack-btn" onClick={onClose}>
@@ -92,6 +98,14 @@ export function PartRack({
                 <tr
                   key={i}
                   onClick={() => onSelect(i)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(i);
+                    }
+                  }}
+                  tabIndex={0}
+                  aria-selected={selected}
                   className={`${selected ? 'selected' : ''}${(isSlave ? masterEnabled : cfg.enabled) ? '' : ' off'}${isSlave ? ' linked' : ''}`}
                 >
                   <td className="part-num">{i + 1}</td>
@@ -109,7 +123,12 @@ export function PartRack({
                   {isSlave ? (
                     <>
                       <td>
-                        <input type="checkbox" checked={masterEnabled} disabled />
+                        <input
+                          type="checkbox"
+                          checked={masterEnabled}
+                          disabled
+                          aria-label={`Part ${i + 1} on (follows part ${masterIdx + 1})`}
+                        />
                       </td>
                       <td colSpan={8} className="part-linked">
                         ← linked to part {masterIdx + 1}
@@ -121,6 +140,7 @@ export function PartRack({
                         <input
                           type="checkbox"
                           checked={cfg.enabled}
+                          aria-label={`Part ${i + 1} on`}
                           onChange={(e) => onSetPart(i, { enabled: e.target.checked })}
                           onClick={(e) => e.stopPropagation()}
                         />
@@ -128,6 +148,7 @@ export function PartRack({
                       <td>
                         <select
                           value={cfg.rxChannel}
+                          aria-label={`Part ${i + 1} MIDI receive channel`}
                           onChange={(e) => onSetPart(i, { rxChannel: Number(e.target.value) })}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -197,7 +218,10 @@ export function PartRack({
                         />
                       </td>
                       <td>
+                        {/* Wrapper stops the row's select-on-click from firing while
+                            dragging the knob; the knob itself is the focusable control. */}
                         <div
+                          role="presentation"
                           onClick={(e) => e.stopPropagation()}
                           onPointerDown={(e) => e.stopPropagation()}
                         >
@@ -208,7 +232,7 @@ export function PartRack({
                             center={0}
                             size={28}
                             layout="inline"
-                            label=""
+                            label={`Part ${i + 1} transpose`}
                             format={(s) => (s > 0 ? `+${s}` : `${s}`)}
                             onChange={(noteShift) => onSetPart(i, { noteShift })}
                           />
@@ -216,6 +240,7 @@ export function PartRack({
                       </td>
                       <td>
                         <div
+                          role="presentation"
                           onClick={(e) => e.stopPropagation()}
                           onPointerDown={(e) => e.stopPropagation()}
                         >
@@ -226,7 +251,7 @@ export function PartRack({
                             center={0}
                             size={28}
                             layout="inline"
-                            label=""
+                            label={`Part ${i + 1} detune`}
                             format={(d) => (d > 0 ? `+${d}` : `${d}`)}
                             onChange={(detune) => onSetPart(i, { detune })}
                           />
@@ -237,13 +262,16 @@ export function PartRack({
                           type="checkbox"
                           checked={cfg.forcedDamp}
                           title="EG Forced Damp"
+                          aria-label={`Part ${i + 1} EG forced damp`}
                           onChange={(e) => onSetPart(i, { forcedDamp: e.target.checked })}
                           onClick={(e) => e.stopPropagation()}
                         />
                       </td>
                     </>
                   )}
-                  <td className="td-act">
+                  {/* Decorative: the LED tracks sounding voices at ~31Hz, so announcing
+                      it would flood a screen reader with no useful information. */}
+                  <td className="td-act" aria-hidden>
                     <span className={`part-led${(activity[i] ?? 0) > 0 ? ' on' : ''}`} />
                   </td>
                 </tr>

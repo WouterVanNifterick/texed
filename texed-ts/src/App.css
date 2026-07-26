@@ -37,6 +37,57 @@
   padding: 8px;
 }
 
+/* Below the usable scale floor the stage stops shrinking and pans instead, so
+   controls keep a workable size on small screens. The negative margins pull the
+   layout box down to the drawn (post-scale) size, so the scroll area matches
+   what is actually on screen instead of trailing empty space. */
+html.stage-clamped .app-root {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+html.stage-clamped .rack {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: scale(var(--stage-scale, 1));
+  transform-origin: top left;
+  margin-right: calc(-1440px * (1 - var(--stage-scale, 1)));
+  margin-bottom: calc(-1020px * (1 - var(--stage-scale, 1)));
+}
+
+/* Explains why the layout is panning rather than fitting. */
+.small-screen-notice {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgb(10 12 17 / 92%);
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font:
+    12px system-ui,
+    sans-serif;
+  text-align: center;
+}
+
+.small-screen-notice button {
+  flex: none;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
 /* Instrument-style cursors: no text-select I-beam on labels and readouts;
    real text inputs opt back in. */
 .rack,
@@ -49,6 +100,28 @@
 .partrack input:not([type='range']) {
   user-select: text;
   cursor: text;
+}
+
+/* Keyboard focus ring for the button families and the selectable part rows.
+   :focus-visible only, so pointer users never see it. Knobs, sliders and note
+   ranges style their own focus state next to their other visuals. */
+.seg:focus-visible,
+.bar-btn:focus-visible,
+.toggle:focus-visible,
+.panel-tab:focus-visible,
+.part-btn:focus-visible,
+.partrack-btn:focus-visible,
+.libbrowser-row:focus-visible,
+.program-select:focus-visible,
+.partrack tr:focus-visible,
+.libbrowser-columns:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The row is the focus target, but the ring reads better on its cells. */
+.partrack tr:focus-visible {
+  outline-offset: -2px;
 }
 
 .editor {
@@ -1559,6 +1632,17 @@
   stroke: #fff;
 }
 
+/* SVG cannot take an outline, so the keyboard ring is drawn on the node box. */
+.algo-display g:focus {
+  outline: none;
+}
+
+.algo-display g:focus-visible .algo-node {
+  stroke: var(--accent);
+  stroke-width: 2.6;
+  stroke-dasharray: 3 2;
+}
+
 .algo-display g.dim .algo-node {
   opacity: 0.35;
 }
@@ -1991,7 +2075,8 @@
 
 /* ==== Start overlay ==== */
 
-.start-overlay {
+.start-overlay,
+.crash-overlay {
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -2003,7 +2088,12 @@
   backdrop-filter: blur(6px);
 }
 
-.start-card {
+.crash-overlay {
+  z-index: 80;
+}
+
+.start-card,
+.crash-card {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -2016,6 +2106,37 @@
   font:
     13px system-ui,
     sans-serif;
+}
+
+.crash-card h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.crash-card p {
+  margin: 0;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+.crash-detail {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 30vh;
+  overflow: auto;
+  background: rgb(0 0 0 / 35%);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: 11px var(--mono);
+  color: var(--red);
+  white-space: pre-wrap;
+}
+
+.crash-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .start-head {
@@ -2102,7 +2223,9 @@ button.start:hover {
 
 /* ==== Part rack overlay (TX802 / TX816) ==== */
 
-.partrack-overlay {
+/* Shared modal backdrop for the part rack, the store dialog, and the library. */
+.partrack-overlay,
+.libbrowser-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -2110,6 +2233,24 @@ button.start:hover {
   align-items: center;
   justify-content: center;
   background: rgb(0 0 0 / 60%);
+}
+
+/* Click-outside-to-close, as a real button so it has a name and a keyboard
+   path instead of a bare click handler on the backdrop. */
+.overlay-dismiss {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: default;
+}
+
+/* The backdrop is positioned, so it paints over the panel next to it and would
+   swallow every click inside the dialog. Lift the panel above it. */
+.overlay-dismiss + [role='dialog'] {
+  position: relative;
+  z-index: 1;
 }
 
 /* Region-scoped variant: covers only the editor (middle) area, so the
@@ -2199,14 +2340,26 @@ button.start:hover {
   width: 180px;
 }
 
-.partrack-btn {
-  margin-left: auto;
+/* Buttons inside a dialog: the part rack and the library share one look. */
+.partrack-btn,
+.libbrowser-btn {
   background: #2b2f36;
   color: var(--text);
   border: 1px solid #3a3f46;
   border-radius: 4px;
   padding: 4px 10px;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.partrack-btn:hover,
+.libbrowser-btn:hover {
+  background: #343a42;
+}
+
+/* The part rack's CLOSE sits at the end of the header row. */
+.partrack-btn {
+  margin-left: auto;
 }
 
 .partrack tbody tr {
@@ -2306,16 +2459,6 @@ button.start:hover {
 
 /* ==== Library browser overlay ==== */
 
-.libbrowser-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 60%);
-}
-
 .libbrowser {
   display: flex;
   flex-direction: column;
@@ -2369,20 +2512,6 @@ button.start:hover {
   color: #7fc4ff;
   font-weight: 700;
   white-space: nowrap;
-}
-
-.libbrowser-btn {
-  background: #2b2f36;
-  color: var(--text);
-  border: 1px solid #3a3f46;
-  border-radius: 4px;
-  padding: 4px 10px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.libbrowser-btn:hover {
-  background: #343a42;
 }
 
 .libbrowser-columns {

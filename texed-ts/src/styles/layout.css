@@ -81,10 +81,20 @@ html.stage-clamped .rack {
   cursor: default;
 }
 
-.rack input:not([type='range']),
-.partrack input:not([type='range']) {
+.rack input:not([type='range'], [type='checkbox']),
+.partrack input:not([type='range'], [type='checkbox']) {
   user-select: text;
   cursor: text;
+}
+
+.rack input[type='checkbox'],
+.partrack input[type='checkbox'] {
+  cursor: pointer;
+}
+
+.rack input[type='checkbox']:disabled,
+.partrack input[type='checkbox']:disabled {
+  cursor: default;
 }
 
 /* Keyboard focus ring for the button families and the selectable part rows.

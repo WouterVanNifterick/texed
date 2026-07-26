@@ -1,0 +1,182 @@
+/* ==== Panels ==== */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  min-width: 0;
+  min-height: 0;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 4px 14px rgb(0 0 0 / 30%);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgb(255 255 255 / 4%);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+}
+
+.panel-title::before {
+  content: '';
+  width: 3px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+.op-panel.disabled > :not(.panel-head) {
+  opacity: 0.35;
+}
+
+/* LEVEL at 0 (OP still on): keep the LEVEL knob full-bright inside the dimmed row. */
+.op-panel.level-cue > .ctl-row:has(.level-zero) {
+  opacity: 1;
+}
+
+.op-panel.level-cue > .ctl-row:has(.level-zero) > :not(.level-zero) {
+  opacity: 0.35;
+}
+
+.op-panel.level-cue .knob.level-zero {
+  position: relative;
+  z-index: 1;
+  padding: 2px 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 70%, transparent),
+    0 0 12px rgb(255 122 122 / 55%);
+  animation: level-cue-pulse 1.5s ease-in-out infinite;
+}
+
+.op-panel.level-cue .knob.level-zero .ctl-label {
+  color: var(--red);
+  font-weight: 800;
+  letter-spacing: 0.6px;
+}
+
+.op-panel.level-cue .knob.level-zero .knob-body {
+  fill: color-mix(in srgb, var(--red) 28%, #262b38);
+  stroke: var(--red);
+  stroke-width: 1.8;
+}
+
+.op-panel.level-cue .knob.level-zero .knob-track {
+  stroke: color-mix(in srgb, var(--red) 75%, #3a4051);
+}
+
+.op-panel.level-cue .knob.level-zero .knob-pointer {
+  stroke: var(--red);
+  stroke-width: 2.2;
+}
+
+.op-panel.level-cue .knob.level-zero .knob-value {
+  color: var(--red);
+  font-weight: 800;
+}
+
+@keyframes level-cue-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--red) 55%, transparent),
+      0 0 8px rgb(255 122 122 / 40%);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px var(--red),
+      0 0 16px rgb(255 122 122 / 85%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .op-panel.level-cue .knob.level-zero {
+    animation: none;
+    box-shadow:
+      0 0 0 1.5px var(--red),
+      0 0 14px rgb(255 122 122 / 75%);
+  }
+}
+
+.op-panel.hilite {
+  border-color: color-mix(in srgb, var(--op, var(--accent)) 55%, var(--line));
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--op, var(--accent)) 30%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 10%, transparent);
+}
+
+/* Persistent selection ring - the op/pitch envelope being edited in the
+   combined view. Placed after .hilite so it wins when a panel is both. */
+.panel.selected {
+  border-color: var(--op, var(--accent));
+  box-shadow:
+    0 0 0 1px var(--op, var(--accent)),
+    0 0 14px color-mix(in srgb, var(--op, var(--accent)) 32%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 9%, transparent);
+}
+
+.op-power {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #565d70;
+  background: linear-gradient(#232735, #191c25);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.op-power.on {
+  color: var(--op, var(--accent));
+  border-color: color-mix(in srgb, var(--op, var(--accent)) 55%, #10131a);
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--op, var(--accent)) 35%, transparent),
+    inset 0 0 4px color-mix(in srgb, var(--op, var(--accent)) 18%, transparent);
+}
+
+.op-role {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.op-role.carrier {
+  color: var(--green);
+  border-color: #2c5943;
+}
+
+.op-freq {
+  font: 11px var(--mono);
+  color: var(--lcd);
+  min-width: 58px;
+}

@@ -1,0 +1,43 @@
+/* ==== Meters ==== */
+
+.meter {
+  flex: 1;
+  height: 7px;
+  background: #0b0d12;
+  border: 1px solid #232735;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #2c8a5a, var(--green) 70%, #d9f7a1);
+}
+
+.lfo-meter {
+  position: relative;
+  max-width: 120px;
+}
+
+/* Centre tick - the LFO zero-crossing that the fill grows out from. */
+.lfo-meter-center {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: rgb(255 255 255 / 20%);
+  z-index: 1;
+}
+
+/* Bipolar fill: anchored to the centre, extends left or right with the LFO. */
+.lfo-meter-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--green);
+}

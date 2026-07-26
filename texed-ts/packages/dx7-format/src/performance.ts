@@ -89,9 +89,6 @@ export function parseTx802PmemBlock(block: Uint8Array): ParsedPerformance {
   return { name: readAsciiName(block, 64, 20), parts };
 }
 
-/** @deprecated Use parseTx802PmemBlock */
-export const parsePmemBlock = parseTx802PmemBlock;
-
 /** Parse one 51-byte DX7II performance (PCED/PMEM) block. */
 export function parseDx7iiPerfBlock(block: Uint8Array): ParsedPerformance {
   const mode = block[0] & 0x03;

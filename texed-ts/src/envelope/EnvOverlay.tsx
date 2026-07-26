@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import type { SynthStatus } from '../audio/useSynth';
-import { OP, G, opBase, noteName } from '@texed/dx7-format/voice';
+import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { helpProps, setHelp } from '../state/help';
 import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
@@ -16,13 +16,6 @@ import { LiveEnvEditor } from './EnvEditor';
 const W = 100;
 const H = 100;
 const PAD = 2;
-
-// The crosshair maps the paint note across the on-screen keyboard span
-// (C2–C7) and the velocity 1..127 over the plot height. It is a loose visual
-// tie between "note ↔ horizontal, velocity ↔ vertical", not a data axis.
-const XHAIR_NOTE_LO = 36;
-const XHAIR_NOTE_HI = 96;
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 export type EnvSelection = number | 'pitch'; // op number 1..6, or the pitch EG
@@ -92,11 +85,6 @@ export function EnvOverlay({
     });
     return out;
   }, [voice, timeScale, yMode, note, velocity]);
-
-  // Crosshair position: note → x (over the keyboard span), velocity → y (top = loud).
-  const xhairX =
-    PAD + clamp01((note - XHAIR_NOTE_LO) / (XHAIR_NOTE_HI - XHAIR_NOTE_LO)) * (W - 2 * PAD);
-  const xhairY = PAD + (1 - clamp01(velocity / 127)) * (H - 2 * PAD);
 
   // Editor props for the selected envelope.
   const editor =
@@ -220,22 +208,8 @@ export function EnvOverlay({
                 />
               )),
             )}
-          {/* Paint note/velocity crosshair: note ↔ horizontal, velocity ↔ vertical. */}
-          <line className="env-xhair-v" x1={xhairX} y1={0} x2={xhairX} y2={H} />
-          <line className="env-xhair-h" x1={0} y1={xhairY} x2={W} y2={xhairY} />
-          <circle className="env-xhair-dot" cx={xhairX} cy={xhairY} r={1.6} />
         </svg>
         {editor}
-        <span
-          className="env-xhair-label note"
-          style={{ left: `${(xhairX / W) * 100}%` }}
-          aria-hidden
-        >
-          {noteName(note)}
-        </span>
-        <span className="env-xhair-label vel" style={{ top: `${(xhairY / H) * 100}%` }} aria-hidden>
-          v{velocity}
-        </span>
         <div className="env-overlay-axis" aria-hidden>
           <span>{yMode === 'db' ? '0 dB' : '1.0'}</span>
           <span>{yMode === 'db' ? '−72 dB' : '0'}</span>

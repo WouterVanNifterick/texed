@@ -319,16 +319,18 @@ export function EnvEditor(props: EnvEditorProps) {
           />
         ))}
         {activePts && <polyline className="env-active" points={activePts} />}
-        {playhead && (
-          <circle
-            className="env-playhead"
-            cx={px(g, playhead.timeSec)}
-            cy={py(g, playhead.levelQ24)}
-            r={2.4}
-            style={{ fill: color }}
-          />
-        )}
       </svg>
+      {playhead && (
+        <span
+          className="env-playhead"
+          style={{
+            left: `${(px(g, playhead.timeSec) / W) * 100}%`,
+            top: `${(py(g, playhead.levelQ24) / H) * 100}%`,
+            background: color,
+          }}
+          aria-hidden
+        />
+      )}
       {trace.nodes.map((n) => {
         const leftPct = (px(g, n.timeSec) / W) * 100;
         const topPct = (py(g, n.levelQ24) / H) * 100;

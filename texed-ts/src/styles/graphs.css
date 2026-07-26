@@ -1,12 +1,20 @@
 /* ==== LFO shape graph ==== */
 
 .lfo-graph {
+  position: relative;
   width: 100%;
   height: 38px;
   flex: none;
   background: linear-gradient(#0a0c11, #0d1017);
   border: 1px solid #232735;
   border-radius: 6px;
+  overflow: hidden;
+}
+
+.lfo-graph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .lfo-delay-zone {
@@ -111,6 +119,28 @@
   transform: translateX(-50%);
   font: 8px var(--mono);
   color: #7fc4ff;
+  pointer-events: none;
+}
+
+/* Paint note marker: where the note the curves are drawn for sits on this curve. */
+.scale-note-line {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.35;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.scale-note-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border: 1.5px solid #0d1017;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgb(255 255 255 / 45%);
   pointer-events: none;
 }
 

@@ -34,6 +34,8 @@ interface ScalingGraphProps {
   onChange: (field: ScalingField, value: number) => void;
   /** Operator color for the curve fill (stroke follows --op via CSS). */
   color?: string;
+  /** Paint note, marked on the curve - X is MIDI note here, so it lands exactly. */
+  note: number;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -60,6 +62,7 @@ export function ScalingGraph({
   rightCurve,
   onChange,
   color = '#ffb454',
+  note,
 }: ScalingGraphProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<DragState | null>(null);
@@ -151,6 +154,9 @@ export function ScalingGraph({
     );
   }
 
+  const markNote = clamp(note, 0, W);
+  const markY = y(scaleLevel(markNote, breakPoint, leftDepth, rightDepth, leftCurve, rightCurve));
+
   const toggleExp = (side: 'left' | 'right') => {
     const cur = side === 'left' ? leftCurve : rightCurve;
     onChange(side === 'left' ? 'leftCurve' : 'rightCurve', curveFor(isPositive(cur), !isExp(cur)));
@@ -193,6 +199,7 @@ export function ScalingGraph({
           points={`0,${H / 2} ${points.join(' ')} ${W},${H / 2}`}
         />
         <polyline className="scale-curve" points={points.join(' ')} />
+        <line className="scale-note-line" x1={markNote} y1={0} x2={markNote} y2={H} />
         <rect x={bpNote - BP_HIT} y={0} width={BP_HIT * 2} height={H} className="scale-bp-hit" />
         <line x1={bpNote} y1={0} x2={bpNote} y2={H} className="scale-bp-line" />
         <circle cx={bpNote} cy={H / 2} r={2.4} className="scale-bp-dot" />
@@ -200,6 +207,13 @@ export function ScalingGraph({
       <span className="scale-bp-label" style={{ left: `${(bpNote / W) * 100}%` }}>
         {bpLabel(breakPoint)}
       </span>
+      {/* HTML, not an SVG circle: the graph scales without keeping its aspect
+          ratio, which would flatten a circle into an ellipse. */}
+      <span
+        className="scale-note-dot"
+        style={{ left: `${(markNote / W) * 100}%`, top: `${(markY / H) * 100}%` }}
+        aria-hidden
+      />
       <button
         type="button"
         className="scale-crv left"

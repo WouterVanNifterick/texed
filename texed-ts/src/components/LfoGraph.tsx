@@ -135,12 +135,20 @@ export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {
   const dotY = H / 2 - env(dotT) * wave(waveform, START_PHASE + dotT / drawPeriod) * amp;
 
   return (
-    <svg className="lfo-graph" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
-      {hasDelay && <rect x={0} y={0} width={delayX} height={H} className="lfo-delay-zone" />}
-      <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="scale-baseline" />
-      {hasDelay && <polyline className="lfo-env" points={envTop.join(' ')} />}
-      <polyline className="lfo-wave" points={pts.join(' ')} />
-      {playing && <circle className="lfo-playhead" cx={dotX} cy={dotY} r={2.2} />}
-    </svg>
+    <div className="lfo-graph">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+        {hasDelay && <rect x={0} y={0} width={delayX} height={H} className="lfo-delay-zone" />}
+        <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="scale-baseline" />
+        {hasDelay && <polyline className="lfo-env" points={envTop.join(' ')} />}
+        <polyline className="lfo-wave" points={pts.join(' ')} />
+      </svg>
+      {playing && (
+        <span
+          className="lfo-playhead"
+          style={{ left: `${(dotX / W) * 100}%`, top: `${(dotY / H) * 100}%` }}
+          aria-hidden
+        />
+      )}
+    </div>
   );
 }

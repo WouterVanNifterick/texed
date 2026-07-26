@@ -7,9 +7,18 @@ import { useMemo } from 'react';
 import type { SynthStatus } from '../audio/useSynth';
 import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { helpProps, setHelp } from '../state/help';
-import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
+import { simulateAmpEnv, simulatePitchEnv, type EnvTrace } from '@texed/dx7-engine/env-sim';
+import { useStatus } from '../audio/useSynth';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
-import { makeYMap, curveSegments, type YMode, type DrawGeom } from './env-draw';
+import {
+  makeYMap,
+  curveSegments,
+  playheadPoint,
+  px,
+  py,
+  type YMode,
+  type DrawGeom,
+} from './env-draw';
 import { opColor, PITCH_COLOR } from '../ui/op-colors';
 import { LiveEnvEditor } from './EnvEditor';
 
@@ -19,6 +28,17 @@ const PAD = 2;
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 export type EnvSelection = number | 'pitch'; // op number 1..6, or the pitch EG
+
+/** One non-editable envelope on the plot: what to draw it with, and where. */
+interface BgTrace {
+  key: string;
+  sel: EnvSelection;
+  color: string;
+  segments: { points: string; held: boolean }[];
+  kind: 'amp' | 'pitch';
+  trace: EnvTrace;
+  g: DrawGeom;
+}
 
 interface EnvOverlayProps {
   voice: Uint8Array;
@@ -50,38 +70,34 @@ export function EnvOverlay({
   // Background polylines for every envelope (the selected one is redrawn on top
   // by the editor). Recomputed when any EG byte or the scale changes.
   const bg = useMemo(() => {
-    const ampYmap = makeYMap('amp', yMode);
-    const pitchYmap = makeYMap('pitch', yMode);
-    const out: {
-      key: string;
-      sel: EnvSelection;
-      color: string;
-      segments: { points: string; held: boolean }[];
-      kind: 'amp' | 'pitch';
-    }[] = [];
+    const ampG: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap: makeYMap('amp', yMode) };
+    const pitchG: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap: makeYMap('pitch', yMode) };
+    const out: BgTrace[] = [];
     for (let opNum = 1; opNum <= 6; opNum++) {
       const trace = simulateAmpEnv(
         computeAmpParams(voice, opNum, true, note, velocity),
         timeScale.gateSec,
       );
-      const g: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap: ampYmap };
       out.push({
         key: `op${opNum}`,
         sel: opNum,
         color: opColor(opNum),
-        segments: curveSegments(trace, g),
+        segments: curveSegments(trace, ampG),
         kind: 'amp',
+        trace,
+        g: ampG,
       });
     }
     const peg = pitchEgParams(voice);
     const pt = simulatePitchEnv(peg.rates, peg.levels, timeScale.gateSec);
-    const pg: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap: pitchYmap };
     out.push({
       key: 'pitch',
       sel: 'pitch',
       color: PITCH_COLOR,
-      segments: curveSegments(pt, pg),
+      segments: curveSegments(pt, pitchG),
       kind: 'pitch',
+      trace: pt,
+      g: pitchG,
     });
     return out;
   }, [voice, timeScale, yMode, note, velocity]);
@@ -209,12 +225,59 @@ export function EnvOverlay({
               )),
             )}
         </svg>
+        <BgPlayheads traces={bg.filter((b) => b.sel !== selected)} subscribe={subscribeStatus} />
         {editor}
         <div className="env-overlay-axis" aria-hidden>
           <span>{yMode === 'db' ? '0 dB' : '1.0'}</span>
           <span>{yMode === 'db' ? '−72 dB' : '0'}</span>
         </div>
+        {/* Time labels: the gridlines move as you zoom, so they need naming. */}
+        <div className="env-overlay-times" aria-hidden>
+          {timeScale.gridlines.map((gl, i) => (
+            <span key={i} style={{ left: `${PAD + gl.x01 * (W - 2 * PAD)}%` }}>
+              {gl.label}
+            </span>
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Playback dots for the envelopes that are not being edited. One subscription
+ * for all of them: every operator's step and level arrive in the same status
+ * frame, so a dot per subscriber would only mean the same frame re-read seven
+ * times. The selected envelope draws its own, brighter, dot in the editor.
+ */
+function BgPlayheads({ traces, subscribe }: { traces: BgTrace[]; subscribe: Subscribe }) {
+  const status = useStatus<SynthStatus | null>(subscribe, (s) => s, null);
+  if (!status) return null;
+  return (
+    <>
+      {traces.map((b) => {
+        // Status arrays are in engine order, the reverse of the UI numbering.
+        const opIdx = 6 - (b.sel as number);
+        const pitch = b.kind === 'pitch';
+        const p = playheadPoint(
+          b.trace,
+          pitch ? status.pitchStep : status.steps[opIdx],
+          pitch ? status.pitchLevel : status.levels[opIdx],
+        );
+        if (!p) return null;
+        return (
+          <span
+            key={b.key}
+            className="env-playhead bg"
+            style={{
+              left: `${(px(b.g, p.timeSec) / W) * 100}%`,
+              top: `${(py(b.g, p.levelQ24) / H) * 100}%`,
+              background: b.color,
+            }}
+            aria-hidden
+          />
+        );
+      })}
+    </>
   );
 }

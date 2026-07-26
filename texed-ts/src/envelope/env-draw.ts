@@ -122,6 +122,51 @@ export function fillPoints(trace: EnvTrace, g: DrawGeom): string {
   );
 }
 
+/** [startSec, endSec] of the given stage, for the active-segment highlight. */
+export function stageWindow(trace: EnvTrace, stage: number): [number, number] {
+  if (stage <= 0) return [0, trace.nodes[0].timeSec];
+  if (stage === 1) return [trace.nodes[0].timeSec, trace.nodes[1].timeSec];
+  if (stage === 2) return [trace.nodes[1].timeSec, trace.nodes[2].timeSec];
+  return [trace.gateSec, trace.releaseEndSec];
+}
+
+/**
+ * Where the playback dot sits: the point on the active stage's curve at the live
+ * envelope level. Level is monotonic within a stage, so the span containing that
+ * level is unambiguous, and interpolating within it puts the dot at a fractional
+ * time - the curve is only sampled ~18 times per stage, and snapping to those
+ * samples made the dot visibly step. During a constant sustain/hold no span
+ * contains the level, and it parks at the nearest end instead.
+ */
+export function playheadPoint(
+  trace: EnvTrace,
+  stage: number,
+  levelQ24: number,
+): { timeSec: number; levelQ24: number } | null {
+  if (stage < 0 || stage > 3) return null;
+  const [from, to] = stageWindow(trace, stage);
+  const pts = trace.curve.filter((p) => p.timeSec >= from - 1e-6 && p.timeSec <= to + 1e-6);
+  if (pts.length === 0) return null;
+
+  let best = pts[0];
+  let bestErr = Math.abs(best.levelQ24 - levelQ24);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const span = b.levelQ24 - a.levelQ24;
+    if (span !== 0) {
+      const f = (levelQ24 - a.levelQ24) / span;
+      if (f >= 0 && f <= 1) return { timeSec: a.timeSec + f * (b.timeSec - a.timeSec), levelQ24 };
+    }
+    const err = Math.abs(b.levelQ24 - levelQ24);
+    if (err < bestErr) {
+      bestErr = err;
+      best = b;
+    }
+  }
+  return best;
+}
+
 export interface NodeGeom {
   x01: number; // 0..1 across width
   y01: number; // 0..1 down height

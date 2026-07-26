@@ -14,14 +14,16 @@ import {
   type EnvDragSolution,
   type EnvTrace,
 } from '@texed/dx7-engine/env-sim';
-import { setEnvAxisFrozen } from '../state/env-axis';
+import { setEnvAxisFrozen, useEnvZoomPan } from '../state/env-axis';
 import type { EnvTimeScale } from './env-time';
 import {
   makeYMap,
   curveSegments,
   fillPoints,
+  playheadPoint,
   px,
   py,
+  stageWindow,
   type YMode,
   type EnvKind,
   type DrawGeom,
@@ -89,6 +91,7 @@ export function EnvEditor(props: EnvEditorProps) {
   const gid = useId();
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<DragState | null>(null);
+  useEnvZoomPan(root, PAD / W);
 
   // The last solved drag, unrounded.
   //
@@ -139,10 +142,7 @@ export function EnvEditor(props: EnvEditorProps) {
 
   // Playback dot: sits on the curve at the live envelope level within the
   // active stage. Hidden when idle/finished (stage 4) or no live level.
-  const playhead =
-    stage >= 0 && stage <= 3 && props.playLevel != null
-      ? playheadPoint(trace, stage, props.playLevel)
-      : null;
+  const playhead = props.playLevel != null ? playheadPoint(trace, stage, props.playLevel) : null;
 
   function prevNodeTime(s: number): number {
     if (s === 0) return 0;
@@ -364,6 +364,11 @@ export function EnvEditor(props: EnvEditorProps) {
           }}
         />
       )}
+      {timeScale.clippedLeft && (
+        <span className="env-overflow left" title="Scrolled past the start of the envelope">
+          ‹
+        </span>
+      )}
       {timeScale.clamped && (
         <span className="env-overflow" title="Envelope extends past the visible time range">
           ›
@@ -391,37 +396,4 @@ export function LiveEnvEditor(
     0,
   );
   return <EnvEditor {...rest} stage={stage} playLevel={playLevel} />;
-}
-
-/** [startSec, endSec] of the given stage for the active-segment highlight. */
-function stageWindow(trace: EnvTrace, stage: number): [number, number] {
-  if (stage <= 0) return [0, trace.nodes[0].timeSec];
-  if (stage === 1) return [trace.nodes[0].timeSec, trace.nodes[1].timeSec];
-  if (stage === 2) return [trace.nodes[1].timeSec, trace.nodes[2].timeSec];
-  return [trace.gateSec, trace.releaseEndSec];
-}
-
-/**
- * The curve point within the active stage's time window whose level is closest
- * to the live envelope level — where the playback dot sits. Level is monotonic
- * within a stage, so the nearest-level point is unambiguous; during a constant
- * sustain/hold it parks at the sustain node.
- */
-function playheadPoint(
-  trace: EnvTrace,
-  stage: number,
-  levelQ24: number,
-): { timeSec: number; levelQ24: number } | null {
-  const [from, to] = stageWindow(trace, stage);
-  let best: { timeSec: number; levelQ24: number } | null = null;
-  let bestErr = Infinity;
-  for (const p of trace.curve) {
-    if (p.timeSec < from - 1e-6 || p.timeSec > to + 1e-6) continue;
-    const err = Math.abs(p.levelQ24 - levelQ24);
-    if (err < bestErr) {
-      bestErr = err;
-      best = p;
-    }
-  }
-  return best;
 }

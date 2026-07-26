@@ -71,6 +71,16 @@
   box-shadow: 0 0 6px color-mix(in srgb, var(--curve, var(--accent)) 85%, transparent);
 }
 
+/* Dots on the traces that are not being edited, dimmed to match them. */
+.env-playhead.bg {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-width: 1px;
+  box-shadow: none;
+  opacity: 0.65;
+}
+
 .lfo-playhead {
   background: var(--accent);
   box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 85%, transparent);
@@ -145,6 +155,11 @@
   font: 700 14px var(--mono);
   color: var(--dim);
   pointer-events: none;
+}
+
+.env-overflow.left {
+  right: auto;
+  left: 2px;
 }
 
 /* ==== Combined envelope overlay ==== */
@@ -235,6 +250,22 @@
 
 .env-overlay-fg .env-shape {
   stroke-width: 2;
+}
+
+.env-overlay-times {
+  position: absolute;
+  inset: auto 0 1px 0;
+  height: 10px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.env-overlay-times span {
+  position: absolute;
+  padding-left: 3px;
+  font: 8px var(--mono);
+  color: var(--dim);
+  opacity: 0.75;
 }
 
 .env-overlay-axis {

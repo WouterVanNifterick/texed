@@ -137,6 +137,24 @@ export function usePartSelectKeys(enabled: boolean, selectPart: (index: number) 
   }, [enabled, selectPart]);
 }
 
+/** Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo. */
+export function useUndoKeys(enabled: boolean, undo: () => void, redo: () => void): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const down = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (isEditableTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      e.preventDefault();
+      if (key === 'y' || e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [enabled, undo, redo]);
+}
+
 export function patchFiles(files: FileList | File[]): File[] {
   return Array.from(files).filter((f) => /\.(syx|mx|dx7voice|ini)$/i.test(f.name));
 }

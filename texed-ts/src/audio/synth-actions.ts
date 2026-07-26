@@ -21,8 +21,10 @@ export interface MirrorHandles {
   /** Mirrors `supplement` so live ACED emission never reads a stale closure. */
   supplement: RefObject<Uint8Array>;
   programOptions: RefObject<ProgramOption[]>;
-  bankDumpCb: RefObject<((data: Uint8Array | null) => void) | null>;
-  fullStateCb: RefObject<((state: RackState) => void) | null>;
+  // Queues, not single slots: two requests in flight used to drop the first
+  // reply. Replies arrive in request order because the worklet is single-threaded.
+  bankDumpCbs: RefObject<((data: Uint8Array | null) => void)[]>;
+  fullStateCbs: RefObject<((state: RackState) => void)[]>;
   statusSubs: RefObject<Set<(s: SynthStatus) => void>>;
 }
 
@@ -142,11 +144,11 @@ export function createSynthActions(port: SynthPort, m: MirrorHandles): SynthActi
     },
 
     requestBankDump: (bank, cb) => {
-      m.bankDumpCb.current = cb;
+      m.bankDumpCbs.current.push(cb);
       post({ type: MsgType.RequestBankDump, bank });
     },
     getFullState: (cb) => {
-      m.fullStateCb.current = cb;
+      m.fullStateCbs.current.push(cb);
       post({ type: MsgType.GetFullState });
     },
     setFullState: (state) => post({ type: MsgType.SetFullState, state }),

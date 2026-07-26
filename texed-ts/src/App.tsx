@@ -15,7 +15,9 @@ import {
   useQwertyKeyboard,
   useStageScale,
   useTransientMessage,
+  useUndoKeys,
 } from './hooks';
+import { useHistory } from './state/useHistory';
 import { useSession } from './state/useSession';
 import { usePatchFiles } from './state/usePatchFiles';
 import { Keyboard } from './components/Keyboard';
@@ -31,7 +33,7 @@ import { PartRack } from './components/PartRack';
 import { LibraryBrowser } from './components/LibraryBrowser';
 import { TopBar } from './components/TopBar';
 import { StoreVoiceDialog } from './components/StoreVoiceDialog';
-import { StoreIcon } from './ui/icons';
+import { RedoIcon, StoreIcon, UndoIcon } from './ui/icons';
 import { helpProps } from './state/help';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 
@@ -44,6 +46,8 @@ const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 export default function App() {
   const synth = useSynth(HW_MODE ? hardwarePort : undefined);
   const [started, setStarted] = useState(false);
+  /** Startup finished, including any session restore. */
+  const [loaded, setLoaded] = useState(false);
   // Global system-setup settings live in the engine's edit buffer; mirror them.
   const { engine, volume, polyphony } = synth.settings;
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
@@ -128,16 +132,22 @@ export default function App() {
   const midi = useMidiIo({ synth, noteOn, noteOff, hardwareMode: HW_MODE });
   const session = useSession(synth, started);
   const files = usePatchFiles(synth, showLoadMsg);
+  // Armed only once the session has been restored, so its baseline is the patch
+  // the user actually sees. Arming at `started` would make the restore itself the
+  // first undo step, and Ctrl+Z would throw the restored session away.
+  const history = useHistory(synth, loaded);
 
   const handleStart = useCallback(async () => {
     await synth.start();
     setStarted(true);
     if (await session.restore()) showLoadMsg('Session restored');
+    setLoaded(true);
     midiRef.current = await midi.connect();
   }, [synth, session, midi, showLoadMsg]);
 
   useQwertyKeyboard(started, noteOn, noteOff);
   usePartSelectKeys(started, synth.selectPart);
+  useUndoKeys(loaded, history.undo, history.redo);
 
   useEffect(() => {
     return () => midiRef.current?.close();
@@ -245,6 +255,26 @@ export default function App() {
               {...helpProps('STORE', 'Store the edited voice into a bank slot (name + location).')}
             >
               <StoreIcon />
+            </button>
+            <button
+              type="button"
+              className="bar-btn bar-btn-icon"
+              onClick={history.undo}
+              disabled={!history.canUndo}
+              aria-label="Undo"
+              {...helpProps('UNDO', 'Step back through patch edits (Ctrl+Z).')}
+            >
+              <UndoIcon />
+            </button>
+            <button
+              type="button"
+              className="bar-btn bar-btn-icon"
+              onClick={history.redo}
+              disabled={!history.canRedo}
+              aria-label="Redo"
+              {...helpProps('REDO', 'Step forward again (Ctrl+Shift+Z).')}
+            >
+              <RedoIcon />
             </button>
           </div>
           <div className="mode-bar-viz">

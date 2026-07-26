@@ -57,8 +57,8 @@ export function useSynth(externalPort?: SynthPort): Synth {
   supplementRef.current = supplement;
   const programOptionsRef = useRef(programOptions);
   programOptionsRef.current = programOptions;
-  const bankDumpCb = useRef<((data: Uint8Array | null) => void) | null>(null);
-  const fullStateCb = useRef<((state: RackState) => void) | null>(null);
+  const bankDumpCbs = useRef<((data: Uint8Array | null) => void)[]>([]);
+  const fullStateCbs = useRef<((state: RackState) => void)[]>([]);
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
 
   // Meter frames arrive faster than they can usefully be drawn, so only the
@@ -75,8 +75,8 @@ export function useSynth(externalPort?: SynthPort): Synth {
         setSettings,
         supplement: supplementRef,
         programOptions: programOptionsRef,
-        bankDumpCb,
-        fullStateCb,
+        bankDumpCbs,
+        fullStateCbs,
         statusSubs,
       }),
     [port],
@@ -119,12 +119,10 @@ export function useSynth(externalPort?: SynthPort): Synth {
           setPerformanceName(m.name);
           break;
         case 'bankDump':
-          bankDumpCb.current?.(m.data ? new Uint8Array(m.data) : null);
-          bankDumpCb.current = null;
+          bankDumpCbs.current.shift()?.(m.data ? new Uint8Array(m.data) : null);
           break;
         case 'fullState':
-          fullStateCb.current?.(m.state);
-          fullStateCb.current = null;
+          fullStateCbs.current.shift()?.(m.state);
           break;
         case 'status':
           pendingStatus.current = m;

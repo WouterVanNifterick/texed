@@ -605,9 +605,14 @@ html.stage-clamped .rack {
     background 0.15s;
 }
 
-.bar-btn:hover {
+.bar-btn:hover:not(:disabled) {
   color: var(--text);
   border-color: #3d4456;
+}
+
+.bar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .bar-btn-icon {

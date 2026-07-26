@@ -108,7 +108,7 @@ export function TopBar({
           className="part-strip"
           {...helpProps(
             'PART SELECT',
-            'Chooses which of the 8 multi-timbral parts the editor below is editing. Keys 1–8 also select parts.',
+            'Chooses which of the 8 multi-timbral parts the editor below is editing. F1–F8 also select parts.',
           )}
         >
           {Array.from({ length: 8 }, (_, i) => {

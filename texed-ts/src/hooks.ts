@@ -1,5 +1,5 @@
 // App-level UI hooks: transient status message, QWERTY note input,
-// part-select digit keys, window-wide file drag-and-drop, and the
+// part and operator select keys, window-wide file drag-and-drop, and the
 // fixed-stage scale factor.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -120,21 +120,30 @@ export function useQwertyKeyboard(
   }, [enabled, noteOn, noteOff]);
 }
 
-/** Selects multi-timbral parts 1–8 with the digit keys. */
-export function usePartSelectKeys(enabled: boolean, selectPart: (index: number) => void): void {
+/** F1–F8 select multi-timbral parts 1–8; digits 1–6 select the edited operator. */
+export function useSelectKeys(
+  enabled: boolean,
+  selectPart: (index: number) => void,
+  selectOp: (op: number) => void,
+): void {
   useEffect(() => {
     if (!enabled) return;
     const down = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isEditableTarget(e.target)) return;
-      const n = Number(e.key);
-      if (n < 1 || n > 8) return;
+      const part = /^F([1-8])$/.exec(e.key);
+      if (part) {
+        e.preventDefault();
+        selectPart(Number(part[1]) - 1);
+        return;
+      }
+      if (!/^[1-6]$/.test(e.key)) return;
       e.preventDefault();
-      selectPart(n - 1);
+      selectOp(Number(e.key));
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, [enabled, selectPart]);
+  }, [enabled, selectPart, selectOp]);
 }
 
 /** Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo. */

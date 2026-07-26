@@ -23,7 +23,8 @@ layout, reference key) are kept separately in local storage.
 | On-screen keyboard | Click keys                                                                                |
 | QWERTY             | `A`–`K` row maps to semitones starting at MIDI note 60 (C4); `W/E/T/Y/U/O/P/;` are sharps |
 | Web MIDI           | Standard note on/off after audio has started                                              |
-| Part select        | Digit keys `1`–`8` select timbral parts when the part rack is in use                      |
+| Part select        | `F1`–`F8` select timbral parts when the part rack is in use                               |
+| Operator select    | Digit keys `1`–`6` select the operator being edited                                       |
 
 ## Editing a voice
 

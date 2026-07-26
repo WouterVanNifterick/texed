@@ -8,11 +8,11 @@ import { hardwarePort } from './audio/midi-out';
 import { getVoiceName, withVoiceName } from '@texed/dx7-format/voice';
 import {
   useFileDrop,
-  usePartSelectKeys,
   usePersistentFlag,
   usePersistentState,
   usePersistentNumber,
   useQwertyKeyboard,
+  useSelectKeys,
   useStageScale,
   useTransientMessage,
   useUndoKeys,
@@ -156,7 +156,7 @@ export default function App() {
   }, [synth, session, midi, showLoadMsg]);
 
   useQwertyKeyboard(started, noteOn, noteOff);
-  usePartSelectKeys(started, synth.selectPart);
+  useSelectKeys(started, synth.selectPart, setSelectedOp);
   useUndoKeys(loaded, history.undo, history.redo);
 
   useEffect(() => {

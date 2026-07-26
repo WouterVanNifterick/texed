@@ -35,6 +35,7 @@ import { TopBar } from './components/TopBar';
 import { StoreVoiceDialog } from './components/StoreVoiceDialog';
 import { RedoIcon, StoreIcon, UndoIcon } from './ui/icons';
 import { helpProps } from './state/help';
+import { useEnvAxisFrozen } from './state/env-axis';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 
 const ENGINES = ['MODERN', 'MARK I', 'OPL'];
@@ -74,7 +75,8 @@ export default function App() {
   const stageClamped = useStageScale(1440, 1020, 0.62);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
 
-  const timeScale = useEnvTimeScale(synth.voice, timeMode, refNote, refVelocity);
+  const axisFrozen = useEnvAxisFrozen();
+  const timeScale = useEnvTimeScale(synth.voice, timeMode, refNote, refVelocity, axisFrozen);
   const combined = envView === 'combined';
   const stack = opLayout === 'stack';
 

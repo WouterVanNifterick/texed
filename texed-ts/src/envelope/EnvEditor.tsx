@@ -3,18 +3,18 @@
 // the shared time scale. Nodes are draggable in 2D: horizontal sets the stage
 // rate (inverted from the engine timing), vertical sets the stage level.
 
-import { useId, useMemo, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useSynth';
 import {
   simulateAmpEnv,
   simulatePitchEnv,
-  rateForStageDuration,
-  pitchRateForStageDuration,
-  levelForTarget,
-  pitchLevelForTarget,
+  solveAmpNodeDrag,
+  solvePitchNodeDrag,
   type AmpEnvParams,
+  type EnvDragSolution,
   type EnvTrace,
 } from '@texed/dx7-engine/env-sim';
+import { setEnvAxisFrozen } from '../state/env-axis';
 import type { EnvTimeScale } from './env-time';
 import {
   makeYMap,
@@ -51,6 +51,26 @@ interface EnvEditorProps {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+/**
+ * Everything a drag needs, captured on pointer-down.
+ *
+ * The gesture is solved from this snapshot rather than from the live props, so
+ * the node position is a pure function of the cursor: no dependence on a value
+ * a previous pointer event has already changed, and no way for the per-stage
+ * block rounding to ratchet over the course of a drag. `sent` tracks what has
+ * actually been emitted so an unchanged param does not re-render the editor.
+ */
+interface DragState {
+  stage: number;
+  levelOnly: boolean;
+  rates: number[];
+  levels: number[];
+  ampParams?: AmpEnvParams;
+  /** Time the dragged stage starts at - fixed, since earlier stages are untouched. */
+  prevNodeSec: number;
+  sent: { rates: number[]; levels: number[] };
+}
+
 export function EnvEditor(props: EnvEditorProps) {
   const {
     kind,
@@ -68,15 +88,38 @@ export function EnvEditor(props: EnvEditorProps) {
   const color = props.color ?? DEFAULT_COLOR[kind];
   const gid = useId();
   const root = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ stage: number; levelOnly: boolean } | null>(null);
+  const drag = useRef<DragState | null>(null);
+
+  // The last solved drag, unrounded.
+  //
+  // A DX7 parameter is a whole number, and its tables are coarse and uneven -
+  // 42 of the 99 EG level steps produce no change at all, and the ones that do
+  // jump by up to 3 dB. Solving the drag in between them is what keeps the node
+  // under the cursor instead of snapping from one reachable value to the next.
+  // Only the drawing uses it: the voice, and so everything that is heard or
+  // saved, still only ever holds the rounded value.
+  //
+  // It is used only while it still rounds to what the voice reports, so a patch
+  // load, an undo or a knob edit retires it without any bookkeeping.
+  const [fine, setFine] = useState<EnvDragSolution | null>(null);
+  const live =
+    fine &&
+    fine.rates.every((v, i) => Math.round(v) === rates[i]) &&
+    fine.levels.every((v, i) => Math.round(v) === levels[i])
+      ? fine
+      : null;
+  const eRates = live ? live.rates : rates;
+  const eLevels = live ? live.levels : levels;
+  const eAmpParams =
+    live && ampParams ? { ...ampParams, rates: eRates, levels: eLevels } : ampParams;
 
   // Deliberately not memoized. Callers rebuild ampParams/rates/levels on every
   // render, so a useMemo here could never hit - it only looked like caching. The
   // replay costs ~6us, which is far below the cost of pretending otherwise.
   const trace: EnvTrace =
     kind === 'amp'
-      ? simulateAmpEnv(ampParams!, timeScale.gateSec)
-      : simulatePitchEnv(rates, levels, timeScale.gateSec);
+      ? simulateAmpEnv(eAmpParams!, timeScale.gateSec)
+      : simulatePitchEnv(eRates, eLevels, timeScale.gateSec);
 
   const ymap = useMemo(() => makeYMap(kind, yMode), [kind, yMode]);
   const g: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap };
@@ -117,19 +160,35 @@ export function EnvEditor(props: EnvEditorProps) {
     const x01 = clamp((fx * W - PAD) / (W - 2 * PAD), 0, 1);
     const y01 = clamp((fy * H - PAD) / (H - 2 * PAD), 0, 1);
 
-    // The amp and pitch paths differ only in which inverse mapping applies.
-    const ap = kind === 'amp' ? ampParams : undefined;
+    // Horizontal position is the stage's *duration*, not an absolute time.
+    const desiredSec = d.levelOnly ? null : Math.max(0, timeScale.t(x01) - d.prevNodeSec);
     const target = ymap.y01ToLevel(y01);
-    const level = ap ? levelForTarget(target, ap.outlevel) : pitchLevelForTarget(target);
+    // The amp and pitch paths differ only in which inverse mapping applies.
+    const next = d.ampParams
+      ? solveAmpNodeDrag(d.ampParams, d.stage, desiredSec, target)
+      : solvePitchNodeDrag(d.rates, d.levels, d.stage, desiredSec, target);
 
-    if (!d.levelOnly) {
-      const desiredSec = Math.max(0, timeScale.t(x01) - prevNodeTime(d.stage));
-      const rate = ap
-        ? rateForStageDuration(ap, d.stage, desiredSec, rates[d.stage])
-        : pitchRateForStageDuration(levels, d.stage, desiredSec, rates[d.stage]);
-      if (rate !== rates[d.stage]) onSetRate(d.stage, rate);
+    // Keep the fractional solution for the drawing, and re-render on it: when a
+    // move does not cross a whole step nothing is emitted, so this is the only
+    // thing that moves the node. React batches it with the emissions below, so
+    // a render never sees one without the other.
+    setFine(next);
+
+    // Round only here. The solver deliberately works in fractions - it solves
+    // the rate against the *new* level and re-solves the follower from it - and
+    // rounding any earlier would put the cursor lag straight back.
+    for (let i = 0; i < 4; i++) {
+      const r = Math.round(next.rates[i]);
+      if (r !== d.sent.rates[i]) {
+        d.sent.rates[i] = r;
+        onSetRate(i, r);
+      }
+      const l = Math.round(next.levels[i]);
+      if (l !== d.sent.levels[i]) {
+        d.sent.levels[i] = l;
+        onSetLevel(i, l);
+      }
     }
-    if (level !== levels[d.stage]) onSetLevel(d.stage, level);
   }
 
   const onNodeDown = (e: React.PointerEvent, s: number, levelOnly = false) => {
@@ -139,9 +198,36 @@ export function EnvEditor(props: EnvEditorProps) {
     } catch {
       // synthetic pointer ids
     }
-    drag.current = { stage: s, levelOnly };
+    // Snapshot the *effective* params, so grabbing a node again continues from
+    // where it is drawn rather than from the rounded value behind it.
+    const r = [eRates[0], eRates[1], eRates[2], eRates[3]];
+    const l = [eLevels[0], eLevels[1], eLevels[2], eLevels[3]];
+    drag.current = {
+      stage: s,
+      levelOnly,
+      rates: r,
+      levels: l,
+      ampParams:
+        kind === 'amp'
+          ? { ...eAmpParams!, rates: [...r], levels: [...l] } // copies: the props are rebuilt per render
+          : undefined,
+      prevNodeSec: prevNodeTime(s),
+      // What the voice already holds - `live` guarantees these are the rounded r/l.
+      sent: { rates: [...rates], levels: [...levels] },
+    };
+    setEnvAxisFrozen(true);
     e.stopPropagation();
   };
+
+  const endDrag = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    setEnvAxisFrozen(false);
+  };
+
+  // Selecting another envelope mid-drag unmounts this editor; without this the
+  // axis would stay frozen with no gesture left to end it.
+  useEffect(() => endDrag, []);
 
   const onNodeKey = (e: React.KeyboardEvent, s: number) => {
     let dr = 0;
@@ -176,8 +262,9 @@ export function EnvEditor(props: EnvEditorProps) {
       className={`env-editor${tall ? ' tall' : ''}${className ? ' ' + className : ''}`}
       style={{ ['--curve' as string]: color }}
       onPointerMove={(e) => drag.current && applyDrag(e.clientX, e.clientY)}
-      onPointerUp={() => (drag.current = null)}
-      onPointerCancel={() => (drag.current = null)}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
         <defs>

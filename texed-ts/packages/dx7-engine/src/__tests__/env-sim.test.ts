@@ -248,6 +248,61 @@ describe('inverse mappings round-trip', () => {
     }
   });
 
+  // The point of the whole exercise: a dragged node must be able to land where
+  // the integer grid cannot, otherwise it snaps.
+  it('levelForTarget sweeps continuously between two integer levels', () => {
+    // 51 -> 52 is a real step. 50/51 and 52/53 are not: above level 20 the
+    // table pairs levels up, which is why only 58 of the 100 level params
+    // produce a distinct target at all.
+    const a = ampTargetLevel(51, p.outlevel);
+    const b = ampTargetLevel(52, p.outlevel);
+    expect(b).toBeGreaterThan(a);
+    let prev = 51;
+    for (let f = 0.02; f <= 1.0001; f += 0.02) {
+      const l = levelForTarget(a + (b - a) * f, p.outlevel);
+      expect(l).toBeGreaterThanOrEqual(prev);
+      expect(l).toBeCloseTo(51 + f, 6);
+      prev = l;
+    }
+    // A target sitting exactly on a plateau resolves to the plateau's foot.
+    expect(levelForTarget(a, p.outlevel)).toBe(50);
+    expect(levelForTarget(b, p.outlevel)).toBe(52);
+  });
+
+  it('pitchLevelForTarget round-trips fractional levels', () => {
+    for (const l of [12.25, 40.5, 63.75, 88.1]) {
+      expect(pitchLevelForTarget(pitchTargetLevel(l))).toBeCloseTo(l, 3);
+    }
+  });
+
+  it('fractional rates reach stage durations no integer rate can', () => {
+    const stageBlocks = (rate: number) => {
+      const probe = { ...p, rates: Array.from(p.rates) };
+      probe.rates[1] = rate;
+      const sim = simulateAmpEnv(probe, 60_000 * tPerBlock);
+      return Math.round((sim.nodes[1].timeSec - sim.nodes[0].timeSec) / tPerBlock);
+    };
+    const reachable = new Set<number>();
+    for (let r = 0; r <= 99; r++) reachable.add(stageBlocks(r));
+
+    // Sweep the same range fractionally and collect what opens up. Rates below
+    // 30 are excluded: those stages run into the tens of seconds, where the
+    // plateaus are narrower than the inverse's rate resolution (and where a
+    // block either way is far past anything the display can show).
+    const extra = new Set<number>();
+    for (let r = 30; r <= 99; r += 0.05) {
+      const b = stageBlocks(r);
+      if (!reachable.has(b)) extra.add(b);
+    }
+    expect(extra.size).toBeGreaterThan(20);
+
+    // And every one of those is actually selectable by dragging to that time.
+    for (const blocks of extra) {
+      const r = rateForStageDuration(p, 1, blocks * tPerBlock, p.rates[1]);
+      expect(stageBlocks(r), `blocks=${blocks} -> rate ${r}`).toBe(blocks);
+    }
+  });
+
   it('pitchRateForStageDuration reproduces the same stage duration', () => {
     const rates = [60, 50, 40, 55];
     const levels = [80, 30, 55, 50];

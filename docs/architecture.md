@@ -56,6 +56,16 @@ An edit follows this path:
    session) post `voice`, `parts`, `programState`, or `settings` events back, and the mirror is
    replaced from those.
 
+The voice is 156 whole numbers everywhere, including in the engine. The one place a fractional
+parameter exists is inside `EnvEditor` while a node is being dragged: the DX7 tables are coarse and
+uneven (42 of the 99 EG level steps produce no change at all, and the ones that do jump by up to
+3 dB), so solving the drag between two steps is what keeps the node under the cursor. It is rounded
+before it reaches `setParam`, and the fractional value is kept only for drawing, and only while it
+still rounds to what the voice reports - so a patch load, an undo or a knob edit retires it. See
+`lerpAt` in `packages/dx7-engine/src/env-tables.ts`, which env-sim uses to read those tables at a
+fractional index; it is exact at whole numbers, so env-sim still agrees with the engine on every
+real patch.
+
 Session persistence snapshots the whole rack through `GetFullState` into IndexedDB, debounced.
 The serializable shape is `RackState` in `packages/dx7-format/src/rack-state.ts`.
 

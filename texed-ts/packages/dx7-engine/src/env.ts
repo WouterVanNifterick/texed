@@ -2,8 +2,10 @@
 // ACCURATE_ENVELOPE is enabled (as in Dexed). Result is Q24/doubling log,
 // subsampled once per N-sample block.
 
-import { LG_N, N } from './synth';
-import { sar64 } from './fixedpoint';
+import { N } from './synth';
+import { ampIncAt, ampLevelBase, ampStaticAt } from './env-tables';
+
+export { scaleoutlevel } from './env-tables';
 
 let srMultiplier = 1 << 24;
 let sampleRate = 44100;
@@ -11,25 +13,6 @@ let sampleRate = 44100;
 // TX802 EG Forced Damp: a stolen voice fades to silence over this window before
 // its slot is reclaimed, avoiding the click of an instantaneous cut.
 const DAMP_MS = 6;
-
-const levellut = [0, 5, 9, 13, 17, 20, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 42, 43, 45, 46];
-
-// prettier-ignore
-const statics = [
-  1764000, 1764000, 1411200, 1411200, 1190700, 1014300, 992250,
-  882000, 705600, 705600, 584325, 507150, 502740, 441000, 418950,
-  352800, 308700, 286650, 253575, 220500, 220500, 176400, 145530,
-  145530, 125685, 110250, 110250, 88200, 88200, 74970, 61740,
-  61740, 55125, 48510, 44100, 37485, 31311, 30870, 27562, 27562,
-  22050, 18522, 17640, 15435, 14112, 13230, 11025, 9261, 9261, 7717,
-  6615, 6615, 5512, 5512, 4410, 3969, 3969, 3439, 2866, 2690, 2249,
-  1984, 1896, 1808, 1411, 1367, 1234, 1146, 926, 837, 837, 705,
-  573, 573, 529, 441, 441,
-];
-
-export function scaleoutlevel(outlevel: number): number {
-  return outlevel >= 20 ? 28 + outlevel : levellut[outlevel];
-}
 
 export class Env {
   private initialised = false;
@@ -136,31 +119,20 @@ export class Env {
     this.ix = newix;
     if (this.ix < 4) {
       const newlevel = this.levels[this.ix];
-      let actuallevel = scaleoutlevel(newlevel) >> 1;
-      actuallevel = (actuallevel << 6) + this.outlevel - 4256;
+      let actuallevel = ampLevelBase(newlevel) + this.outlevel - 4256;
       actuallevel = actuallevel < 16 ? 16 : actuallevel;
       this.targetlevel = actuallevel << 16;
       this.rising = this.targetlevel > this.level;
 
-      let qrate = (this.rates[this.ix] * 41) >> 6;
-      qrate += this.rateScaling;
-      qrate = qrate < 63 ? qrate : 63;
-
-      if (this.targetlevel === this.level || (this.ix === 0 && newlevel === 0)) {
-        let staticrate = this.rates[this.ix];
-        staticrate += this.rateScaling;
-        staticrate = staticrate < 99 ? staticrate : 99;
-        this.staticcount = staticrate < 77 ? statics[staticrate] : 20 * (99 - staticrate);
-        if (staticrate < 77 && this.ix === 0 && newlevel === 0) {
-          this.staticcount = (this.staticcount / 20) | 0;
-        }
-        this.staticcount = sar64(this.staticcount * srMultiplier, 24);
+      const shortHold = this.ix === 0 && newlevel === 0 ? 1 : 0;
+      if (this.targetlevel === this.level || shortHold) {
+        const staticrate = Math.min(99, this.rates[this.ix] + this.rateScaling);
+        this.staticcount = ampStaticAt(staticrate, srMultiplier, shortHold);
       } else {
         this.staticcount = 0;
       }
 
-      this.inc = (4 + (qrate & 3)) << (2 + LG_N + (qrate >> 2));
-      this.inc = sar64(this.inc * srMultiplier, 24);
+      this.inc = ampIncAt(this.rates[this.ix], srMultiplier, this.rateScaling);
     }
   }
 
@@ -173,8 +145,8 @@ export class Env {
     this.rateScaling = rateScaling;
     if (this.down) {
       const newlevel = this.levels[2];
-      let actuallevel = scaleoutlevel(newlevel) >> 1;
-      actuallevel = (actuallevel << 6) - 4256;
+      // Deliberately without `+ this.outlevel`, matching msfa's env.cc.
+      let actuallevel = ampLevelBase(newlevel) - 4256;
       actuallevel = actuallevel < 16 ? 16 : actuallevel;
       this.targetlevel = actuallevel << 16;
       this.advance(2);

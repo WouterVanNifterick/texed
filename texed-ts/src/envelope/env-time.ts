@@ -27,7 +27,7 @@ export type TimeMode = 'log' | 'linear';
 
 /** Combined per-operator output level and rate scaling (dx7note.ts init). */
 export function computeAmpParams(
-  voice: Uint8Array,
+  voice: ArrayLike<number>,
   opNum: number,
   scaleByOutlevel = true,
   note = REF_NOTE,
@@ -70,7 +70,7 @@ export function computeAmpParams(
   return { rates, levels, outlevel, rateScaling };
 }
 
-export function pitchEgParams(voice: Uint8Array): { rates: number[]; levels: number[] } {
+export function pitchEgParams(voice: ArrayLike<number>): { rates: number[]; levels: number[] } {
   return {
     rates: [
       voice[G.pitchEgRate(0)],
@@ -153,7 +153,7 @@ function niceLinearTicks(axisMax: number): number[] {
  * time-to-sustain; the axis spans to the slowest release end.
  */
 export function computeEnvTimeScale(
-  voice: Uint8Array,
+  voice: ArrayLike<number>,
   mode: TimeMode,
   note = REF_NOTE,
   velocity = REF_VELOCITY,
@@ -186,29 +186,35 @@ export function computeEnvTimeScale(
 }
 
 /**
- * React hook: shared time scale, recomputed only when the EG bytes change.
+ * React hook: shared time scale, recomputed only when the EG params change.
  *
  * Every parameter edit hands down a fresh `voice` array, so a `useMemo` on
  * `voice` would recompute on each keystroke anywhere in the editor. Caching on
- * the value of the bytes the curves actually depend on limits the work to edits
+ * the value of the params the curves actually depend on limits the work to edits
  * that can change the result.
+ *
+ * `frozen` holds the last computed scale regardless of the params - see
+ * state/env-axis.ts for why a drag needs that.
  */
 export function useEnvTimeScale(
-  voice: Uint8Array,
+  voice: ArrayLike<number>,
   mode: TimeMode,
   note = REF_NOTE,
   velocity = REF_VELOCITY,
+  frozen = false,
 ): EnvTimeScale {
-  const key = `${envDepKey(voice)}|${mode}|${note}|${velocity}`;
   const cached = useRef<{ key: string; value: EnvTimeScale } | null>(null);
+  // Before the key, which is itself not free to build on every pointer event.
+  if (frozen && cached.current) return cached.current.value;
+  const key = `${envDepKey(voice)}|${mode}|${note}|${velocity}`;
   if (cached.current?.key !== key) {
     cached.current = { key, value: computeEnvTimeScale(voice, mode, note, velocity) };
   }
   return cached.current.value;
 }
 
-/** Hash of every byte the seven envelope curves depend on. */
-function envDepKey(voice: Uint8Array): string {
+/** Hash of every param the seven envelope curves depend on. */
+function envDepKey(voice: ArrayLike<number>): string {
   const bytes: number[] = [];
   for (let opNum = 1; opNum <= 6; opNum++) {
     const base = opBase(opNum);

@@ -21,7 +21,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "typecheck": "pnpm -r typecheck && tsc -b"
+    "typecheck": "pnpm -r typecheck && tsc -b && tsc -p tsconfig.test.json"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [

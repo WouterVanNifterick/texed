@@ -230,14 +230,14 @@ describe('inverse mappings round-trip', () => {
     // giving the identical duration (plateaus allowed, so compare durations).
     for (const ix of [0, 1, 2, 3]) {
       for (const r of [10, 40, 70, 99]) {
-        const probe = { ...p, rates: [...p.rates] };
+        const probe = { ...p, rates: Array.from(p.rates) };
         probe.rates[ix] = r;
         const sim = simulateAmpEnv(probe, 60_000 * tPerBlock);
         const t0 = ix === 0 ? 0 : sim.nodes[ix - 1].timeSec;
         const dur =
           (ix === 3 ? sim.releaseEndSec : sim.nodes[ix].timeSec) - (ix === 3 ? sim.gateSec : t0);
         const rBack = rateForStageDuration(probe, ix, dur, r);
-        const probe2 = { ...p, rates: [...probe.rates] };
+        const probe2 = { ...p, rates: Array.from(probe.rates) };
         probe2.rates[ix] = rBack;
         const sim2 = simulateAmpEnv(probe2, 60_000 * tPerBlock);
         const dur2 =

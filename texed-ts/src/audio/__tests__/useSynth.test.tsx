@@ -75,12 +75,12 @@ describe('useSynth', () => {
   it('resolves setProgram against the program list from the synth', () => {
     const { port, sent, emit } = fakePort();
     const { result } = renderHook(() => useSynth(port));
-    const ref = { bank: 'internalA', slot: 5 } as const;
+    const ref = { bank: 'internalA', program: 5 } as const;
 
     emit({
       type: 'programState',
       options: [
-        { ref: { bank: 'internalA', slot: 0 }, label: 'INT 01' },
+        { ref: { bank: 'internalA', program: 0 }, label: 'INT 01' },
         { ref, label: 'INT 06' },
       ],
       banks: [{ id: 'internalA', label: 'INT A', populated: true }],

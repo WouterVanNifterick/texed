@@ -13,9 +13,15 @@ const NO_SUB: Subscribe = () => () => {};
 const W = 120;
 const H = 40;
 const PAD = 2;
-const SAMPLES = 360;
+// Enough points for the full DX7 LFO range (~0.06–49 Hz) in WINDOW seconds
+// without the polyline collapsing into an aliased flat density.
+const SAMPLES = 960;
+const MIN_SAMPLES_PER_CYCLE = 4;
 const WINDOW = 2; // seconds shown when the delay fits; extends for long delays
 const START_PHASE = 0.5; // Lfo.keydown() starts synced waves halfway through their cycle
+// Engine: delta = trunc(lfoSource[rate] * 4437500000*N/sampleRate); freq =
+// delta/2^32 * sampleRate/N ⇒ lfoSource[rate] * 4437500000 / 2^32 Hz.
+const LFO_HZ_SCALE = 4437500000 / 2 ** 32;
 
 // Deterministic S&H steps using the engine's LCG (randstate * 179 + 17).
 const SH: number[] = (() => {
@@ -92,11 +98,13 @@ export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {
     ramp = 2 ** 31 / 25190424 / a2;
   }
 
-  const period = 1 / lfoSource[Math.min(99, Math.max(0, speed))];
-  // Fixed time window so speed reads as cycle density; only stretch it when
-  // a long delay wouldn't fit. Cap the cycle count so fast LFOs stay readable.
+  const period = 1 / (lfoSource[Math.min(99, Math.max(0, speed))] * LFO_HZ_SCALE);
+  // Fixed time window so speed reads as cycle density; stretch only when a
+  // long delay wouldn't fit. Cap cycles from the sample budget so 0-99 stay
+  // visually distinct without the polyline collapsing.
   const total = Math.max(WINDOW, (hold + ramp) * 1.25);
-  const drawPeriod = Math.max(period, total / 28);
+  const maxCycles = SAMPLES / MIN_SAMPLES_PER_CYCLE;
+  const drawPeriod = Math.max(period, total / maxCycles);
 
   const amp = H / 2 - PAD;
   const env = (t: number) => (t < hold ? 0 : t < hold + ramp ? (t - hold) / ramp : 1);

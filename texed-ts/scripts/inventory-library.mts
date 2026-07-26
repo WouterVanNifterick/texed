@@ -16,7 +16,7 @@ import {
   type SysexFrame,
 } from '@texed/dx7-format/sysex';
 import { performancesFromFrame } from '@texed/dx7-format/performance';
-import { getVoiceName } from '@texed/dx7-format/params';
+import { getVoiceName } from '@texed/dx7-format/voice';
 import {
   masterTuningCents,
   parseSystemSetup,

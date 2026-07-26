@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { noteName, formatTranspose } from '@texed/dx7-format/params';
+import { noteName, formatTranspose } from '@texed/dx7-format/voice';
 
 describe('noteName', () => {
   it('maps MIDI notes to scientific pitch names', () => {

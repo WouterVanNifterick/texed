@@ -70,20 +70,16 @@ export function EnvEditor(props: EnvEditorProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ stage: number; levelOnly: boolean } | null>(null);
 
-  const trace: EnvTrace = useMemo(
-    () =>
-      kind === 'amp'
-        ? simulateAmpEnv(ampParams!, timeScale.gateSec)
-        : simulatePitchEnv(rates, levels, timeScale.gateSec),
-    [kind, ampParams, rates, levels, timeScale.gateSec],
-  );
+  // Deliberately not memoized. Callers rebuild ampParams/rates/levels on every
+  // render, so a useMemo here could never hit - it only looked like caching. The
+  // replay costs ~6us, which is far below the cost of pretending otherwise.
+  const trace: EnvTrace =
+    kind === 'amp'
+      ? simulateAmpEnv(ampParams!, timeScale.gateSec)
+      : simulatePitchEnv(rates, levels, timeScale.gateSec);
 
   const ymap = useMemo(() => makeYMap(kind, yMode), [kind, yMode]);
   const g: DrawGeom = { W, H, pad: PAD, ts: timeScale, ymap };
-
-  // Latest render state for the drag handlers (avoids stale closures).
-  const latest = useRef({ trace, ampParams, rates, levels, ymap, timeScale, kind });
-  latest.current = { trace, ampParams, rates, levels, ymap, timeScale, kind };
 
   const segs = curveSegments(trace, g);
   const fill = fillPoints(trace, g);
@@ -106,10 +102,9 @@ export function EnvEditor(props: EnvEditorProps) {
       : null;
 
   function prevNodeTime(s: number): number {
-    const t = latest.current.trace;
     if (s === 0) return 0;
-    if (s === 3) return t.gateSec;
-    return t.nodes[s - 1].timeSec;
+    if (s === 3) return trace.gateSec;
+    return trace.nodes[s - 1].timeSec;
   }
 
   function applyDrag(clientX: number, clientY: number) {
@@ -122,26 +117,19 @@ export function EnvEditor(props: EnvEditorProps) {
     const x01 = clamp((fx * W - PAD) / (W - 2 * PAD), 0, 1);
     const y01 = clamp((fy * H - PAD) / (H - 2 * PAD), 0, 1);
 
-    const L = latest.current;
-    const desiredLevel = L.ymap.y01ToLevel(y01);
+    // The amp and pitch paths differ only in which inverse mapping applies.
+    const ap = kind === 'amp' ? ampParams : undefined;
+    const target = ymap.y01ToLevel(y01);
+    const level = ap ? levelForTarget(target, ap.outlevel) : pitchLevelForTarget(target);
 
-    if (L.kind === 'amp' && L.ampParams) {
-      const l = levelForTarget(desiredLevel, L.ampParams.outlevel);
-      if (!d.levelOnly) {
-        const desiredSec = Math.max(0, L.timeScale.t(x01) - prevNodeTime(d.stage));
-        const r = rateForStageDuration(L.ampParams, d.stage, desiredSec, L.rates[d.stage]);
-        if (r !== L.rates[d.stage]) onSetRate(d.stage, r);
-      }
-      if (l !== L.levels[d.stage]) onSetLevel(d.stage, l);
-    } else {
-      const l = pitchLevelForTarget(desiredLevel);
-      if (!d.levelOnly) {
-        const desiredSec = Math.max(0, L.timeScale.t(x01) - prevNodeTime(d.stage));
-        const r = pitchRateForStageDuration(L.levels, d.stage, desiredSec, L.rates[d.stage]);
-        if (r !== L.rates[d.stage]) onSetRate(d.stage, r);
-      }
-      if (l !== L.levels[d.stage]) onSetLevel(d.stage, l);
+    if (!d.levelOnly) {
+      const desiredSec = Math.max(0, timeScale.t(x01) - prevNodeTime(d.stage));
+      const rate = ap
+        ? rateForStageDuration(ap, d.stage, desiredSec, rates[d.stage])
+        : pitchRateForStageDuration(levels, d.stage, desiredSec, rates[d.stage]);
+      if (rate !== rates[d.stage]) onSetRate(d.stage, rate);
     }
+    if (level !== levels[d.stage]) onSetLevel(d.stage, level);
   }
 
   const onNodeDown = (e: React.PointerEvent, s: number, levelOnly = false) => {

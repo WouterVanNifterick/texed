@@ -3,11 +3,13 @@
 
 import { memo, useState } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useSynth';
-import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/params';
+import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/voice';
 import * as Sup from '@texed/dx7-format/supplement';
 import { helpProps } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
-import { Knob, Cycle, Toggle } from './ui';
+import { Knob } from './Knob';
+import { Cycle } from './Cycle';
+import { Toggle } from './Toggle';
 import { AlgoDisplay } from './AlgoDisplay';
 import { LiveEnvEditor } from './EnvEditor';
 import { PITCH_COLOR, type YMode } from './env-draw';

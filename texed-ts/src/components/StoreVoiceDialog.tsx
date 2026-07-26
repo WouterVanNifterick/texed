@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Synth } from '../audio/useSynth';
 import { programIndexForVoice } from '../audio/useSynth';
-import { getVoiceName } from '@texed/dx7-format/params';
+import { getVoiceName } from '@texed/dx7-format/voice';
 import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
 import { VOICE_BANK_LABELS } from '@texed/dx7-format/voice-library';
 

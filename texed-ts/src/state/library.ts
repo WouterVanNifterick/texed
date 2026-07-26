@@ -6,7 +6,7 @@ import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
 import { voiceFromRawVced } from '@texed/dx7-format/sysex';
 import { AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
 import { VOICE_BANK_ORDER, type VoiceLibrary } from '@texed/dx7-format/voice-library';
-import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice-layout';
+import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice';
 import {
   isLibraryManifest,
   type LibBank,

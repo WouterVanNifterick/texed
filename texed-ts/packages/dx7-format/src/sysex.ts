@@ -245,7 +245,6 @@ export function voiceFromVced(frame: Uint8Array): Uint8Array | null {
   return voiceFromRawVced(frame.subarray(6, 6 + 155));
 }
 
-/** Serialize a 156-byte editable voice as a 163-byte VCED single-voice dump. */
 /** DX7 VCED single-parameter change: live edit of one byte of the 156-byte voice. */
 export function voiceParamChangeSysex(offset: number, value: number, device = 0): Uint8Array {
   return Uint8Array.of(
@@ -259,6 +258,7 @@ export function voiceParamChangeSysex(offset: number, value: number, device = 0)
   );
 }
 
+/** Serialize a 156-byte editable voice as a 163-byte VCED single-voice dump. */
 export function vcedFromVoice(voice: Uint8Array, channel = 0): Uint8Array {
   const out = new Uint8Array(163);
   out.set([0xf0, 0x43, 0x00 | (channel & 0x0f), 0x00, 0x01, 0x1b], 0);

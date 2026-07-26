@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 import { DEFAULT_GLOBAL_SETTINGS } from '@texed/dx7-format/global-settings';
-import { G } from '@texed/dx7-format/voice-layout';
+import { G } from '@texed/dx7-format/voice';
 import { useSynth, type SynthActions } from '../useSynth';
 
 /** Stands in for the worklet: records commands, replays events on demand. */

@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import type { SynthStatus } from '../audio/useSynth';
-import { OP, G, opBase, noteName } from '@texed/dx7-format/params';
+import { OP, G, opBase, noteName } from '@texed/dx7-format/voice';
 import { helpProps, setHelp } from '../state/help';
 import { simulateAmpEnv, simulatePitchEnv } from '@texed/dx7-engine/env-sim';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';

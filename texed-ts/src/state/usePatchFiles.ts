@@ -3,7 +3,8 @@
 // the parsed MiniDexed extras, so they live in one hook.
 
 import { useCallback, useState } from 'react';
-import { getVoiceName, voiceToSysex } from '@texed/dx7-format/params';
+import { getVoiceName } from '@texed/dx7-format/voice';
+import { vcedFromVoice } from '@texed/dx7-format/sysex';
 import { acedToSysex } from '@texed/dx7-format/amem';
 import {
   parseMiniDexedIni,
@@ -48,7 +49,7 @@ export function usePatchFiles(synth: Synth, showMsg: (text: string) => void): Pa
     // Single voice = DX7II additional data (ACED) followed by the voice (VCED),
     // the same pair the DX7II transmits for the current voice.
     const aced = acedToSysex(synth.supplement);
-    const vced = voiceToSysex(synth.voice);
+    const vced = vcedFromVoice(synth.voice);
     const syx = new Uint8Array(aced.length + vced.length);
     syx.set(aced, 0);
     syx.set(vced, aced.length);

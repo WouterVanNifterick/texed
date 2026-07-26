@@ -8,7 +8,7 @@
 import { useRef } from 'react';
 import { scaleoutlevel } from '@texed/dx7-engine/env';
 import { scaleLevel, scaleRate, scaleVelocity } from '@texed/dx7-engine/dx7note';
-import { OP, G, opBase } from '@texed/dx7-format/params';
+import { OP, G, opBase } from '@texed/dx7-format/voice';
 import {
   ampStageTimes,
   pitchStageTimes,

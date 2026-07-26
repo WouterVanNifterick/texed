@@ -4,10 +4,15 @@
 
 import { SynthRack } from '@texed/dx7-engine/synth-rack';
 import { AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
-import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice-layout';
+import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice';
 import { identifySysex, SysexKind, voiceFromVced } from '@texed/dx7-format/sysex';
 import { loadSysexFile, applySystemSetupToParts } from '@texed/dx7-format/sysex-loader';
-import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
+import {
+  MsgType,
+  type StatusMsg,
+  type SynthCommand,
+  type SynthEvent,
+} from '@texed/synth-protocol/protocol';
 
 const STATUS_INTERVAL = 12;
 
@@ -23,6 +28,20 @@ function splitRecords(raw: Uint8Array, size: number): Uint8Array[] {
 class TexedProcessor extends AudioWorkletProcessor {
   private rack: SynthRack;
   private statusCountdown = STATUS_INTERVAL;
+  // Reused so the audio thread does not allocate to report state. See postStatus.
+  private statusMsg: StatusMsg = {
+    type: 'status',
+    amps: [],
+    steps: [],
+    levels: [],
+    pitchStep: 4,
+    pitchLevel: 0,
+    lfo: 0,
+    lfoRestart: 0,
+    selectedPart: 0,
+    partActivity: [],
+    totalActive: 0,
+  };
 
   constructor() {
     super();
@@ -293,9 +312,31 @@ class TexedProcessor extends AudioWorkletProcessor {
 
     if (--this.statusCountdown <= 0) {
       this.statusCountdown = STATUS_INTERVAL;
-      this.post({ type: 'status', ...this.rack.getStatus() });
+      this.postStatus();
     }
     return true;
+  }
+
+  /**
+   * Copy the rack's reused status object into a reused message. Spreading it
+   * into a fresh literal here would have undone the point of getStatus() not
+   * allocating. The arrays are the rack's own and are structure-cloned by
+   * postMessage, so handing over the references is safe.
+   */
+  private postStatus(): void {
+    const s = this.rack.getStatus();
+    const m = this.statusMsg;
+    m.amps = s.amps;
+    m.steps = s.steps;
+    m.levels = s.levels;
+    m.pitchStep = s.pitchStep;
+    m.pitchLevel = s.pitchLevel;
+    m.lfo = s.lfo;
+    m.lfoRestart = s.lfoRestart;
+    m.selectedPart = s.selectedPart;
+    m.partActivity = s.partActivity;
+    m.totalActive = s.totalActive;
+    this.post(m);
   }
 }
 

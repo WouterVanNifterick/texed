@@ -11,7 +11,7 @@ import {
   type SourceFile,
 } from '../patch-library-core.mts';
 import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
-import { getVoiceName } from '@texed/dx7-format/params';
+import { getVoiceName } from '@texed/dx7-format/voice';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const patchesDir = join(here, '../../../patches');

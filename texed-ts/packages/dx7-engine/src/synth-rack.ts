@@ -17,7 +17,7 @@ import { RACK_STATE_SCHEMA } from '@texed/dx7-format/rack-state';
 import { volumeToGain, type GlobalSettings } from '@texed/dx7-format/global-settings';
 import { identifySysex, SysexKind, cartridgeFromSyx } from '@texed/dx7-format/sysex';
 import { amemPayloadFromFrame } from '@texed/dx7-format/amem';
-import { getVoiceName } from '@texed/dx7-format/params';
+import { getVoiceName } from '@texed/dx7-format/voice';
 import {
   VoiceLibrary,
   defaultVoiceRef,

@@ -18,17 +18,39 @@ export default defineConfig(({ command, isPreview }) => ({
       provider: 'v8',
       reporter: ['text-summary', 'lcov'],
       include: ['src/**/*.{ts,tsx}', 'packages/*/src/**/*.ts'],
-      // The worklet and the entry point only run inside an
-      // AudioWorkletGlobalScope or the browser, and the re-export barrel holds
-      // no logic worth counting.
-      exclude: ['src/worklet/**', 'src/main.tsx', 'src/components/ui.tsx', '**/*.d.ts'],
-      // Floors, not targets: they exist to catch a drop, so raise them as the
-      // untested layers get covered.
+      // main.tsx only mounts React into the page; there is nothing to assert.
+      exclude: ['src/main.tsx', '**/*.d.ts'],
+      // Floors, not targets: they catch a regression, so raise them as coverage
+      // grows. Per-area, because a single global number hid that the engine sits
+      // at 90% while the React layer is near zero - it could only ever be set
+      // low enough to be meaningless for the part that matters most.
       thresholds: {
-        statements: 54,
-        branches: 43,
-        functions: 34,
-        lines: 55,
+        'packages/dx7-engine/src/**': {
+          statements: 88,
+          branches: 79,
+          functions: 84,
+          lines: 89,
+        },
+        'packages/dx7-format/src/**': {
+          statements: 73,
+          branches: 60,
+          functions: 64,
+          lines: 76,
+        },
+        'packages/synth-protocol/src/**': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+        // The UI is the weak spot. This floor is deliberately just under where it
+        // stands today; it should climb every time a component gains a test.
+        'src/**': {
+          statements: 13,
+          branches: 9,
+          functions: 10,
+          lines: 14,
+        },
       },
     },
     projects: [

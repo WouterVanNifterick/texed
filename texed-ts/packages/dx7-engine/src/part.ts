@@ -22,7 +22,7 @@ import {
 import { Dx7Note, type VoiceStatus } from './dx7note';
 import { createStandardTuning, type TuningState } from './tuning';
 import { initVoice } from '@texed/dx7-format/cartridge';
-import { G } from '@texed/dx7-format/voice-layout';
+import { G } from '@texed/dx7-format/voice';
 import { VoiceSupplement, createDefaultAmem, AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
 
 export const MAX_ACTIVE_NOTES = 32;

@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { noteName } from '@texed/dx7-format/params';
+import { noteName } from '@texed/dx7-format/voice';
 
 const MIDI_MAX = 127;
 

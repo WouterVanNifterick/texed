@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Cycle, Knob, Toggle } from '../ui';
+import { Cycle } from '../Cycle';
+import { Knob } from '../Knob';
+import { Toggle } from '../Toggle';
 
 describe('Knob', () => {
   function renderKnob(overrides: Partial<Parameters<typeof Knob>[0]> = {}) {

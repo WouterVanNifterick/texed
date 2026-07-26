@@ -3,7 +3,7 @@
 // Node brightness reflects static output level plus live envelope amplitude.
 
 import { useStatus, type SynthStatus } from '../audio/useSynth';
-import { OP, G, opBase } from '@texed/dx7-format/params';
+import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { algoGraph } from '../state/algo';
 import { opColor } from '../state/op-colors';
 

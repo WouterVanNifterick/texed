@@ -7,7 +7,9 @@ import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 import { programIndexForVoice } from '../audio/useSynth';
 import type { SynthStatus } from '../audio/useSynth';
-import { Knob, NoteRange, PartSlider } from './ui';
+import { Knob } from './Knob';
+import { NoteRange } from './NoteRange';
+import { PartSlider } from './PartSlider';
 
 interface PartRackProps {
   configs: PartConfig[];

@@ -3,9 +3,9 @@
 // on the playing context, so the drawn shapes are pinned to one note+velocity.
 // FOLLOW makes that context track the last note played.
 
-import { noteName } from '@texed/dx7-format/params';
+import { noteName } from '@texed/dx7-format/voice';
 import { helpProps } from '../state/help';
-import { Toggle } from './ui';
+import { Toggle } from './Toggle';
 
 interface RefKeyControlProps {
   note: number;

@@ -12,11 +12,13 @@ import {
   formatDetune,
   OSC_MODES,
   PARAM_CENTER,
-} from '@texed/dx7-format/params';
+} from '@texed/dx7-format/voice';
 import { getAms, setAms, getScalingMode, setScalingMode } from '@texed/dx7-format/supplement';
 import { algoGraph } from '../state/algo';
 import { helpProps } from '../state/help';
-import { Knob, Cycle, Toggle } from './ui';
+import { Knob } from './Knob';
+import { Cycle } from './Cycle';
+import { Toggle } from './Toggle';
 import { LiveEnvEditor } from './EnvEditor';
 import { computeAmpParams, type EnvTimeScale } from './env-time';
 import { OP_COLORS, type YMode } from './env-draw';

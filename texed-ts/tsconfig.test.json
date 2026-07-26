@@ -25,6 +25,8 @@
   },
   "include": [
     "vitest.setup.ts",
+    // The processor test imports the worklet, which needs these ambient globals.
+    "src/worklet/audioworklet.d.ts",
     "e2e",
     "scripts/__tests__",
     "src/**/__tests__",

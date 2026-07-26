@@ -6,7 +6,7 @@
 import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 import { voiceParamChangeSysex } from '@texed/dx7-format/sysex';
-import { voiceToSysex } from '@texed/dx7-format/params';
+import { vcedFromVoice } from '@texed/dx7-format/sysex';
 import { acedToSysex, createDefaultAmem } from '@texed/dx7-format/amem';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { NUM_PARTS, defaultPartConfig } from '@texed/dx7-format/part-config';
@@ -76,7 +76,7 @@ export class HardwareMidiPort implements SynthPort {
         this.voice = new Uint8Array(cmd.data);
         if (cmd.supplement) this.supplement = new Uint8Array(cmd.supplement);
         this.bytes(acedToSysex(this.supplement));
-        this.bytes(voiceToSysex(this.voice));
+        this.bytes(vcedFromVoice(this.voice));
         if ((cmd.partIndex ?? 0) === 0) {
           this.emit({
             type: 'voice',

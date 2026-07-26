@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { SynthRack } from '../synth-rack';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
-import { G, OP, opBase } from '@texed/dx7-format/voice-layout';
+import { G, OP, opBase } from '@texed/dx7-format/voice';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GOLDEN = join(here, 'fixtures', 'render-golden.json');

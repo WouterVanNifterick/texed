@@ -9,7 +9,7 @@
 
 import { useCallback, useRef } from 'react';
 import { scaleLevel } from '@texed/dx7-engine/dx7note';
-import { CURVES, noteName } from '@texed/dx7-format/params';
+import { CURVES, noteName } from '@texed/dx7-format/voice';
 
 const W = 127;
 const H = 56;

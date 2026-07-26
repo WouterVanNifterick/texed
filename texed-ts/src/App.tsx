@@ -5,7 +5,7 @@ import { useSynth } from './audio/useSynth';
 import type { MidiConnection } from './audio/midi';
 import { useMidiIo } from './audio/useMidiIo';
 import { hardwarePort } from './audio/midi-out';
-import { getVoiceName, withVoiceName } from '@texed/dx7-format/params';
+import { getVoiceName, withVoiceName } from '@texed/dx7-format/voice';
 import {
   useFileDrop,
   usePartSelectKeys,
@@ -25,7 +25,7 @@ import { GlobalPanel } from './components/GlobalPanel';
 import { EnvOverlay, type EnvSelection } from './components/EnvOverlay';
 import { useEnvTimeScale, type TimeMode } from './components/env-time';
 import { type YMode } from './components/env-draw';
-import { Segmented } from './components/ui';
+import { Segmented } from './components/Segmented';
 import { RefKeyControl } from './components/RefKeyControl';
 import { PartRack } from './components/PartRack';
 import { LibraryBrowser } from './components/LibraryBrowser';

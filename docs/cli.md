@@ -1,6 +1,6 @@
 # Headless CLI (MIDI → WAV)
 
-The `@texed/cli` app renders a **Standard MIDI File** through the same **SynthRack** engine used
+The `@texed/cli` app renders a Standard MIDI File through the same SynthRack engine used
 in the browser, without Web Audio or a UI.
 
 ## Prerequisites
@@ -12,7 +12,7 @@ cd texed-ts
 pnpm install
 ```
 
-Requires **Node.js ≥ 24** (see `texed-ts/package.json`).
+Requires Node.js ≥ 24 (see `texed-ts/package.json`).
 
 ## Basic usage
 
@@ -20,13 +20,13 @@ Requires **Node.js ≥ 24** (see `texed-ts/package.json`).
 pnpm cli <file.mid> [--syx bank.syx] [--out out.wav] [--rate 48000] [--program n]
 ```
 
-| Option | Meaning |
-| ------ | ------- |
-| `<file.mid>` | Input Standard MIDI File (required) |
-| `--syx` | Optional SysEx bank or single-voice dump to load before playback |
-| `--out` | Output WAV path (default: same basename as the MIDI file, `.wav`) |
-| `--rate` | Sample rate in Hz (default: `48000`) |
-| `--program` | If set (≥ 0), select this program index on all active parts before MIDI program changes |
+| Option       | Meaning                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------- |
+| `<file.mid>` | Input Standard MIDI File (required)                                                     |
+| `--syx`      | Optional SysEx bank or single-voice dump to load before playback                        |
+| `--out`      | Output WAV path (default: same basename as the MIDI file, `.wav`)                       |
+| `--rate`     | Sample rate in Hz (default: `48000`)                                                    |
+| `--program`  | If set (≥ 0), select this program index on all active parts before MIDI program changes |
 
 Examples:
 
@@ -38,9 +38,9 @@ pnpm cli song.mid --rate 44100 --program 0
 
 ## How playback maps to the engine
 
-- MIDI **channels** map to up to **eight parts** (first eight distinct channels), similar to a
+- MIDI channels map to up to eight parts (first eight distinct channels), similar to a
   multi-timbral rack.
-- **Program change** events select voices from the loaded library when a bank was provided with
+- Program change events select voices from the loaded library when a bank was provided with
   `--syx`.
 - Rendering includes note releases and a short tail; the CLI prints duration, channel count, and
   peak level (and warns on clipping).

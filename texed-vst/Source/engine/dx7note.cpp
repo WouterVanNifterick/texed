@@ -216,11 +216,11 @@ void Dx7Note::compute(int32_t* buf, int32_t lfoVal, int32_t lfoDelay, const Cont
     // patch depth to the summed controller contributions and saturating at 255,
     // then multiplies the LFO by it. msfa takes the larger of the two instead.
     const int32_t senslfo = pitchmodsens * (lfoVal - (1 << 23));
-    // depth * delay reaches 255 * 2^24, which does not fit in the int32 the
-    // shift operates on, so at full delay it wraps negative. That wrap is what
-    // both msfa and the TypeScript engine do; keep it or the vibrato differs.
-    const int32_t delayedDepth = (int32_t)(uint32_t)((int64_t)pitchmoddepth * lfoDelay);
-    const int pitchModFactor = std::min(255, (delayedDepth >> 24) + ctrls.pitchMod * 2);
+    // Wide multiply then >> 24: depth * delay reaches 255 * 2^24. A signed
+    // int32 fold wraps to -1 and kills vibrato at full fade-in.
+    const int delayedDepth =
+        (int)(((int64_t)pitchmoddepth * (int64_t)lfoDelay) >> 24);
+    const int pitchModFactor = std::min(255, delayedDepth + ctrls.pitchMod * 2);
     int32_t pitchMod = (int32_t)std::llabs(sar64((int64_t)pitchModFactor * senslfo, 15));
     int32_t peg = pitchenv.getsample();
     if (pegShift) peg >>= pegShift;
@@ -349,6 +349,14 @@ void Dx7Note::update(const uint8_t* patch, double midinote, int velocity, int) {
     }
     // Keep the glide anchored if the tuning moved under us.
     notePitch = tuningState->midinoteToLogfreq(midinote) + randPitchOffset;
+    const VoiceSupplement* sup = supplement;
+    const int pegRateAdj =
+        (sup && sup->pitchEgScaleRate) ? scaleRate(midinote, sup->pitchEgScaleRate & 7) : 0;
+    for (int i = 0; i < 4; i++) {
+        rates[i] = std::min(99, patch[126 + i] + pegRateAdj);
+        levels[i] = patch[130 + i];
+    }
+    pitchenv.update(rates, levels);
     algorithm = patch[134];
     const int feedback = patch[135];
     fbShift = feedback != 0 ? kFeedbackBitdepth - feedback : 16;

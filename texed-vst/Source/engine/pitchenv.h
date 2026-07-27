@@ -15,6 +15,8 @@ public:
     static void init(double sampleRate);
 
     void set(const int32_t r[4], const int32_t l[4]);
+    /** Live edit: refresh rates/levels without restarting the running envelope. */
+    void update(const int32_t r[4], const int32_t l[4]);
     int32_t getsample();
     void keydown(bool d);
     int getPosition() const { return ix; }

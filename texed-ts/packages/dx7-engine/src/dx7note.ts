@@ -335,9 +335,11 @@ export class Dx7Note {
     // than the sum. `ctrls.pitchMod` runs 0-127 against the depth's 0-255, hence
     // the doubling.
     const senslfo = (this.pitchmodsens * (lfoVal - (1 << 23))) | 0;
+    // Unsigned shift: depth * delay reaches 255 * 2^24, which signed >> 24
+    // wraps to -1 and kills vibrato at full fade-in.
     const pitchModFactor = Math.min(
       255,
-      ((this.pitchmoddepth * lfoDelay) >> 24) + ctrls.pitchMod * 2,
+      ((this.pitchmoddepth * lfoDelay) >>> 24) + ctrls.pitchMod * 2,
     );
     let pitchMod = Math.abs(sar64(pitchModFactor * senslfo, 15));
     let peg = this.pitchenv.getsample();
@@ -486,6 +488,14 @@ export class Dx7Note {
     }
     // Keep the glide anchored if the tuning moved under us.
     this.notePitch = this.tuningState.midinoteToLogfreq(midinote) + this.randPitchOffset;
+    const sup = this.supplement;
+    const pegRateAdj =
+      sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
+    for (let i = 0; i < 4; i++) {
+      rates[i] = Math.min(99, patch[126 + i] + pegRateAdj);
+      levels[i] = patch[130 + i];
+    }
+    this.pitchenv.update(rates, levels);
     this.algorithm = patch[134];
     const feedback = patch[135];
     this.fbShift = feedback !== 0 ? FEEDBACK_BITDEPTH - feedback : 16;

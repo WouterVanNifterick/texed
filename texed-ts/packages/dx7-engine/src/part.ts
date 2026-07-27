@@ -222,6 +222,9 @@ export class Part {
     if (this.data[offset] === value) return;
     this.data[offset] = value;
     this.refreshVoices();
+    // delayinc updates in reset, but an already-finished ramp would stay full;
+    // clear so editing DELAY while a note rings restarts the hold/fade.
+    if (offset === G.lfoDelay) this.lfo.restartDelay();
   }
 
   getVoiceData(): Uint8Array {
@@ -459,11 +462,13 @@ export class Part {
       case 11:
         // Foot controller 2 (mapped to CC 11 / expression in this implementation).
         this.controllers.foot2Cc = value;
+        this.controllers.foot2Seen = true;
         this.controllers.refresh();
         break;
       case 13:
         // "MIDI IN controller" (DX7II assignable CC; fixed to CC 13 here).
         this.controllers.midiCsCc = value;
+        this.controllers.midiCsSeen = true;
         this.controllers.refresh();
         break;
       case 64:

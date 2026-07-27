@@ -111,4 +111,6 @@ void Lfo::keydown() {
     delaystate = 0;
 }
 
+void Lfo::restartDelay() { delaystate = 0; }
+
 }  // namespace texed

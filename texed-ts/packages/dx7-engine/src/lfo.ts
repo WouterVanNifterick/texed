@@ -139,4 +139,9 @@ export class Lfo {
     }
     this.delaystate = 0;
   }
+
+  /** Restart only the delay ramp (e.g. after a live DELAY edit). */
+  restartDelay(): void {
+    this.delaystate = 0;
+  }
 }

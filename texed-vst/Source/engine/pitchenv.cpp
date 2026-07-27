@@ -35,6 +35,18 @@ void PitchEnv::set(const int32_t r[4], const int32_t l[4]) {
     advance(0);
 }
 
+void PitchEnv::update(const int32_t r[4], const int32_t l[4]) {
+    for (int i = 0; i < 4; i++) {
+        rates[i] = r[i];
+        levels[i] = l[i];
+    }
+    if (ix < 4) {
+        targetlevel = pitchLevelAt(levels[ix]);
+        rising = targetlevel > level;
+        inc = pitchIncAt(rates[ix], unit);
+    }
+}
+
 int32_t PitchEnv::getsample() {
     if (ix < 3 || (ix < 4 && !down)) {
         if (rising) {

@@ -40,8 +40,11 @@ void Controllers::refresh() {
     applyMod(breathCc, breath);
     if (!fc1AsCs1) applyMod(footCc, foot);
     applyMod(aftertouchCc, at);
-    applyMod(foot2Cc, foot2);
-    applyMod(midiCsCc, midiCs);
+    // FC2 / MIDI-ctrl default to CC=127 for volume (unplugged pedal = open),
+    // but must not feed pitch/amp/EG until a real CC arrives - otherwise
+    // factory AMEM pitch routings bypass LFO delay with constant vibrato.
+    applyMod(foot2Seen ? foot2Cc : 0, foot2);
+    applyMod(midiCsSeen ? midiCsCc : 0, midiCs);
 
     // No EG bias assigned anywhere: operators play at full level.
     const bool egAssigned = wheel.egRange || breath.egRange || (!fc1AsCs1 && foot.egRange) ||

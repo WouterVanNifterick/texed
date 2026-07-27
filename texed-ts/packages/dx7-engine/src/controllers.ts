@@ -43,10 +43,20 @@ export class Controllers {
   aftertouchCc = 0;
   breathCc = 0;
   footCc = 0;
-  /** Foot controller 2 (CC 11). Defaults high: an unplugged pedal reads max. */
+  /**
+   * Foot controller 2 (CC 11). Stored value defaults high so an unplugged
+   * expression pedal does not silence volume routings; pitch/amp/EG stay off
+   * until {@link foot2Seen} (see refresh).
+   */
   foot2Cc = 127;
-  /** "MIDI IN controller" (CC 13 by default on this implementation). */
+  /** True after the host has sent CC 11 for this part. */
+  foot2Seen = false;
+  /**
+   * "MIDI IN controller" (CC 13 by default). Same volume-vs-mod split as foot2.
+   */
   midiCsCc = 127;
+  /** True after the host has sent CC 13 for this part. */
+  midiCsSeen = false;
   modwheelCc = 0;
   portamentoEnableCc = false;
   portamentoCc = 0;
@@ -108,8 +118,11 @@ export class Controllers {
     this.applyMod(this.breathCc, this.breath);
     if (!this.fc1AsCs1) this.applyMod(this.footCc, this.foot);
     this.applyMod(this.aftertouchCc, this.at);
-    this.applyMod(this.foot2Cc, this.foot2);
-    this.applyMod(this.midiCsCc, this.midiCs);
+    // FC2 / MIDI-ctrl default to CC=127 for volume (unplugged pedal = open),
+    // but must not feed pitch/amp/EG until a real CC arrives - otherwise
+    // factory AMEM pitch routings bypass LFO delay with constant vibrato.
+    this.applyMod(this.foot2Seen ? this.foot2Cc : 0, this.foot2);
+    this.applyMod(this.midiCsSeen ? this.midiCsCc : 0, this.midiCs);
 
     // No EG bias assigned anywhere: operators play at full level.
     const egAssigned =

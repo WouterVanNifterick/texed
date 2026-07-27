@@ -48,6 +48,19 @@ export class PitchEnv {
     this.advance(0);
   }
 
+  /** Live edit: refresh rates/levels without restarting the running envelope. */
+  update(r: ArrayLike<number>, l: ArrayLike<number>): void {
+    for (let i = 0; i < 4; i++) {
+      this.rates[i] = r[i];
+      this.levels[i] = l[i];
+    }
+    if (this.ix < 4) {
+      this.targetlevel = pitchLevelAt(this.levels[this.ix]);
+      this.rising = this.targetlevel > this.level;
+      this.inc = pitchIncAt(this.rates[this.ix], unit);
+    }
+  }
+
   getsample(): number {
     if (this.ix < 3 || (this.ix < 4 && !this.down)) {
       if (this.rising) {

@@ -24,6 +24,8 @@ public:
     int32_t getsample();
     int32_t getdelay();
     void keydown();
+    /** Restart only the delay ramp (e.g. after a live DELAY edit). */
+    void restartDelay();
 
 private:
     uint32_t phase = 0;  // Q32

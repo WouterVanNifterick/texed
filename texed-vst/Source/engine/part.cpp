@@ -87,6 +87,9 @@ void Part::setVoiceParam(int offset, int value) {
     if (data[(size_t)offset] == value) return;
     data[(size_t)offset] = (uint8_t)value;
     refreshVoices();
+    // delayinc updates in reset, but an already-finished ramp would stay full;
+    // clear so editing DELAY while a note rings restarts the hold/fade.
+    if (offset == G::lfoDelay) lfo.restartDelay();
 }
 
 void Part::clearActiveVoices() {
@@ -293,11 +296,13 @@ void Part::controlChange(int ctrl, int value) {
         case 11:
             // Foot controller 2, mapped to CC 11 (expression) here.
             controllers.foot2Cc = value;
+            controllers.foot2Seen = true;
             controllers.refresh();
             break;
         case 13:
             // "MIDI IN controller" (DX7II assignable CC; fixed to CC 13 here).
             controllers.midiCsCc = value;
+            controllers.midiCsSeen = true;
             controllers.refresh();
             break;
         case 64: setSustain(value > 63); break;

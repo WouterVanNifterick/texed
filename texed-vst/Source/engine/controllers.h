@@ -47,10 +47,18 @@ public:
     int aftertouchCc = 0;
     int breathCc = 0;
     int footCc = 0;
-    /** Foot controller 2 (CC 11). Defaults high: an unplugged pedal reads max. */
+    /**
+     * Foot controller 2 (CC 11). Stored value defaults high so an unplugged
+     * expression pedal does not silence volume routings; pitch/amp/EG stay off
+     * until foot2Seen (see refresh).
+     */
     int foot2Cc = 127;
-    /** "MIDI IN controller" (CC 13 by default on this implementation). */
+    /** True after the host has sent CC 11 for this part. */
+    bool foot2Seen = false;
+    /** "MIDI IN controller" (CC 13 by default). Same volume-vs-mod split as foot2. */
     int midiCsCc = 127;
+    /** True after the host has sent CC 13 for this part. */
+    bool midiCsSeen = false;
     int modwheelCc = 0;
     bool portamentoEnableCc = false;
     int portamentoCc = 0;

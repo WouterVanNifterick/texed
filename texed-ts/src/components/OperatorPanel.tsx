@@ -15,7 +15,9 @@ import {
 } from '@texed/dx7-format/voice';
 import { getAms, setAms, getScalingMode, setScalingMode } from '@texed/dx7-format/supplement';
 import { algoGraph } from '../state/algo';
-import { helpProps } from '../state/help';
+import { helpProps, setHelp } from '../state/help';
+import { useOpDropTarget, type OpClipboard } from '../state/useOpClipboard';
+import { DropHint } from './DropHint';
 import { Knob } from '../ui/Knob';
 import { Cycle } from '../ui/Cycle';
 import { Toggle } from '../ui/Toggle';
@@ -47,6 +49,7 @@ const HELP = {
     'Fractional scaling (DX7II) - high-resolution keyboard level scaling, stored in the AMEM supplement.',
   scaling:
     'Keyboard level scaling - operator level varies around the break point. Drag left/right of the break point to set depths, drag the blue line to move it, click the corner labels to change curves (−LIN −EXP +EXP +LIN).',
+  head: 'Drag this header onto another operator to copy this one there - drop on its envelope graph to copy only the EG, hold Alt to swap the two. Ctrl+C and Ctrl+V copy and paste the selected operator; Ctrl+Shift+V pastes the envelope alone.',
 };
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
@@ -82,6 +85,7 @@ interface OperatorPanelProps {
   /** Reference note/velocity the envelope curve is drawn for. */
   note: number;
   velocity: number;
+  clipboard: OpClipboard;
 }
 
 export const OperatorPanel = memo(function OperatorPanel({
@@ -101,7 +105,9 @@ export const OperatorPanel = memo(function OperatorPanel({
   flat,
   note,
   velocity,
+  clipboard,
 }: OperatorPanelProps) {
+  const drop = useOpDropTarget(opNum, clipboard);
   const base = opBase(opNum);
   const opIdx = 6 - opNum; // sysex order, used by the engine status
   const v = (rel: number) => voice[base + rel];
@@ -130,7 +136,7 @@ export const OperatorPanel = memo(function OperatorPanel({
     // panel itself holds no controls of its own that need a keyboard handler.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <section
-      className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${selected ? ' selected' : ''}${flat ? ' flat' : ''}`}
+      className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${selected ? ' selected' : ''}${flat ? ' flat' : ''}${drop.armed ? ' drop-armed' : ''}`}
       style={{ ['--op' as string]: opColor(opNum) }}
       aria-label={`Operator ${opNum}`}
       aria-current={selected}
@@ -138,8 +144,17 @@ export const OperatorPanel = memo(function OperatorPanel({
       onPointerLeave={() => onHover(null)}
       onPointerDown={onSelect}
       onFocus={onSelect}
+      {...drop.dropProps}
     >
-      <div className="panel-head">
+      {drop.hint && <DropHint action={drop.hint} />}
+      <div
+        className="panel-head"
+        // Pointer-only help: the OP button nested inside has its own, and
+        // helpProps would also claim the focus that belongs to that button.
+        onPointerEnter={() => setHelp({ title: `OP${opNum}`, text: HELP.head })}
+        onPointerLeave={() => setHelp(null)}
+        {...clipboard.dragProps(opNum)}
+      >
         <button
           type="button"
           className={`op-power${enabled ? ' on' : ''}`}

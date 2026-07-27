@@ -8,6 +8,7 @@ import { hardwarePort } from './audio/midi-out';
 import { NativeBridgePort, hasNativeBridge } from './audio/native-bridge-port';
 import { getVoiceName, withVoiceName } from '@texed/dx7-format/voice';
 import {
+  useClipboardKeys,
   useFileDrop,
   usePersistentFlag,
   usePersistentState,
@@ -19,15 +20,16 @@ import {
   useUndoKeys,
 } from './hooks';
 import { useHistory } from './state/useHistory';
+import { useOpClipboard } from './state/useOpClipboard';
 import { useSession } from './state/useSession';
 import { usePatchFiles } from './state/usePatchFiles';
 import { Keyboard } from './components/Keyboard';
 import { HelpBar } from './components/HelpBar';
 import { OperatorPanel } from './components/OperatorPanel';
 import { GlobalPanel } from './components/GlobalPanel';
-import { EnvOverlay, type EnvSelection } from './envelope/EnvOverlay';
+import { EnvOverlay } from './envelope/EnvOverlay';
 import { useEnvTimeScale, type TimeMode } from './envelope/env-time';
-import { type YMode } from './envelope/env-draw';
+import { type EnvSelection, type YMode } from './envelope/env-draw';
 import { Segmented } from './ui/Segmented';
 import { RefKeyControl } from './components/RefKeyControl';
 import { PartRack } from './components/PartRack';
@@ -177,9 +179,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const clipboard = useOpClipboard(synth, showLoadMsg);
+  const copySelected = useCallback(() => clipboard.copy(selectedOp), [clipboard, selectedOp]);
+  const pasteSelected = useCallback(
+    (envOnly: boolean) => clipboard.paste(selectedOp, envOnly ? 'env' : 'all'),
+    [clipboard, selectedOp],
+  );
+
   useQwertyKeyboard(started, noteOn, noteOff);
   useSelectKeys(started, synth.selectPart, setSelectedOp);
   useUndoKeys(loaded, history.undo, history.redo);
+  useClipboardKeys(loaded, copySelected, pasteSelected);
 
   useEffect(() => {
     return () => midiRef.current?.close();
@@ -401,6 +411,7 @@ export default function App() {
               onHoverOp={setHoverOp}
               note={refNote}
               velocity={refVelocity}
+              clipboard={clipboard}
             />
           )}
           {[1, 2, 3, 4, 5, 6].map((opNum) => (
@@ -422,6 +433,7 @@ export default function App() {
               flat={stack}
               note={refNote}
               velocity={refVelocity}
+              clipboard={clipboard}
             />
           ))}
           <GlobalPanel
@@ -436,6 +448,7 @@ export default function App() {
             onSelect={setSelectedOp}
             timeScale={timeScale}
             yMode={yMode}
+            clipboard={clipboard}
           />
 
           {showLibrary && (

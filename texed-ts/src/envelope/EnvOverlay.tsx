@@ -6,7 +6,8 @@
 import { useMemo } from 'react';
 import type { SynthStatus } from '../audio/useSynth';
 import { OP, G, opBase } from '@texed/dx7-format/voice';
-import { helpProps, setHelp } from '../state/help';
+import { setHelp } from '../state/help';
+import { useOpDropTarget, type OpClipboard } from '../state/useOpClipboard';
 import { simulateAmpEnv, simulatePitchEnv, type EnvTrace } from '@texed/dx7-engine/env-sim';
 import { useStatus } from '../audio/useSynth';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
@@ -18,6 +19,7 @@ import {
   py,
   type YMode,
   type DrawGeom,
+  type EnvSelection,
 } from './env-draw';
 import { opColor, PITCH_COLOR } from '../ui/op-colors';
 import { LiveEnvEditor } from './EnvEditor';
@@ -27,7 +29,6 @@ const H = 100;
 const PAD = 2;
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
-export type EnvSelection = number | 'pitch'; // op number 1..6, or the pitch EG
 
 /** One non-editable envelope on the plot: what to draw it with, and where. */
 interface BgTrace {
@@ -52,6 +53,57 @@ interface EnvOverlayProps {
   onHoverOp: (opNum: number | null) => void;
   note: number;
   velocity: number;
+  clipboard: OpClipboard;
+}
+
+/**
+ * One legend chip: selects its envelope, and doubles as a drag handle and drop
+ * target for it. In this view the operator panels have no envelope graph of
+ * their own, so the chips are where envelope-only copies are aimed.
+ */
+function EnvChip({
+  sel,
+  color,
+  selected,
+  hovered,
+  clipboard,
+  onSelect,
+  onHover,
+}: {
+  sel: EnvSelection;
+  color: string;
+  selected: boolean;
+  hovered: boolean;
+  clipboard: OpClipboard;
+  onSelect: (sel: EnvSelection) => void;
+  onHover: (opNum: number | null) => void;
+}) {
+  const drop = useOpDropTarget(sel, clipboard, true);
+  const name = sel === 'pitch' ? 'Pitch EG' : `OP${sel}`;
+  return (
+    <button
+      type="button"
+      className={`env-chip${sel === 'pitch' ? ' pitch' : ''}${selected ? ' on' : ''}${hovered ? ' hover' : ''}${drop.armed ? ' drop-armed' : ''}${drop.hint ? ' drop-over' : ''}`}
+      style={{ ['--chip' as string]: color }}
+      title={drop.hint?.label}
+      onClick={() => onSelect(sel)}
+      onPointerEnter={() => {
+        if (typeof sel === 'number') onHover(sel);
+        setHelp({
+          title: `${name} envelope`,
+          text: `Select ${name}'s envelope to edit it on top of the others, or drag this chip onto another one to copy the envelope over.`,
+        });
+      }}
+      onPointerLeave={() => {
+        onHover(null);
+        setHelp(null);
+      }}
+      {...clipboard.dragProps(sel)}
+      {...drop.dropProps}
+    >
+      {sel === 'pitch' ? 'PITCH' : `OP${sel}`}
+    </button>
+  );
 }
 
 export function EnvOverlay({
@@ -66,6 +118,7 @@ export function EnvOverlay({
   onHoverOp,
   note,
   velocity,
+  clipboard,
 }: EnvOverlayProps) {
   // Background polylines for every envelope (the selected one is redrawn on top
   // by the editor). Recomputed when any EG byte or the scale changes.
@@ -151,36 +204,26 @@ export function EnvOverlay({
         <span className="panel-title">ENVELOPES</span>
         <div className="env-legend">
           {[1, 2, 3, 4, 5, 6].map((opNum) => (
-            <button
+            <EnvChip
               key={opNum}
-              type="button"
-              className={`env-chip${selected === opNum ? ' on' : ''}${hoverOp === opNum ? ' hover' : ''}`}
-              style={{ ['--chip' as string]: opColor(opNum) }}
-              onClick={() => onSelect(opNum)}
-              onPointerEnter={() => {
-                onHoverOp(opNum);
-                setHelp({
-                  title: `OP${opNum} envelope`,
-                  text: `Select OP${opNum}'s amplitude envelope to edit it on top of the others.`,
-                });
-              }}
-              onPointerLeave={() => {
-                onHoverOp(null);
-                setHelp(null);
-              }}
-            >
-              OP{opNum}
-            </button>
+              sel={opNum}
+              color={opColor(opNum)}
+              selected={selected === opNum}
+              hovered={hoverOp === opNum}
+              clipboard={clipboard}
+              onSelect={onSelect}
+              onHover={onHoverOp}
+            />
           ))}
-          <button
-            type="button"
-            className={`env-chip pitch${selected === 'pitch' ? ' on' : ''}`}
-            style={{ ['--chip' as string]: PITCH_COLOR }}
-            onClick={() => onSelect('pitch')}
-            {...helpProps('Pitch EG', 'Select the pitch envelope to edit it on top of the others.')}
-          >
-            PITCH
-          </button>
+          <EnvChip
+            sel="pitch"
+            color={PITCH_COLOR}
+            selected={selected === 'pitch'}
+            hovered={false}
+            clipboard={clipboard}
+            onSelect={onSelect}
+            onHover={onHoverOp}
+          />
         </div>
       </div>
 

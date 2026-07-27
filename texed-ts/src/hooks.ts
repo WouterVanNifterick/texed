@@ -164,6 +164,41 @@ export function useUndoKeys(enabled: boolean, undo: () => void, redo: () => void
   }, [enabled, undo, redo]);
 }
 
+/**
+ * Ctrl/Cmd+C copies the selected operator, Ctrl/Cmd+V pastes it back onto the
+ * selection; holding Shift pastes only the envelope.
+ *
+ * Copy is left alone when there is a real text selection, so selecting a patch
+ * name and pressing Ctrl+C still copies the text. Ctrl+Shift+C is not claimed
+ * either - preventDefault would not stop the browser opening its inspector.
+ */
+export function useClipboardKeys(
+  enabled: boolean,
+  copy: () => void,
+  paste: (envOnly: boolean) => void,
+): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const down = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (isEditableTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'v') {
+        e.preventDefault();
+        paste(e.shiftKey);
+        return;
+      }
+      if (key !== 'c' || e.shiftKey) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      e.preventDefault();
+      copy();
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [enabled, copy, paste]);
+}
+
 export function patchFiles(files: FileList | File[]): File[] {
   return Array.from(files).filter((f) => /\.(syx|mx|dx7voice|ini)$/i.test(f.name));
 }

@@ -203,6 +203,21 @@
   border-color: var(--chip);
 }
 
+/* In the combined view the chips are the only per-envelope drop targets, so
+   they get the same dashed-armed / filled-hover language as the panels. */
+.env-chip.drop-armed {
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.env-chip.drop-over {
+  color: #12141a;
+  background: var(--chip);
+  border-style: solid;
+  border-color: var(--chip);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip) 55%, transparent);
+}
+
 .env-overlay-plot {
   position: relative;
   flex: 1;

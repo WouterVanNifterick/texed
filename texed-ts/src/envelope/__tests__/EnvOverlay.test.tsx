@@ -8,8 +8,16 @@ import { EnvOverlay } from '../EnvOverlay';
 import { computeEnvTimeScale } from '../env-time';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import type { SynthStatus } from '../../audio/useSynth';
+import type { OpClipboard } from '../../state/useOpClipboard';
 
 const IDLE_STAGE = 4;
+
+const CLIPBOARD: OpClipboard = {
+  copy: () => {},
+  paste: () => {},
+  drop: () => {},
+  dragProps: () => ({ draggable: true, onDragStart: () => {}, onDragEnd: () => {} }),
+};
 
 function status(over: Partial<SynthStatus> = {}): SynthStatus {
   return {
@@ -47,6 +55,7 @@ function setup() {
       onHoverOp={() => {}}
       note={60}
       velocity={99}
+      clipboard={CLIPBOARD}
     />,
   );
   return {

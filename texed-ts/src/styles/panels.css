@@ -1,6 +1,7 @@
 /* ==== Panels ==== */
 
 .panel {
+  position: relative; /* anchor for the drag-and-drop hint overlay */
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -45,7 +46,7 @@
   opacity: 0.7;
 }
 
-.op-panel.disabled > :not(.panel-head) {
+.op-panel.disabled > :not(.panel-head, .drop-zones) {
   opacity: 0.35;
 }
 
@@ -134,6 +135,100 @@
     0 0 0 1px var(--op, var(--accent)),
     0 0 14px color-mix(in srgb, var(--op, var(--accent)) 32%, transparent),
     inset 0 0 12px color-mix(in srgb, var(--op, var(--accent)) 9%, transparent);
+}
+
+/* ==== Copying operators between panels ==== */
+
+/* The header doubles as the grab handle: no extra chrome on a panel that is
+   already dense, and a title bar is the one part everyone expects to drag. */
+.op-panel > .panel-head,
+.pitch-panel > .panel-head {
+  cursor: grab;
+}
+
+.op-panel > .panel-head:active,
+.pitch-panel > .panel-head:active {
+  cursor: grabbing;
+}
+
+/* Where the drag in flight could land. Dashed rather than coloured, so six
+   armed panels at once read as an invitation and not as an alarm. */
+.panel.drop-armed {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--op, var(--accent)) 45%, var(--line));
+}
+
+.drop-zones {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  /* Transparent to the drag, so dragover keeps reporting which part of the
+     panel - envelope graph or not - the cursor is really over. */
+  pointer-events: none;
+}
+
+.drop-zone {
+  position: absolute;
+  border-radius: 8px;
+}
+
+/* Everything outside the envelope graph, which is to say the whole panel: the
+   envelope zone is drawn on top of it. */
+.drop-zone.zone-all {
+  inset: 0;
+  border-radius: 10px;
+}
+
+/* The zone the cursor is not in. Outlined, never filled, so the panel stays
+   readable and the alternative stays visibly on offer. */
+.drop-zone:not(.on) {
+  outline: 1px dashed color-mix(in srgb, var(--op, var(--accent)) 60%, transparent);
+  outline-offset: -2px;
+}
+
+/* Tinted, not covered: hiding the graph would hide what is being aimed at. */
+.drop-zone.on {
+  background: color-mix(in srgb, var(--op, var(--accent)) 17%, transparent);
+  box-shadow: inset 0 0 0 2px var(--op, var(--accent));
+}
+
+/* Both captions hang from the top of their own zone, so the named zone and the
+   offered one never land on top of each other in either layout. */
+.drop-zone-label,
+.drop-zone-tag {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+}
+
+.drop-zone-label {
+  padding: 2px 7px;
+  font: 800 10px var(--mono);
+  letter-spacing: 0.6px;
+  color: #10131a;
+  background: var(--op, var(--accent));
+  border-radius: 4px;
+}
+
+.drop-zone-label em {
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.drop-zone-tag {
+  padding: 1px 5px;
+  font: 700 8px var(--mono);
+  letter-spacing: 0.7px;
+  color: color-mix(in srgb, var(--op, var(--accent)) 75%, #fff);
+  background: rgb(10 12 17 / 80%);
+  border-radius: 3px;
 }
 
 .op-power {

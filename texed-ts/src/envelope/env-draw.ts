@@ -17,6 +17,8 @@ import type { EnvTimeScale } from './env-time';
 
 export type YMode = 'db' | 'linear';
 export type EnvKind = 'amp' | 'pitch';
+/** Which envelope the editor is pointed at: operator 1..6, or the pitch EG. */
+export type EnvSelection = number | 'pitch';
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 

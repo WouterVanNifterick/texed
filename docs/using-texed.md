@@ -18,13 +18,14 @@ layout, reference key) are kept separately in local storage.
 
 ## Playing notes
 
-| Input              | Behavior                                                                                  |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| On-screen keyboard | Click keys                                                                                |
-| QWERTY             | `A`–`K` row maps to semitones starting at MIDI note 60 (C4); `W/E/T/Y/U/O/P/;` are sharps |
-| Web MIDI           | Standard note on/off after audio has started                                              |
-| Part select        | `F1`–`F8` select timbral parts when the part rack is in use                               |
-| Operator select    | Digit keys `1`–`6` select the operator being edited                                       |
+| Input              | Behavior                                                                                           |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| On-screen keyboard | Click keys                                                                                         |
+| QWERTY             | `A`–`K` row maps to semitones starting at MIDI note 60 (C4); `W/E/T/Y/U/O/P/;` are sharps          |
+| Web MIDI           | Standard note on/off after audio has started                                                       |
+| Part select        | `F1`–`F8` select timbral parts when the part rack is in use                                        |
+| Operator select    | Digit keys `1`–`6` select the operator being edited                                                |
+| Copy / paste       | `Ctrl+C` copies the selected operator, `Ctrl+V` pastes it, `Ctrl+Shift+V` pastes only its envelope |
 
 ## Editing a voice
 
@@ -35,6 +36,13 @@ algorithm, feedback, LFO, pitch EG, transpose, and related globals.
   enumerated values such as curves and LFO wave.
 - Envelopes: the curve comes from the same envelope generator as the audio, so it is not a
   schematic. Drag a node sideways to change that stage's rate, or up and down for its level.
+- Copying operators: drag an operator panel by its header onto another one. Drop on the target's
+  envelope graph to copy only the EG, anywhere else on it to copy the whole operator, and hold
+  Alt while dropping to swap the two. The pitch EG panel drags and receives the same way, and in
+  the combined envelope view the legend chips are the drop targets. Ctrl+C and Ctrl+V do the same
+  thing for the selected operator, with Ctrl+Shift+V for the envelope alone. A copy carries every
+  operator parameter including the DX7II AMS and fractional-scaling extras, but not the ON/OFF
+  switch, and the whole paste is a single undo step.
 - Undo and redo: Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), and the two arrows next to STORE. A whole
   knob drag counts as one step. History covers the edited voice, not part routing or which
   program is selected.

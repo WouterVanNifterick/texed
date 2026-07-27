@@ -5,8 +5,10 @@ import { memo, useState } from 'react';
 import { useStatus, type SynthStatus } from '../audio/useSynth';
 import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/voice';
 import * as Sup from '@texed/dx7-format/supplement';
-import { helpProps } from '../state/help';
+import { helpProps, setHelp } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
+import { useOpDropTarget, type OpClipboard } from '../state/useOpClipboard';
+import { DropHint } from './DropHint';
 import { Knob } from '../ui/Knob';
 import { Cycle } from '../ui/Cycle';
 import { Toggle } from '../ui/Toggle';
@@ -15,10 +17,13 @@ import { LiveEnvEditor } from '../envelope/EnvEditor';
 import { type YMode } from '../envelope/env-draw';
 import { PITCH_COLOR } from '../ui/op-colors';
 import { type EnvTimeScale } from '../envelope/env-time';
-import { type EnvSelection } from '../envelope/EnvOverlay';
+import { type EnvSelection } from '../envelope/env-draw';
 import { LfoGraph } from './LfoGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
+
+const PITCH_HEAD_HELP =
+  'Drag this header onto an operator to copy this envelope onto its EG, or drag an operator here to bring its EG over. Ctrl+C and Ctrl+V copy and paste the selected envelope.';
 
 function LfoMeter({ subscribe }: { subscribe: Subscribe }) {
   // Status is 0..1 with 0.5 = LFO zero-crossing. Draw the fill outward from the
@@ -48,6 +53,7 @@ interface GlobalPanelProps {
   onSelect: (sel: EnvSelection) => void;
   timeScale: EnvTimeScale;
   yMode: YMode;
+  clipboard: OpClipboard;
 }
 
 export const GlobalPanel = memo(function GlobalPanel({
@@ -62,8 +68,11 @@ export const GlobalPanel = memo(function GlobalPanel({
   onSelect,
   timeScale,
   yMode,
+  clipboard,
 }: GlobalPanelProps) {
   const [tab, setTab] = useState<'dx7ii' | 'ctrl'>('dx7ii');
+  // The pitch EG has no operator parameters, so a drop here is always its EG.
+  const drop = useOpDropTarget('pitch', clipboard, true);
   const set = (offset: number) => (value: number) => setParam(offset, value);
   const setSup = (edit: Sup.ByteEdit) => setSupplementParam(edit.offset, edit.value);
   const pitchRates = [
@@ -209,11 +218,18 @@ export const GlobalPanel = memo(function GlobalPanel({
       </section>
 
       <section
-        className={`panel pitch-panel${selected === 'pitch' ? ' selected' : ''}`}
+        className={`panel pitch-panel${selected === 'pitch' ? ' selected' : ''}${drop.armed ? ' drop-armed' : ''}`}
         style={{ ['--op' as string]: PITCH_COLOR }}
         onPointerDown={() => onSelect('pitch')}
+        {...drop.dropProps}
       >
-        <div className="panel-head">
+        {drop.hint && <DropHint action={drop.hint} />}
+        <div
+          className="panel-head"
+          onPointerEnter={() => setHelp({ title: 'PITCH EG', text: PITCH_HEAD_HELP })}
+          onPointerLeave={() => setHelp(null)}
+          {...clipboard.dragProps('pitch')}
+        >
           <span className="panel-title">PITCH EG</span>
         </div>
         <LiveEnvEditor

@@ -1,0 +1,147 @@
+/* ==== Start overlay ==== */
+
+.start-overlay,
+.crash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(10 12 17 / 72%);
+  backdrop-filter: blur(6px);
+}
+
+.crash-overlay {
+  z-index: 80;
+}
+
+.start-card,
+.crash-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: min(560px, 100%);
+  padding: 28px 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
+  font:
+    13px system-ui,
+    sans-serif;
+}
+
+.crash-card h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.crash-card p {
+  margin: 0;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+.crash-detail {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 30vh;
+  overflow: auto;
+  background: rgb(0 0 0 / 35%);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: 11px var(--mono);
+  color: var(--red);
+  white-space: pre-wrap;
+}
+
+.crash-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.start-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.start-icon {
+  display: block;
+  flex: none;
+  filter: drop-shadow(0 0 20px rgb(255 180 84 / 35%));
+}
+
+.start-title h1 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  color: var(--text);
+}
+
+.start-tag {
+  margin: 4px 0 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+.start-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.start-features li {
+  position: relative;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.start-features li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+button.start {
+  align-self: center;
+  padding: 14px 40px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #12141a;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgb(255 180 84 / 35%);
+}
+
+button.start:hover {
+  background: #ffc06e;
+}
+
+.start-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 12px;
+}

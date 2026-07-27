@@ -3,6 +3,8 @@
 import { Cartridge, initVoice, sysexChecksum } from './cartridge';
 import { createDefaultAmem, AMEM_SLOT_SIZE, AMEM_BULK_SIZE } from './amem';
 import { cartridgeFromVoices } from './sysex';
+import { isFillerVoiceName } from './voice';
+import type { ProgramOption } from './part-config';
 import type { ParsedPerformance } from './performance';
 import type { SystemSetup } from './system-setup';
 
@@ -199,8 +201,8 @@ export class VoiceLibrary {
   }
 
   /** Flat program list for UI: all populated banks with prefixed labels. */
-  programOptions(): { ref: VoiceRef; label: string }[] {
-    const out: { ref: VoiceRef; label: string }[] = [];
+  programOptions(): ProgramOption[] {
+    const out: ProgramOption[] = [];
     for (const bank of this.populatedBanks()) {
       const prefix = VOICE_BANK_LABELS[bank].split(' ')[0];
       const names = this.programNames(bank);
@@ -208,6 +210,7 @@ export class VoiceLibrary {
         out.push({
           ref: { bank, program: p },
           label: `${prefix} ${String(p + 1).padStart(2, '0')} ${names[p]}`,
+          filler: isFillerVoiceName(names[p]),
         });
       }
     }

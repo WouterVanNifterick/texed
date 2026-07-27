@@ -1,0 +1,70 @@
+/* ==== Flat 1×6 operator panels ==== */
+/* Everything stays visible; the vertical strip becomes a horizontal row. */
+
+.op-panel.flat {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 6px;
+  padding: 5px 6px;
+  overflow: hidden;
+}
+
+/* Compact identity column - only as wide as OP / role / freq need. */
+.op-panel.flat .panel-head {
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 6px 0 0;
+  border-bottom: none;
+  border-right: 1px solid rgb(255 255 255 / 5%);
+}
+
+.op-panel.flat .op-freq {
+  min-width: 0;
+}
+
+.op-panel.flat .meter {
+  flex: none;
+  align-self: stretch;
+  height: 5px;
+}
+
+/* Grow into leftover space; width:auto so basis isn't 100% of the row. */
+.op-panel.flat .env-editor {
+  flex: 1 1 0;
+  width: auto;
+  height: auto;
+  align-self: stretch;
+  min-width: 110px;
+}
+
+.op-panel.flat .eg-grid {
+  flex: 0 0 auto;
+  grid-template-columns: repeat(8, auto);
+  align-content: center;
+  column-gap: 1px;
+}
+
+.op-panel.flat .ctl-row {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Size to knobs + FRACT; graph takes a modest fixed slice. */
+.op-panel.flat .scale-row {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.op-panel.flat .scale-graph-wrap {
+  flex: 0 0 88px;
+  width: 88px;
+}
+
+.op-panel.flat .scale-graph {
+  min-height: 46px;
+}

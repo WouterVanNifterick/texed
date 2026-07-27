@@ -1,0 +1,33 @@
+<!doctype html>
+<!--
+  Embedded only when texed-ts/dist is missing at configure time, so the WebView
+  says what went wrong instead of showing a blank panel.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Texed</title>
+    <style>
+      body {
+        margin: 0;
+        display: grid;
+        place-content: center;
+        height: 100vh;
+        background: #14161c;
+        color: #c8ccd8;
+        font: 14px/1.6 system-ui, sans-serif;
+        text-align: center;
+      }
+      code {
+        color: #f0a860;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h1>No UI bundle</h1>
+      <p>Build the web UI, then re-run CMake configure:</p>
+      <p><code>cd texed-ts &amp;&amp; pnpm build</code></p>
+    </div>
+  </body>
+</html>

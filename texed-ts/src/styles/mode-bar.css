@@ -1,0 +1,293 @@
+/* ==== Mode bar (envelope view / layout / axis switches) ==== */
+
+.mode-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.mode-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-bar-viz {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.segmented {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.segmented-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+
+.segmented-group {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgb(0 0 0 / 22%);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.seg {
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text);
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    background 0.12s,
+    border-color 0.12s;
+}
+
+.seg:hover {
+  color: var(--text);
+  background: rgb(255 255 255 / 9%);
+  border-color: var(--dim);
+}
+
+.seg.on {
+  color: var(--accent);
+  background: rgb(255 180 84 / 10%);
+  border-color: rgb(255 180 84 / 25%);
+}
+
+/* Reference note/velocity control in the envelope toolbar. */
+.ref-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ref-key-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ref-key-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+
+.ref-key-name {
+  font: 9px var(--mono);
+  color: var(--dim);
+  min-width: 22px;
+}
+
+.ref-key-field input {
+  width: 38px;
+  padding: 3px 4px;
+  font: 11px var(--mono);
+  text-align: center;
+  color: var(--text);
+  background: rgb(0 0 0 / 22%);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.ref-key-field input:focus {
+  outline: none;
+  border-color: rgb(255 180 84 / 45%);
+}
+
+.ref-key-field input:disabled {
+  color: var(--dim);
+  opacity: 0.7;
+}
+
+.algo-panel {
+  gap: 3px;
+}
+
+.algo-panel-body {
+  display: flex;
+  gap: 8px;
+  height: 104px;
+  min-height: 0;
+}
+
+.algo-vis-block {
+  flex: 0 0 128px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+  padding: 4px;
+  background: rgb(0 0 0 / 18%);
+  border: 1px solid rgb(255 255 255 / 5%);
+  border-radius: 6px;
+}
+
+.algo-vis-block .algo-display {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.algo-ctl-block {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+
+.algo-ctl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 6px;
+  width: 100%;
+  align-items: end;
+  justify-items: center;
+}
+
+.global-col .dx7ii-panel {
+  min-height: 0;
+}
+
+.dx7ii-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 6px;
+}
+
+.ctl-group.wide {
+  grid-column: 1 / -1;
+}
+
+.ctl-group {
+  padding: 4px 6px 2px;
+  background: rgb(0 0 0 / 16%);
+  border: 1px solid rgb(255 255 255 / 5%);
+  border-radius: 6px;
+}
+
+.ctl-group-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--dim);
+  margin-bottom: 2px;
+  opacity: 0.9;
+}
+
+/* DX7II / CTRL tab strip in the panel head. */
+.panel-tab {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab.on {
+  color: var(--accent);
+  background: rgb(255 180 84 / 8%);
+  border-color: rgb(255 180 84 / 22%);
+}
+
+/* Controller-modulation matrix, shown by the CTRL tab: destinations as
+   rows, the six physical controllers as columns. */
+.ctrl-mod-grid {
+  display: grid;
+  grid-template-columns: 42px repeat(6, 1fr);
+  gap: 5px 4px;
+  align-items: center;
+  justify-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.ctrl-grid-dest {
+  justify-self: start;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+}
+
+/* Column header: controller name + live MIDI value + meter. */
+.ctrl-mod-id {
+  align-self: end;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ctrl-mod-name {
+  display: flex;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.ctrl-live-val {
+  font: 9px var(--mono);
+  color: var(--lcd);
+}
+
+/* Live MIDI value meter for one physical controller. */
+.ctrl-live {
+  height: 5px;
+  background: #0b0d12;
+  border: 1px solid #232735;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ctrl-mod-grid .knob-value {
+  font-size: 10px;
+}
+
+.dx7ii-panel .ctrl-mod-grid .cycle .toggle {
+  font-size: 9px;
+  padding: 4px 6px;
+}
+
+.ctrl-live-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2c8a5a, var(--green));
+  transition: width 0.05s linear;
+}

@@ -6,10 +6,11 @@
 import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 import { voiceParamChangeSysex } from '@texed/dx7-format/sysex';
-import { voiceToSysex } from '@texed/dx7-format/params';
+import { vcedFromVoice } from '@texed/dx7-format/sysex';
 import { acedToSysex, createDefaultAmem } from '@texed/dx7-format/amem';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { NUM_PARTS, defaultPartConfig } from '@texed/dx7-format/part-config';
+import { DEFAULT_GLOBAL_SETTINGS } from '@texed/dx7-format/global-settings';
 import type { MidiConnection } from './midi';
 
 export class HardwareMidiPort implements SynthPort {
@@ -38,9 +39,11 @@ export class HardwareMidiPort implements SynthPort {
       type: 'parts',
       configs: Array.from({ length: NUM_PARTS }, (_, i) => defaultPartConfig(i === 0)),
       selectedPart: 0,
+      // Hardware can't be queried for per-part names; fall back to labels.
+      voiceNames: Array.from({ length: NUM_PARTS }, () => ''),
     });
     this.emit({ type: 'programState', options: [], banks: [] });
-    this.emit({ type: 'masterTune', cents: 0 });
+    this.emit({ type: 'settings', settings: { ...DEFAULT_GLOBAL_SETTINGS }, microtuningNames: [] });
   }
 
   send(cmd: SynthCommand): void {
@@ -53,6 +56,9 @@ export class HardwareMidiPort implements SynthPort {
         break;
       case MsgType.Cc:
         this.bytes([0xb0 | this.ch(cmd.channel), cmd.controller & 0x7f, cmd.value & 0x7f]);
+        break;
+      case MsgType.ProgramChange:
+        this.bytes([0xc0 | this.ch(cmd.channel), cmd.program & 0x7f]);
         break;
       case MsgType.PitchBend:
         this.bytes([0xe0 | this.ch(cmd.channel), cmd.value & 0x7f, (cmd.value >> 7) & 0x7f]);
@@ -73,7 +79,7 @@ export class HardwareMidiPort implements SynthPort {
         this.voice = new Uint8Array(cmd.data);
         if (cmd.supplement) this.supplement = new Uint8Array(cmd.supplement);
         this.bytes(acedToSysex(this.supplement));
-        this.bytes(voiceToSysex(this.voice));
+        this.bytes(vcedFromVoice(this.voice));
         if ((cmd.partIndex ?? 0) === 0) {
           this.emit({
             type: 'voice',

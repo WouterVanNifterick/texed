@@ -1,0 +1,6 @@
+{"at":0.0,"cmd":{"type":"setPart","index":0,"config":{"enabled":true,"rxChannel":1,"pan":-1}}}
+{"at":0.0,"cmd":{"type":"setPart","index":1,"config":{"enabled":true,"rxChannel":2,"pan":1,"noteShift":7}}}
+{"at":0.0,"cmd":{"type":"noteOn","note":60,"velocity":100,"channel":1}}
+{"at":0.5,"cmd":{"type":"noteOn","note":60,"velocity":100,"channel":2}}
+{"at":1.5,"cmd":{"type":"noteOff","note":60,"channel":1}}
+{"at":1.5,"cmd":{"type":"noteOff","note":60,"channel":2}}

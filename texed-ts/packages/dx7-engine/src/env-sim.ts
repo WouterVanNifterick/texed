@@ -11,9 +11,16 @@
 // sample-rate independent by design (srMultiplier cancels), so this never
 // depends on the mutable Env.initSr module state.
 
-import { LG_N, N } from './synth';
-import { sar64 } from './fixedpoint';
-import { pitchenvRate, pitchenvTab } from './pitchenv';
+import { N } from './synth';
+import { pitchEnvUnit } from './pitchenv';
+import {
+  ampIncAt,
+  ampLevelBase,
+  ampStaticAt,
+  lerpAt,
+  pitchIncAt,
+  pitchLevelAt,
+} from './env-tables';
 
 const SR = 44100;
 const SR_MUL = 1 << 24; // (44100 / 44100) * 2^24 - identity at the reference rate.
@@ -27,34 +34,14 @@ export const DB_FLOOR = -72;
 /** Linear amplitude at DB_TOP - the top of the linear-amplitude y axis. */
 export const AMP_TOP = Math.pow(2, DB_TOP / DB_PER_DOUBLING);
 
-const levellut = [0, 5, 9, 13, 17, 20, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 42, 43, 45, 46];
-
-// prettier-ignore
-const statics = [
-  1764000, 1764000, 1411200, 1411200, 1190700, 1014300, 992250,
-  882000, 705600, 705600, 584325, 507150, 502740, 441000, 418950,
-  352800, 308700, 286650, 253575, 220500, 220500, 176400, 145530,
-  145530, 125685, 110250, 110250, 88200, 88200, 74970, 61740,
-  61740, 55125, 48510, 44100, 37485, 31311, 30870, 27562, 27562,
-  22050, 18522, 17640, 15435, 14112, 13230, 11025, 9261, 9261, 7717,
-  6615, 6615, 5512, 5512, 4410, 3969, 3969, 3439, 2866, 2690, 2249,
-  1984, 1896, 1808, 1411, 1367, 1234, 1146, 926, 837, 837, 705,
-  573, 573, 529, 441, 441,
-];
-
 const JUMP_FLOOR = 1716 << 16; // attack never starts below this (avoids infinite log ramp)
 const CEIL = 17 << 24; // attack decelerates toward this ceiling
 
-function scaleoutlevel(outlevel: number): number {
-  return outlevel >= 20 ? 28 + outlevel : levellut[outlevel];
-}
-
 /** Internal Q24 target level for an amp EG stage - mirrors env.ts advance(). */
 export function ampTargetLevel(newlevel: number, outlevel: number): number {
-  let actuallevel = scaleoutlevel(newlevel) >> 1;
-  actuallevel = (actuallevel << 6) + outlevel - 4256;
+  let actuallevel = lerpAt(ampLevelBase, newlevel) + outlevel - 4256;
   if (actuallevel < 16) actuallevel = 16;
-  return actuallevel << 16;
+  return Math.round(actuallevel * 65536);
 }
 
 /** Q24 internal level → dBFS (0 dB ≈ full scale). */
@@ -120,22 +107,15 @@ function ampStageKin(ix: number, level: number, p: AmpEnvParams): StageKin {
   const target = ampTargetLevel(newlevel, p.outlevel);
   const rising = target > level;
 
-  let qrate = (p.rates[ix] * 41) >> 6;
-  qrate += p.rateScaling;
-  if (qrate > 63) qrate = 63;
-
+  const shortHold = ix === 0 && newlevel < 0.5 ? 1 : 0;
   let staticSamples = 0;
-  const isStatic = target === level || (ix === 0 && newlevel === 0);
+  const isStatic = target === level || shortHold === 1;
   if (isStatic) {
-    let staticrate = p.rates[ix] + p.rateScaling;
-    if (staticrate > 99) staticrate = 99;
-    let sc = staticrate < 77 ? statics[staticrate] : 20 * (99 - staticrate);
-    if (staticrate < 77 && ix === 0 && newlevel === 0) sc = (sc / 20) | 0;
-    staticSamples = sar64(sc * SR_MUL, 24);
+    const staticrate = Math.min(99, p.rates[ix] + p.rateScaling);
+    staticSamples = Math.round(lerpAt(ampStaticAt, staticrate, SR_MUL, shortHold));
   }
 
-  let inc = (4 + (qrate & 3)) << (2 + LG_N + (qrate >> 2));
-  inc = sar64(inc * SR_MUL, 24);
+  const inc = Math.round(lerpAt(ampIncAt, p.rates[ix], SR_MUL, p.rateScaling));
   return { target, rising, inc, staticSamples, isStatic };
 }
 
@@ -359,15 +339,17 @@ export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
 
 // ---- Pitch EG (linear in Q24-octaves) --------------------------------------
 
-const PITCH_UNIT = Math.floor((N * (1 << 24)) / (21.3 * SR) + 0.5);
+// Read per call, not cached: the accuracy mode can change at runtime and the
+// drawn curve has to follow the engine.
+const pitchUnit = () => pitchEnvUnit(SR);
 
 /** Q24 per-octave target for a pitch EG level param. */
 export function pitchTargetLevel(newlevel: number): number {
-  return pitchenvTab[newlevel] << 19;
+  return Math.round(lerpAt(pitchLevelAt, newlevel));
 }
 
 function pitchStageBlocks(startLevel: number, target: number, rawRate: number): number {
-  const inc = pitchenvRate[rawRate] * PITCH_UNIT;
+  const inc = Math.round(lerpAt(pitchIncAt, rawRate, pitchUnit()));
   if (inc <= 0) return 0;
   return Math.ceil(Math.abs(target - startLevel) / inc);
 }
@@ -468,11 +450,92 @@ function ampStageDurationSec(
 
 const logT = (sec: number) => Math.log2(1 + Math.max(0, sec) / 0.05);
 
+// Halvings of the 0..99 range when inverting. 22 places a rate within 2.4e-5,
+// which is what it takes to resolve individual block counts on a stage of a
+// second or two - there the duration plateaus are only ~1e-3 of a rate step
+// wide. Three bisections at this depth still cost fewer evaluations than the
+// flat 0..99 scan this replaced.
+const BISECT = 22;
+
 /**
- * Raw rate (0-99) whose amp stage `ix` duration is closest to `targetSec`.
- * Compared in log-time so the choice matches what the eye sees; ties break
- * toward `currentRate` to avoid value jumps across qrate plateaus while dragging.
+ * Fractional param (0-99) at which the monotone non-decreasing map `f` reaches
+ * `y`, by bracketing the two integers around it and interpolating between them.
+ * Exact for a value the integer grid can hit, and it returns 0 across the flat
+ * region at the bottom of the range rather than somewhere inside it.
  */
+function invertMonotone(f: (i: number) => number, y: number): number {
+  if (y <= f(0)) return 0;
+  if (y >= f(99)) return 99;
+  // Narrow to f(lo) < y <= f(hi), hi === lo + 1. Bracketing a strict step (not
+  // just any step) means the two are never equal, so there is no flat-segment
+  // special case, and a y sitting on a plateau resolves to the plateau's foot -
+  // the lowest param that produces it, which is what makes the round trip
+  // through a strictly monotone table exact.
+  let lo = 0;
+  let hi = 99;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (f(mid) < y) lo = mid;
+    else hi = mid;
+  }
+  const a = f(lo);
+  return lo + (y - a) / (f(hi) - a);
+}
+
+/** Widest r around `at` for which `dur` still yields `blocks`, toward `bound`. */
+function plateauEdge(
+  dur: (r: number) => number,
+  blocks: number,
+  at: number,
+  bound: number,
+): number {
+  if (dur(bound) === blocks) return bound;
+  let inside = at;
+  let outside = bound;
+  for (let i = 0; i < BISECT; i++) {
+    const mid = (inside + outside) / 2;
+    if (dur(mid) === blocks) inside = mid;
+    else outside = mid;
+  }
+  return inside;
+}
+
+/**
+ * Fractional rate (0-99) whose stage duration best matches `targetSec`.
+ *
+ * Duration is a non-increasing staircase in the rate - a stage always lasts a
+ * whole number of 64-sample blocks - so a whole interval of rates produces the
+ * block count we want. Bisect for it, pick between the two neighbouring counts
+ * in log-time (what the eye sees on a log axis), then return the middle of the
+ * winning interval, which keeps the node still while the cursor moves within
+ * one block. `currentRate` is returned when the rate cannot affect this stage
+ * at all, e.g. a pitch EG stage whose start and target levels are equal.
+ */
+function rateForDuration(
+  dur: (r: number) => number,
+  targetSec: number,
+  currentRate: number,
+): number {
+  const slowest = dur(0);
+  const fastest = dur(99);
+  if (slowest === fastest) return currentRate;
+  if (targetSec >= slowest) return 0;
+  if (targetSec <= fastest) return 99;
+
+  let lo = 0;
+  let hi = 99;
+  for (let i = 0; i < BISECT; i++) {
+    const mid = (lo + hi) / 2;
+    if (dur(mid) >= targetSec) lo = mid;
+    else hi = mid;
+  }
+  const want = logT(targetSec);
+  const err = (r: number) => Math.abs(logT(dur(r)) - want);
+  const best = err(lo) <= err(hi) ? lo : hi;
+  const blocks = dur(best);
+  return (plateauEdge(dur, blocks, best, 0) + plateauEdge(dur, blocks, best, 99)) / 2;
+}
+
 export function rateForStageDuration(
   p: AmpEnvParams,
   ix: number,
@@ -480,20 +543,20 @@ export function rateForStageDuration(
   currentRate: number,
 ): number {
   const startLevel = ampStartLevelForStage(p, ix);
-  const targetL = logT(targetSec);
-  let best = currentRate;
-  let bestErr = Infinity;
-  for (let r = 0; r <= 99; r++) {
-    const err = Math.abs(logT(ampStageDurationSec(startLevel, ix, r, p)) - targetL);
-    if (
-      err < bestErr - 1e-9 ||
-      (Math.abs(err - bestErr) <= 1e-9 && Math.abs(r - currentRate) < Math.abs(best - currentRate))
-    ) {
-      bestErr = err;
-      best = r;
-    }
-  }
-  return best;
+  return rateForDuration((r) => ampStageDurationSec(startLevel, ix, r, p), targetSec, currentRate);
+}
+
+/** Duration (sec) amp stage `ix` actually takes with the given params. */
+function ampStageDurSec(p: AmpEnvParams, ix: number): number {
+  return (ampStage(ampStartLevelForStage(p, ix), ix, p).blocks * N) / SR;
+}
+
+/** Duration (sec) pitch stage `ix` actually takes with the given params. */
+function pitchStageDurSec(rates: ArrayLike<number>, levels: ArrayLike<number>, ix: number): number {
+  // Stage 0 starts from L4 (the pitch EG's resting level); every later stage
+  // starts where its predecessor landed.
+  const start = pitchTargetLevel(ix === 0 ? levels[3] : levels[ix - 1]);
+  return (pitchStageBlocks(start, pitchTargetLevel(levels[ix]), rates[ix]) * N) / SR;
 }
 
 export function pitchRateForStageDuration(
@@ -506,47 +569,104 @@ export function pitchRateForStageDuration(
   let startLevel = pitchTargetLevel(levels[3]);
   for (let i = 0; i < ix; i++) startLevel = pitchTargetLevel(levels[i]);
   const target = pitchTargetLevel(levels[ix]);
-  const targetL = logT(targetSec);
-  let best = currentRate;
-  let bestErr = Infinity;
-  for (let r = 0; r <= 99; r++) {
-    const sec = (pitchStageBlocks(startLevel, target, r) * N) / SR;
-    const err = Math.abs(logT(sec) - targetL);
-    if (
-      err < bestErr - 1e-9 ||
-      (Math.abs(err - bestErr) <= 1e-9 && Math.abs(r - currentRate) < Math.abs(best - currentRate))
-    ) {
-      bestErr = err;
-      best = r;
-    }
-  }
-  return best;
+  return rateForDuration(
+    (r) => (pitchStageBlocks(startLevel, target, r) * N) / SR,
+    targetSec,
+    currentRate,
+  );
 }
 
-/** Level param (0-99) whose amp target level is closest to `desiredQ24`. */
+/** Level param (0-99), possibly fractional, whose amp target is `desiredQ24`. */
 export function levelForTarget(desiredQ24: number, outlevel: number): number {
-  let best = 0;
-  let bestErr = Infinity;
-  for (let l = 0; l <= 99; l++) {
-    const err = Math.abs(ampTargetLevel(l, outlevel) - desiredQ24);
-    if (err < bestErr) {
-      bestErr = err;
-      best = l;
-    }
-  }
-  return best;
+  return invertMonotone((l) => ampTargetLevel(l, outlevel), desiredQ24);
 }
 
-/** Pitch level param (0-99) whose target is closest to `desiredQ24`. */
+/** Pitch level param (0-99), possibly fractional, whose target is `desiredQ24`. */
 export function pitchLevelForTarget(desiredQ24: number): number {
-  let best = 0;
-  let bestErr = Infinity;
-  for (let l = 0; l <= 99; l++) {
-    const err = Math.abs(pitchTargetLevel(l) - desiredQ24);
-    if (err < bestErr) {
-      bestErr = err;
-      best = l;
-    }
+  return invertMonotone(pitchTargetLevel, desiredQ24);
+}
+
+// ---- Node drag (2D) --------------------------------------------------------
+
+export interface EnvDragSolution {
+  rates: number[];
+  levels: number[];
+}
+
+/**
+ * Which stage's timing a level change at `stage` disturbs without being the
+ * dragged stage itself. Changing L(s) moves the *start* level of the next stage
+ * while leaving its end level alone, so the damage stops there - one rate to
+ * re-solve, never a cascade. The pitch EG wraps: its L4 is both the release
+ * target and the resting level stage 0 departs from.
+ */
+function followerStage(stage: number, kind: 'amp' | 'pitch'): number {
+  if (stage < 3) return stage + 1;
+  return kind === 'pitch' ? 0 : -1;
+}
+
+/**
+ * Amp EG params after dragging node `stage` to (`desiredSec`, `desiredLevelQ24`).
+ * `base` must be the parameters as they were when the gesture started, so the
+ * result is a pure function of the cursor position and per-event block-rounding
+ * errors cannot accumulate over a drag. `desiredSec` is the wanted duration of
+ * the stage (not an absolute time); null drags the level only.
+ *
+ * Two things happen beyond the obvious inverse mappings. The rate is solved
+ * against the *new* level, because a stage's length depends on the distance it
+ * has to travel - solving against the old one leaves the node lagging the cursor
+ * by however far it moved vertically this event. And the following stage's rate
+ * is re-solved to restore its original duration, so a purely vertical drag
+ * leaves every later node where it was, while a horizontal drag still carries
+ * them along with it.
+ */
+export function solveAmpNodeDrag(
+  base: AmpEnvParams,
+  stage: number,
+  desiredSec: number | null,
+  desiredLevelQ24: number,
+): EnvDragSolution {
+  const rates = [base.rates[0], base.rates[1], base.rates[2], base.rates[3]];
+  const levels = [base.levels[0], base.levels[1], base.levels[2], base.levels[3]];
+  // Reads `rates`/`levels` live, so each solve below sees the edits before it.
+  const probe: AmpEnvParams = {
+    rates,
+    levels,
+    outlevel: base.outlevel,
+    rateScaling: base.rateScaling,
+  };
+
+  const follower = followerStage(stage, 'amp');
+  const holdSec = follower >= 0 ? ampStageDurSec(base, follower) : 0;
+
+  levels[stage] = levelForTarget(desiredLevelQ24, base.outlevel);
+  if (desiredSec !== null) {
+    rates[stage] = rateForStageDuration(probe, stage, desiredSec, base.rates[stage]);
   }
-  return best;
+  if (follower >= 0) {
+    rates[follower] = rateForStageDuration(probe, follower, holdSec, base.rates[follower]);
+  }
+  return { rates, levels };
+}
+
+/** `solveAmpNodeDrag` for the pitch EG, which has no output-level scaling. */
+export function solvePitchNodeDrag(
+  baseRates: ArrayLike<number>,
+  baseLevels: ArrayLike<number>,
+  stage: number,
+  desiredSec: number | null,
+  desiredLevelQ24: number,
+): EnvDragSolution {
+  const rates = [baseRates[0], baseRates[1], baseRates[2], baseRates[3]];
+  const levels = [baseLevels[0], baseLevels[1], baseLevels[2], baseLevels[3]];
+
+  const follower = followerStage(stage, 'pitch');
+  const holdSec = pitchStageDurSec(baseRates, baseLevels, follower);
+
+  levels[stage] = pitchLevelForTarget(desiredLevelQ24);
+  if (desiredSec !== null) {
+    rates[stage] = pitchRateForStageDuration(levels, stage, desiredSec, baseRates[stage]);
+  }
+  rates[follower] = pitchRateForStageDuration(levels, follower, holdSec, baseRates[follower]);
+  return { rates, levels };
 }

@@ -1,5 +1,5 @@
 // App-level UI hooks: transient status message, QWERTY note input,
-// part-select digit keys, window-wide file drag-and-drop, and the
+// part and operator select keys, window-wide file drag-and-drop, and the
 // fixed-stage scale factor.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -49,6 +49,13 @@ export function usePersistentNumber(key: string, initial: number): [number, (v: 
   const num = Number(str);
   const set = useCallback((v: number) => setStr(String(v)), [setStr]);
   return [Number.isFinite(num) ? num : initial, set];
+}
+
+/** Boolean variant of usePersistentState (stored as 'on'/'off' under the hood). */
+export function usePersistentFlag(key: string, initial: boolean): [boolean, (v: boolean) => void] {
+  const [str, setStr] = usePersistentState<'on' | 'off'>(key, initial ? 'on' : 'off');
+  const set = useCallback((v: boolean) => setStr(v ? 'on' : 'off'), [setStr]);
+  return [str === 'on', set];
 }
 
 const QWERTY_MAP: Record<string, number> = {
@@ -113,25 +120,52 @@ export function useQwertyKeyboard(
   }, [enabled, noteOn, noteOff]);
 }
 
-/** Selects multi-timbral parts 1–8 with the digit keys. */
-export function usePartSelectKeys(enabled: boolean, selectPart: (index: number) => void): void {
+/** F1–F8 select multi-timbral parts 1–8; digits 1–6 select the edited operator. */
+export function useSelectKeys(
+  enabled: boolean,
+  selectPart: (index: number) => void,
+  selectOp: (op: number) => void,
+): void {
   useEffect(() => {
     if (!enabled) return;
     const down = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isEditableTarget(e.target)) return;
-      const n = Number(e.key);
-      if (n < 1 || n > 8) return;
+      const part = /^F([1-8])$/.exec(e.key);
+      if (part) {
+        e.preventDefault();
+        selectPart(Number(part[1]) - 1);
+        return;
+      }
+      if (!/^[1-6]$/.test(e.key)) return;
       e.preventDefault();
-      selectPart(n - 1);
+      selectOp(Number(e.key));
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, [enabled, selectPart]);
+  }, [enabled, selectPart, selectOp]);
+}
+
+/** Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo. */
+export function useUndoKeys(enabled: boolean, undo: () => void, redo: () => void): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const down = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (isEditableTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      e.preventDefault();
+      if (key === 'y' || e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [enabled, undo, redo]);
 }
 
 export function patchFiles(files: FileList | File[]): File[] {
-  return Array.from(files).filter((f) => /\.(syx|dx7voice)$/i.test(f.name));
+  return Array.from(files).filter((f) => /\.(syx|mx|dx7voice|ini)$/i.test(f.name));
 }
 
 function isFileDrag(dt: DataTransfer | null): boolean {
@@ -206,16 +240,30 @@ export function useFileDrop(onDrop: (files: File[]) => void): boolean {
   return dragging;
 }
 
-/** Scales the fixed-size stage to fit the window, like a resizable plugin UI. */
-export function useStageScale(stageWidth: number, stageHeight: number): void {
+/**
+ * Scales the fixed-size stage to fit the window, like a resizable plugin UI.
+ *
+ * Shrinking without a floor makes the controls unusable (a phone lands near
+ * 0.27, which is a 10px knob), so the scale stops at `minScale` and the stage
+ * scrolls instead. Returns whether that floor is in effect, so the caller can
+ * say why the layout no longer fits.
+ */
+export function useStageScale(stageWidth: number, stageHeight: number, minScale = 0): boolean {
+  const [clamped, setClamped] = useState(false);
+
   useEffect(() => {
-    const update = () =>
-      document.documentElement.style.setProperty(
-        '--stage-scale',
-        String(Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight)),
-      );
+    const update = () => {
+      const fit = Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight);
+      const scale = Math.max(fit, minScale);
+      document.documentElement.style.setProperty('--stage-scale', String(scale));
+      // Drives the scrollable layout in App.css.
+      document.documentElement.classList.toggle('stage-clamped', scale > fit);
+      setClamped(scale > fit);
+    };
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [stageWidth, stageHeight]);
+  }, [stageWidth, stageHeight, minScale]);
+
+  return clamped;
 }

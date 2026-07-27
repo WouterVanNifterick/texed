@@ -150,7 +150,10 @@ export class EngineOpl extends FmCore {
   ): void {
     const kLevelThresh = 507;
     const alg = algorithms[algorithm];
-    const hasContents = [true, false, false];
+    const hasContents = this.hasContents;
+    hasContents[0] = true;
+    hasContents[1] = false;
+    hasContents[2] = false;
     for (let op = 0; op < 6; op++) {
       const flags = alg[op];
       let add = (flags & 0x04) !== 0;

@@ -1,0 +1,20 @@
+# Text is stored and checked out as LF everywhere. Prettier's endOfLine default is
+# "lf", so without this a Windows clone (core.autocrlf=true) gets CRLF working
+# copies and `pnpm format:check` fails on files the contributor never touched.
+* text=auto eol=lf
+
+# Patch data is binary and must never be line-ending converted. Git's own
+# detection looks for a NUL byte early in the file, which a short SysEx dump need
+# not have - a misdetected voice bank would be silently corrupted on checkout.
+*.syx binary
+*.SYX binary
+*.mx binary
+*.MX binary
+*.Dx7Voice binary
+*.dx7voice binary
+*.sqlite3 binary
+
+*.png binary
+*.ico binary
+*.wav binary
+*.mid binary

@@ -11,15 +11,17 @@
     "dev": "pnpm build:library && vite",
     "build": "pnpm build:library && pnpm typecheck && vite build",
     "build:library": "tsx scripts/build-patch-library.mts",
+    "inventory:library": "tsx scripts/inventory-library.mts",
     "cli": "pnpm --filter @texed/cli start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "prepare": "cd .. && husky texed-ts/.husky",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "typecheck": "pnpm -r typecheck && tsc -b"
+    "typecheck": "pnpm -r typecheck && tsc -b && tsc -p tsconfig.test.json"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [
@@ -44,6 +46,8 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.10",
+    "fake-indexeddb": "^6.2.5",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "lint-staged": "^17.1.0",

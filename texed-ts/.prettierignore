@@ -3,3 +3,7 @@ public/library
 pnpm-lock.yaml
 test-results
 *.syx
+# Generated. Not ignoring it made `pnpm format:check` pass or fail depending on
+# whether you had run `pnpm test:coverage` first - CI only escaped it because
+# format:check happens to run before the coverage step.
+coverage

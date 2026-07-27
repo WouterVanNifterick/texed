@@ -72,11 +72,19 @@ export class Controllers {
 
   core!: FmCore;
 
+  /**
+   * Accumulate one controller into the pitch / amp / EG-bias totals.
+   *
+   * MOD_PITCH_SUM_MOD_SOURCE and MOD_AMP_SUM_MOD_SOURCE *add* every assigned
+   * source and saturate at the register's full scale; msfa took the maximum, so
+   * a mod wheel and a breath controller both routed to pitch behaved as one.
+   * Our per-source value tops out near 127 against the hardware's 255.
+   */
   private applyMod(cc: number, mod: FmMod): void {
-    if (mod.pitchRange)
-      this.pitchMod = Math.max(this.pitchMod, Math.trunc(cc * 0.01 * mod.pitchRange));
-    if (mod.ampRange) this.ampMod = Math.max(this.ampMod, Math.trunc(cc * 0.01 * mod.ampRange));
-    if (mod.egRange) this.egMod = Math.max(this.egMod, Math.trunc(cc * 0.01 * mod.egRange));
+    const amount = (range: number) => Math.trunc(cc * 0.01 * range);
+    if (mod.pitchRange) this.pitchMod = Math.min(127, this.pitchMod + amount(mod.pitchRange));
+    if (mod.ampRange) this.ampMod = Math.min(127, this.ampMod + amount(mod.ampRange));
+    if (mod.egRange) this.egMod = Math.min(127, this.egMod + amount(mod.egRange));
   }
 
   /** Volume factor for one controller: range 0 → 1.0, full range + cc 0 → 0. */
@@ -147,7 +155,9 @@ export function applySupplementToControllers(supp: VoiceSupplement, ctrls: Contr
   ctrls.portamentoStepCc = supp.portamentoStep;
   ctrls.portamentoGlissCc = supp.portamentoStep > 0;
   if (supp.portamentoTime > 0) {
-    ctrls.portamentoCc = supp.portamentoTime;
+    // portamentoCc indexes the 0-127 rate table; AMEM stores the DX7's own 0-99
+    // parameter, so the slowest AMEM setting has to reach the slowest rate.
+    ctrls.portamentoCc = Math.min(127, Math.round((supp.portamentoTime * 127) / 99));
     ctrls.portamentoEnableCc = true;
   } else {
     ctrls.portamentoCc = 0;

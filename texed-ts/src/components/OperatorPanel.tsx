@@ -3,7 +3,7 @@
 // status updates never re-render the whole panel.
 
 import { memo } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
 import {
   OP,
   G,
@@ -12,14 +12,17 @@ import {
   formatDetune,
   OSC_MODES,
   PARAM_CENTER,
-} from '@texed/dx7-format/params';
+} from '@texed/dx7-format/voice';
 import { getAms, setAms, getScalingMode, setScalingMode } from '@texed/dx7-format/supplement';
 import { algoGraph } from '../state/algo';
 import { helpProps } from '../state/help';
-import { Knob, Cycle, Toggle } from './ui';
-import { LiveEnvEditor } from './EnvEditor';
-import { computeAmpParams, type EnvTimeScale } from './env-time';
-import { OP_COLORS, type YMode } from './env-draw';
+import { Knob } from '../ui/Knob';
+import { Cycle } from '../ui/Cycle';
+import { Toggle } from '../ui/Toggle';
+import { LiveEnvEditor } from '../envelope/EnvEditor';
+import { computeAmpParams, type EnvTimeScale } from '../envelope/env-time';
+import { type YMode } from '../envelope/env-draw';
+import { opColor } from '../ui/op-colors';
 import { ScalingGraph, type ScalingField } from './ScalingGraph';
 
 // Help-bar descriptions, paraphrased from the DX7 / DX7II operating manuals.
@@ -122,12 +125,19 @@ export const OperatorPanel = memo(function OperatorPanel({
   const levels = [v(4), v(5), v(6), v(7)];
 
   return (
+    // Pointing at or into the panel selects the operator for the combined view.
+    // Focus bubbles from the controls inside, so tabbing gets there too; the
+    // panel itself holds no controls of its own that need a keyboard handler.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <section
       className={`panel op-panel${enabled && !levelZero ? '' : ' disabled'}${enabled && levelZero ? ' level-cue' : ''}${hovered ? ' hilite' : ''}${selected ? ' selected' : ''}${flat ? ' flat' : ''}`}
-      style={{ ['--op' as string]: OP_COLORS[opNum - 1] }}
+      style={{ ['--op' as string]: opColor(opNum) }}
+      aria-label={`Operator ${opNum}`}
+      aria-current={selected}
       onPointerEnter={() => onHover(opNum)}
       onPointerLeave={() => onHover(null)}
       onPointerDown={onSelect}
+      onFocus={onSelect}
     >
       <div className="panel-head">
         <button
@@ -154,7 +164,7 @@ export const OperatorPanel = memo(function OperatorPanel({
           ampParams={computeAmpParams(voice, opNum, !!carrier, note, velocity)}
           timeScale={timeScale}
           yMode={yMode}
-          color={OP_COLORS[opNum - 1]}
+          color={opColor(opNum)}
           subscribe={subscribeStatus}
           opIdx={opIdx}
           onSetRate={(i, val) => setParam(base + OP.egRate(i), val)}
@@ -246,6 +256,8 @@ export const OperatorPanel = memo(function OperatorPanel({
             rightDepth={v(OP.rightDepth)}
             leftCurve={v(OP.leftCurve)}
             rightCurve={v(OP.rightCurve)}
+            color={opColor(opNum)}
+            note={note}
             onChange={(field: ScalingField, value) => setParam(base + OP[field], value)}
           />
         </div>

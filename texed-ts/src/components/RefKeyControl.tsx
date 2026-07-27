@@ -3,8 +3,9 @@
 // on the playing context, so the drawn shapes are pinned to one note+velocity.
 // FOLLOW makes that context track the last note played.
 
+import { noteName } from '@texed/dx7-format/voice';
 import { helpProps } from '../state/help';
-import { Toggle, noteLabel } from './ui';
+import { Toggle } from '../ui/Toggle';
 
 interface RefKeyControlProps {
   note: number;
@@ -44,7 +45,7 @@ export function RefKeyControl({
           disabled={follow}
           onChange={(e) => onNote(clamp(Math.round(Number(e.target.value) || 0), 0, 127))}
         />
-        <span className="ref-key-name">{noteLabel(note)}</span>
+        <span className="ref-key-name">{noteName(note)}</span>
       </label>
       <label
         className="ref-key-field"

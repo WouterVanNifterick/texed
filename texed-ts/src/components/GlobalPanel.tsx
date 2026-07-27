@@ -2,17 +2,20 @@
 // the pitch envelope and the DX7II AMEM supplement.
 
 import { memo, useState } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/params';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/voice';
 import * as Sup from '@texed/dx7-format/supplement';
 import { helpProps } from '../state/help';
 import { useLiveCtrl } from '../state/live-ctrl';
-import { Knob, Cycle, Toggle } from './ui';
+import { Knob } from '../ui/Knob';
+import { Cycle } from '../ui/Cycle';
+import { Toggle } from '../ui/Toggle';
 import { AlgoDisplay } from './AlgoDisplay';
-import { LiveEnvEditor } from './EnvEditor';
-import { PITCH_COLOR, type YMode } from './env-draw';
-import { type EnvTimeScale } from './env-time';
-import { type EnvSelection } from './EnvOverlay';
+import { LiveEnvEditor } from '../envelope/EnvEditor';
+import { type YMode } from '../envelope/env-draw';
+import { PITCH_COLOR } from '../ui/op-colors';
+import { type EnvTimeScale } from '../envelope/env-time';
+import { type EnvSelection } from '../envelope/EnvOverlay';
 import { LfoGraph } from './LfoGraph';
 
 type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
@@ -45,8 +48,6 @@ interface GlobalPanelProps {
   onSelect: (sel: EnvSelection) => void;
   timeScale: EnvTimeScale;
   yMode: YMode;
-  /** Show the pitch EG graph here (hidden in the combined view). */
-  showEnv: boolean;
 }
 
 export const GlobalPanel = memo(function GlobalPanel({
@@ -61,7 +62,6 @@ export const GlobalPanel = memo(function GlobalPanel({
   onSelect,
   timeScale,
   yMode,
-  showEnv,
 }: GlobalPanelProps) {
   const [tab, setTab] = useState<'dx7ii' | 'ctrl'>('dx7ii');
   const set = (offset: number) => (value: number) => setParam(offset, value);
@@ -142,7 +142,12 @@ export const GlobalPanel = memo(function GlobalPanel({
           <span className="panel-title">LFO</span>
           <LfoMeter subscribe={subscribeStatus} />
         </div>
-        <LfoGraph waveform={voice[G.lfoWave]} speed={voice[G.lfoSpeed]} delay={voice[G.lfoDelay]} />
+        <LfoGraph
+          waveform={voice[G.lfoWave]}
+          speed={voice[G.lfoSpeed]}
+          delay={voice[G.lfoDelay]}
+          subscribe={subscribeStatus}
+        />
         <div className="ctl-row">
           <Cycle
             label="WAVE"
@@ -211,20 +216,18 @@ export const GlobalPanel = memo(function GlobalPanel({
         <div className="panel-head">
           <span className="panel-title">PITCH EG</span>
         </div>
-        {showEnv && (
-          <LiveEnvEditor
-            kind="pitch"
-            rates={pitchRates}
-            levels={pitchLevels}
-            timeScale={timeScale}
-            yMode={yMode}
-            color={PITCH_COLOR}
-            tall
-            subscribe={subscribeStatus}
-            onSetRate={(i, v) => setParam(G.pitchEgRate(i), v)}
-            onSetLevel={(i, v) => setParam(G.pitchEgLevel(i), v)}
-          />
-        )}
+        <LiveEnvEditor
+          kind="pitch"
+          rates={pitchRates}
+          levels={pitchLevels}
+          timeScale={timeScale}
+          yMode={yMode}
+          color={PITCH_COLOR}
+          tall
+          subscribe={subscribeStatus}
+          onSetRate={(i, v) => setParam(G.pitchEgRate(i), v)}
+          onSetLevel={(i, v) => setParam(G.pitchEgLevel(i), v)}
+        />
         <div className="eg-grid">
           {[0, 1, 2, 3].map((i) => (
             <Knob

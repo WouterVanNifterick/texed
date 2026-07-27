@@ -11,7 +11,8 @@ import { Porta } from './porta';
 import { Sin } from './sin';
 import { Exp2, Tanh } from './exp2';
 import { PluginFx } from './plugin-fx';
-import { Part, MAX_ACTIVE_NOTES, EngineType } from './part';
+import { Part, MAX_ACTIVE_NOTES, EngineType, type PartStatus } from './part';
+import { setEngineAccuracyMode, type EngineAccuracy } from './engine-accuracy';
 
 export { MAX_ACTIVE_NOTES, EngineType };
 
@@ -24,16 +25,30 @@ function initTablesOnce(): void {
   tablesInited = true;
 }
 
+let lastSampleRate = 44100;
+
 /** Initialize the shared, sample-rate-dependent DSP tables. Safe to call once
  * per sample rate; SynthRack calls this too so tables are ready for its parts. */
 export function initSynthTables(sampleRate: number): void {
   initTablesOnce();
+  lastSampleRate = sampleRate;
   Freqlut.init(sampleRate);
   Lfo.init(sampleRate);
   PitchEnv.init(sampleRate);
   Env.initSr(sampleRate);
   Porta.initSr(sampleRate);
 }
+
+/**
+ * Switch between the hardware-derived and msfa calibrations. The LFO, pitch EG
+ * and portamento tables are built at init time, so changing the mode rebuilds
+ * them at the current sample rate.
+ */
+export function setEngineAccuracy(mode: EngineAccuracy): void {
+  if (setEngineAccuracyMode(mode)) initSynthTables(lastSampleRate);
+}
+
+export { getEngineAccuracy, type EngineAccuracy } from './engine-accuracy';
 
 export class SynthUnit {
   private part = new Part();
@@ -93,7 +108,7 @@ export class SynthUnit {
     this.part.panic();
   }
 
-  getStatus(): { amps: number[]; steps: number[]; pitchStep: number; lfo: number } {
+  getStatus(): PartStatus {
     return this.part.getStatus();
   }
 

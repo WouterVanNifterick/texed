@@ -1,0 +1,14 @@
+:root {
+  --accent: #ffb454;
+  --accent-dim: #b97f36;
+  --green: #6ee7a0;
+  --red: #ff7a7a;
+  --bg: #0b0d12;
+  --panel: linear-gradient(172deg, #1d222e, #141821 55%, #12151d);
+  --panel-solid: #171a22;
+  --line: #2b3040;
+  --text: #e6e8ee;
+  --dim: #8b90a0;
+  --lcd: #ffd58a;
+  --mono: Consolas, 'SF Mono', monospace;
+}

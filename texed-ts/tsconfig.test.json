@@ -1,0 +1,36 @@
+// Tests are a separate project so that source configs stay narrow: the engine
+// must not see `node` types, or nothing stops a worklet-hosted file from
+// reaching for Buffer.
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "vite/client"],
+    "skipLibCheck": true,
+    "strict": true,
+
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "vitest.setup.ts",
+    // The processor test imports the worklet, which needs these ambient globals.
+    "src/worklet/audioworklet.d.ts",
+    "e2e",
+    "scripts/__tests__",
+    "src/**/__tests__",
+    "apps/*/src/__tests__",
+    "packages/*/src/__tests__"
+  ]
+}

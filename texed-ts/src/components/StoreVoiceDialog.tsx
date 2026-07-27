@@ -1,14 +1,14 @@
 // Modal to name a voice and pick a bank slot before storing the edit buffer.
 
 import { useEffect, useMemo, useState } from 'react';
-import type { DexedSynth } from '../audio/useDexedSynth';
-import { programIndexForVoice } from '../audio/useDexedSynth';
-import { getVoiceName } from '@texed/dx7-format/params';
+import type { Synth } from '../audio/useSynth';
+import { programIndexForVoice } from '../audio/useSynth';
+import { getVoiceName } from '@texed/dx7-format/voice';
 import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
 import { VOICE_BANK_LABELS } from '@texed/dx7-format/voice-library';
 
 interface StoreVoiceDialogProps {
-  synth: DexedSynth;
+  synth: Synth;
   defaultVoice: VoiceRef | undefined;
   onConfirm: (name: string, dest: VoiceRef, destLabel: string) => void;
   onClose: () => void;
@@ -61,8 +61,19 @@ export function StoreVoiceDialog({
   };
 
   return (
-    <div className="partrack-overlay" onClick={onClose}>
-      <div className="partrack store-dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="partrack-overlay">
+      <button
+        type="button"
+        className="overlay-dismiss"
+        aria-label="Cancel storing the voice"
+        onClick={onClose}
+      />
+      <div
+        className="partrack store-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Store voice"
+      >
         <div className="partrack-header">
           <span className="partrack-title">STORE VOICE</span>
         </div>

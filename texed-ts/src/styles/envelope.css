@@ -1,0 +1,283 @@
+/* ==== Envelope editor ==== */
+
+.env-editor {
+  position: relative;
+  width: 100%;
+  height: 64px;
+  flex: none;
+  background: linear-gradient(#0a0c11, #0d1017);
+  border: 1px solid #232735;
+  border-radius: 6px;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.env-editor.tall {
+  height: 60px;
+}
+
+.env-editor svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Gradient area fills between a curve and its "no effect" line. */
+.graph-fill {
+  stroke: none;
+  pointer-events: none;
+}
+
+.env-shape {
+  fill: none;
+  stroke: #5a6175;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--curve, var(--green)) 45%, transparent));
+}
+
+/* Held / indefinite horizontal segments (sustain plateau, non-decaying
+   release) render dotted to distinguish them from timed ramps. */
+.env-shape.held,
+.env-bg-trace.held {
+  stroke-dasharray: 1.5 2.5;
+}
+
+.env-active {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--curve, var(--accent)) 70%, transparent));
+  pointer-events: none;
+}
+
+/* Live playback dots following the envelope / LFO curves.
+   HTML overlays (not SVG circles) so preserveAspectRatio="none" cannot stretch them. */
+.env-playhead,
+.lfo-playhead {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  border: 1.5px solid #0d1017;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.env-playhead {
+  background: var(--curve, var(--accent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--curve, var(--accent)) 85%, transparent);
+}
+
+/* Dots on the traces that are not being edited, dimmed to match them. */
+.env-playhead.bg {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-width: 1px;
+  box-shadow: none;
+  opacity: 0.65;
+}
+
+.lfo-playhead {
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+
+.env-grid {
+  stroke: #1d212b;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.env-midline {
+  stroke: #3a4051;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.env-gate {
+  stroke: #6b7288;
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* Draggable envelope vertices. */
+.env-node {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -6px 0 0 -6px;
+  padding: 0;
+  border: 2px solid var(--curve, var(--green));
+  border-radius: 50%;
+  background: #0d1017;
+  cursor: grab;
+  touch-action: none;
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s;
+}
+
+.env-node:hover,
+.env-node:focus {
+  transform: scale(1.25);
+  outline: none;
+  box-shadow: 0 0 8px rgb(255 255 255 / 35%);
+  z-index: 3;
+}
+
+.env-node:active {
+  cursor: grabbing;
+}
+
+.env-node.level-only {
+  cursor: ns-resize;
+}
+
+.env-node.unreached {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.env-overflow {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 700 14px var(--mono);
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.env-overflow.left {
+  right: auto;
+  left: 2px;
+}
+
+/* ==== Combined envelope overlay ==== */
+
+.env-overlay-panel {
+  flex: none;
+  height: 208px;
+  gap: 4px;
+}
+
+.env-legend {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+}
+
+.env-chip {
+  --chip: var(--dim);
+  padding: 2px 7px;
+  font: 700 9px var(--mono);
+  letter-spacing: 0.5px;
+  color: var(--dim);
+  background: #100e07;
+  border: 1px solid #2b3040;
+  border-left: 3px solid var(--chip);
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    background 0.12s;
+}
+
+.env-chip:hover,
+.env-chip.hover {
+  color: var(--text);
+}
+
+.env-chip.on {
+  color: #12141a;
+  background: var(--chip);
+  border-color: var(--chip);
+}
+
+.env-overlay-plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: linear-gradient(#0a0c11, #0d1017);
+  border: 1px solid #232735;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.env-overlay-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.env-bg-trace {
+  fill: none;
+  stroke-width: 1.4;
+  opacity: 0.4;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.env-bg-trace:hover {
+  opacity: 0.8;
+  stroke-width: 1.8;
+}
+
+.env-bg-trace.pitch {
+  stroke-dasharray: 4 3;
+}
+
+/* The selected envelope's editor fills the same box, drawn on top. */
+.env-overlay-fg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.env-overlay-fg .env-shape {
+  stroke-width: 2;
+}
+
+.env-overlay-times {
+  position: absolute;
+  inset: auto 0 1px 0;
+  height: 10px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.env-overlay-times span {
+  position: absolute;
+  padding-left: 3px;
+  font: 8px var(--mono);
+  color: var(--dim);
+  opacity: 0.75;
+}
+
+.env-overlay-axis {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font: 8px var(--mono);
+  color: var(--dim);
+  pointer-events: none;
+  opacity: 0.75;
+}

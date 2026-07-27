@@ -106,7 +106,8 @@ describe('applySupplementToControllers', () => {
     const ctrls = new Controllers();
     applySupplementToControllers(sup, ctrls);
     expect(ctrls.portamentoEnableCc).toBe(true);
-    expect(ctrls.portamentoCc).toBe(50);
+    // AMEM stores the DX7's 0-99 time; portamentoCc indexes the 0-127 rate table.
+    expect(ctrls.portamentoCc).toBe(Math.round((50 * 127) / 99));
     expect(ctrls.portamentoGlissCc).toBe(true);
     expect(ctrls.portamentoStepCc).toBe(3);
   });

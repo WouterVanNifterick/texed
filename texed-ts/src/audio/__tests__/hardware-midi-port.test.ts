@@ -68,7 +68,7 @@ describe('HardwareMidiPort', () => {
   it('start() seeds a default editable state for the UI', async () => {
     const { port, events } = wired();
     await port.start();
-    expect(events.map((e) => e.type)).toEqual(['voice', 'parts', 'programState', 'masterTune']);
+    expect(events.map((e) => e.type)).toEqual(['voice', 'parts', 'programState', 'settings']);
     const parts = events[1];
     if (parts.type !== 'parts') throw new Error('expected parts event');
     expect(parts.configs).toHaveLength(NUM_PARTS);

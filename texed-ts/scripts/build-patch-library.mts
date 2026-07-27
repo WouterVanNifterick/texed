@@ -12,7 +12,7 @@ import {
   slugifyPath,
   type SourceFile,
 } from './patch-library-core.mts';
-import type { LibBank, LibCollection, LibPerfSet } from '../src/state/library-manifest';
+import type { LibBank, LibCollection, LibPerfSet } from '@texed/dx7-format/library-manifest';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const PATCHES_DIR = path.resolve(scriptDir, '..', '..', 'patches');
@@ -23,7 +23,7 @@ interface CollectionSpec {
   name: string;
   /** Directory under patches/. */
   dir: string;
-  kind: 'fs1r' | 'syx';
+  kind: 'raw' | 'syx';
   /**
    * For performance-only files: rel path (forward slashes) → the voice bank
    * files (in internalA..cartridgeB order) the performances reference.
@@ -32,22 +32,17 @@ interface CollectionSpec {
 }
 
 const COLLECTIONS: CollectionSpec[] = [
-  { id: 'fs1r', name: 'DX7 Voices from FS1R', dir: 'DX7 Voices from FS1R', kind: 'fs1r' },
+  { id: 'fs1r', name: 'DX7 Voices from FS1R', dir: 'DX7 Voices from FS1R', kind: 'raw' },
   {
     id: 'tx802-factory',
     name: 'TX802 Factory',
     dir: 'TX802_Factory',
     kind: 'syx',
     perfBankMap: {
-      'original/P.SYX': [
-        'original/A1.SYX',
-        'original/A2.SYX',
-        'original/B1.SYX',
-        'original/B2.SYX',
-      ],
-      'fmori/perf_1-64.syx': ['fmori/voice_1-32.syx', 'fmori/voice_33-64.syx'],
+      'P.SYX': ['A1.SYX', 'A2.SYX', 'B1.SYX', 'B2.SYX'],
     },
   },
+  { id: 'dexed', name: 'Dexed', dir: 'Dexed', kind: 'syx' },
   { id: 'tx802-collections', name: 'TX802 Collections', dir: 'TX802_Collections', kind: 'syx' },
   { id: 'dx7iifd-factory', name: 'DX7IIFD Factory', dir: 'DX7IIFD_Factory', kind: 'syx' },
   { id: 'dx7s-factory', name: 'DX7s Factory', dir: 'DX7s_Factory', kind: 'syx' },
@@ -168,7 +163,7 @@ async function main(): Promise<void> {
   for (const spec of COLLECTIONS) {
     console.log(`collection: ${spec.name}`);
     const col =
-      spec.kind === 'fs1r' ? await buildFs1rCollection(spec) : await buildSyxCollection(spec);
+      spec.kind === 'raw' ? await buildFs1rCollection(spec) : await buildSyxCollection(spec);
     if (col.banks.length === 0 && col.performanceSets.length === 0) {
       console.warn(`  empty collection, dropped: ${spec.id}`);
       continue;
@@ -184,12 +179,12 @@ async function main(): Promise<void> {
     (a, c) => a + c.banks.reduce((x, b) => x + b.voices.length, 0),
     0,
   );
-  const nPerfs = collections.reduce(
+  const performanceCount = collections.reduce(
     (a, c) => a + c.performanceSets.reduce((x, p) => x + p.names.length, 0),
     0,
   );
   console.log(
-    `library: ${collections.length} collections, ${nBanks} banks, ${nVoices} voices, ${nPerfs} performances`,
+    `library: ${collections.length} collections, ${nBanks} banks, ${nVoices} voices, ${performanceCount} performances`,
   );
 }
 

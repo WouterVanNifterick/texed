@@ -1,0 +1,45 @@
+/* ==== Keyboard ==== */
+
+.keyboard {
+  position: relative;
+  width: 100%;
+  height: 72px;
+  flex: none;
+  user-select: none;
+  touch-action: none;
+}
+
+.key {
+  position: absolute;
+  top: 0;
+  padding: 0;
+  border: 1px solid #0c0e13;
+  cursor: pointer;
+}
+
+.key.white {
+  height: 100%;
+  background: linear-gradient(#f6f7fb 80%, #d9dce6);
+  border-radius: 0 0 4px 4px;
+  z-index: 1;
+  box-shadow: inset 0 -4px 6px rgb(0 0 0 / 12%);
+}
+
+.key.white.active {
+  background: linear-gradient(#ffd79a, #ffb454);
+  box-shadow: inset 0 -4px 8px rgb(160 90 10 / 45%);
+}
+
+.key.black {
+  height: 62%;
+  background: linear-gradient(#343a4a, #0c0e13 85%);
+  border-radius: 0 0 3px 3px;
+  z-index: 2;
+  box-shadow:
+    inset 0 -3px 4px rgb(255 255 255 / 6%),
+    0 2px 3px rgb(0 0 0 / 45%);
+}
+
+.key.black.active {
+  background: linear-gradient(#ffb454, #c8832f);
+}

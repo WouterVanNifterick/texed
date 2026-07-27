@@ -1,0 +1,82 @@
+/* ==== Algorithm display ==== */
+
+.algo-display {
+  width: 100%;
+  flex: 1;
+  min-height: 56px;
+}
+
+.algo-node {
+  fill: #232735;
+  stroke: var(--op, #5a6175);
+  stroke-width: 1.4;
+}
+
+.carrier .algo-node {
+  fill: var(--op, var(--accent));
+  stroke: none;
+}
+
+.algo-num {
+  font: 700 9px sans-serif;
+  fill: var(--op, var(--text));
+}
+
+.carrier .algo-num {
+  fill: #12141a;
+}
+
+.algo-edge {
+  stroke: #6b7288;
+  stroke-width: 1.2;
+}
+
+.algo-fb {
+  fill: none;
+  stroke: #6b7288;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.algo-display g {
+  cursor: pointer;
+}
+
+.hilite .algo-node {
+  stroke: var(--op, var(--accent));
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 4px var(--op, var(--accent)));
+}
+
+.carrier.hilite .algo-node {
+  stroke: #fff;
+}
+
+.algo-display g.sel .algo-node {
+  stroke: var(--op, var(--accent));
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 5px var(--op, var(--accent)));
+}
+
+.carrier.sel .algo-node {
+  stroke: #fff;
+}
+
+/* SVG cannot take an outline, so the keyboard ring is drawn on the node box. */
+.algo-display g:focus {
+  outline: none;
+}
+
+.algo-display g:focus-visible .algo-node {
+  stroke: var(--accent);
+  stroke-width: 2.6;
+  stroke-dasharray: 3 2;
+}
+
+.algo-display g.dim .algo-node {
+  opacity: 0.35;
+}
+
+.algo-display g.dim .algo-num {
+  opacity: 0.5;
+}

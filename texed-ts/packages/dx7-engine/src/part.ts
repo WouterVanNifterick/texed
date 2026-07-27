@@ -22,13 +22,24 @@ import {
 import { Dx7Note, type VoiceStatus } from './dx7note';
 import { createStandardTuning, type TuningState } from './tuning';
 import { initVoice } from '@texed/dx7-format/cartridge';
-import { G } from '@texed/dx7-format/voice-layout';
+import { G } from '@texed/dx7-format/voice';
 import { VoiceSupplement, createDefaultAmem, AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
 
-export const MAX_ACTIVE_NOTES = 16;
+export const MAX_ACTIVE_NOTES = 32;
 
 export const EngineType = { Modern: 0, MarkI: 1, Opl: 2 } as const;
 export type EngineType = (typeof EngineType)[keyof typeof EngineType];
+
+/** Live envelope and LFO state for one part, as shown on the meters. */
+export interface PartStatus {
+  amps: number[];
+  steps: number[];
+  levels: number[];
+  pitchStep: number;
+  pitchLevel: number;
+  lfo: number;
+  lfoRestart: number;
+}
 
 interface Voice {
   dx7Note: Dx7Note;
@@ -36,7 +47,12 @@ interface Voice {
   velocity: number;
   channel: number;
   keydown: boolean;
+  /** Held by the sustain pedal (CC 64). */
   sustained: boolean;
+  /** Held by the sostenuto pedal (CC 66): keys that were down when it engaged. */
+  sostenuto: boolean;
+  /** Held by hold-2 (CC 69), which lets go on the next note with no key down. */
+  hold2: boolean;
   live: boolean;
   keydownSeq: number;
   /** Forced-damp fade in progress: still audible, but no longer counts toward
@@ -59,6 +75,7 @@ export class Part {
   private nextKeydownSeq = 0;
   private lastActiveVoice = 0;
   private sustain = false;
+  private hold2 = false;
 
   /** Performance-level transpose (semitones) added to engine pitch only; does
    * not affect note-on/off matching. Set by SynthRack from the part's noteShift. */
@@ -74,10 +91,25 @@ export class Part {
 
   private lastLfoValue = 0;
   private lastLfoDelay = 0;
+  // Increments each time the LFO is (re)triggered, so the UI can restart its
+  // LFO position sweep at the exact note-on that restarted the LFO.
+  private lfoRestartSeq = 0;
   private peekStatus: VoiceStatus = {
     amp: [0, 0, 0, 0, 0, 0],
     ampStep: [0, 0, 0, 0, 0, 0],
+    level: [0, 0, 0, 0, 0, 0],
     pitchStep: 0,
+    pitchLevel: 0,
+  };
+  // See getStatus: reused so the audio thread does not allocate to report state.
+  private status: PartStatus = {
+    amps: [0, 0, 0, 0, 0, 0],
+    steps: [4, 4, 4, 4, 4, 4],
+    levels: [0, 0, 0, 0, 0, 0],
+    pitchStep: 4,
+    pitchLevel: 0,
+    lfo: 0,
+    lfoRestart: 0,
   };
 
   private extraBuf = new Float32Array(N);
@@ -100,6 +132,8 @@ export class Part {
         channel: 1,
         keydown: false,
         sustained: false,
+        sostenuto: false,
+        hold2: false,
         live: false,
         keydownSeq: -1,
         damping: false,
@@ -175,6 +209,14 @@ export class Part {
     }
   }
 
+  /** Swap the whole tuning table (standard or a micro-tuning). */
+  setTuning(state: TuningState): void {
+    this.tuningState = state;
+    for (const v of this.voices) {
+      v.dx7Note.setTuningState(state);
+    }
+  }
+
   setVoiceParam(offset: number, value: number): void {
     if (offset < 0 || offset > 155) return;
     if (this.data[offset] === value) return;
@@ -193,6 +235,8 @@ export class Part {
       if (!v.live) continue;
       v.keydown = false;
       v.sustained = false;
+      v.sostenuto = false;
+      v.hold2 = false;
       v.damping = false;
       v.dx7Note.keyup();
       v.live = false;
@@ -266,6 +310,16 @@ export class Part {
       }
     }
 
+    // Hold-2 keeps notes ringing after key-up, and lets go of them when a new
+    // note starts a fresh phrase rather than when the pedal lifts.
+    if (this.hold2 && !this.anyKeyDown()) {
+      for (const v of this.voices) {
+        if (!v.hold2) continue;
+        v.hold2 = false;
+        this.maybeRelease(v);
+      }
+    }
+
     // LFO key trigger: "single" restarts only on the first key down; "multi"
     // (AMEM LTRG) retriggers on every note-on.
     let triggerLfo = this.supplement.lfoKeyTrigger;
@@ -278,7 +332,10 @@ export class Part {
         }
       }
     }
-    if (triggerLfo) this.lfo.keydown();
+    if (triggerLfo) {
+      this.lfo.keydown();
+      this.lfoRestartSeq++;
+    }
 
     // DX7II unison poly: stack four detuned voices per note (hardware plays
     // 4 notes of the 16-voice pool per key in single mode).
@@ -305,6 +362,8 @@ export class Part {
     v.midiNote = pitch;
     v.velocity = velocity;
     v.sustained = this.sustain;
+    v.sostenuto = false;
+    v.hold2 = false;
     v.keydown = true;
     v.damping = false;
     v.keydownSeq = this.nextKeydownSeq++;
@@ -351,22 +410,33 @@ export class Part {
     for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
       const v = this.voices[note];
       if (v.midiNote === pitch && v.keydown && v.channel === channel) {
-        v.keydown = false;
+        this.keyUp(v);
         released = true;
-        if (this.sustain) v.sustained = true;
-        else v.dx7Note.keyup();
       }
     }
     if (released) return;
 
     for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
       const v = this.voices[note];
-      if (v.midiNote === pitch && v.keydown) {
-        v.keydown = false;
-        if (this.sustain) v.sustained = true;
-        else v.dx7Note.keyup();
-      }
+      if (v.midiNote === pitch && v.keydown) this.keyUp(v);
     }
+  }
+
+  private anyKeyDown(): boolean {
+    for (const v of this.voices) if (v.keydown) return true;
+    return false;
+  }
+
+  private keyUp(v: Voice): void {
+    v.keydown = false;
+    if (this.sustain) v.sustained = true;
+    if (this.hold2) v.hold2 = true;
+    this.maybeRelease(v);
+  }
+
+  /** Let a voice go once no pedal is still holding it. */
+  private maybeRelease(v: Voice): void {
+    if (!v.keydown && !v.sustained && !v.sostenuto && !v.hold2) v.dx7Note.keyup();
   }
 
   controlChange(ctrl: number, value: number): void {
@@ -402,6 +472,12 @@ export class Part {
       case 65:
         this.controllers.portamentoEnableCc = value >= 64;
         break;
+      case 66:
+        this.setSostenuto(value > 63);
+        break;
+      case 69:
+        this.setHold2(value > 63);
+        break;
       case 120:
       case 123:
         this.panic();
@@ -409,15 +485,39 @@ export class Part {
     }
   }
 
+  setMonoMode(on: boolean): void {
+    this.monoMode = on;
+  }
+
   private setSustain(on: boolean): void {
     this.sustain = on;
-    if (!on) {
-      for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
-        if (this.voices[note].sustained && !this.voices[note].keydown) {
-          this.voices[note].dx7Note.keyup();
-          this.voices[note].sustained = false;
-        }
+    if (on) return;
+    for (const v of this.voices) {
+      if (!v.sustained) continue;
+      v.sustained = false;
+      this.maybeRelease(v);
+    }
+  }
+
+  /** Sostenuto captures the keys that are down right now and holds only those. */
+  private setSostenuto(on: boolean): void {
+    for (const v of this.voices) {
+      if (on) {
+        if (v.live && v.keydown) v.sostenuto = true;
+      } else if (v.sostenuto) {
+        v.sostenuto = false;
+        this.maybeRelease(v);
       }
+    }
+  }
+
+  private setHold2(on: boolean): void {
+    this.hold2 = on;
+    if (on) return;
+    for (const v of this.voices) {
+      if (!v.hold2) continue;
+      v.hold2 = false;
+      this.maybeRelease(v);
     }
   }
 
@@ -435,6 +535,8 @@ export class Part {
       this.voices[i].midiNote = -1;
       this.voices[i].keydown = false;
       this.voices[i].sustained = false;
+      this.voices[i].sostenuto = false;
+      this.voices[i].hold2 = false;
       this.voices[i].damping = false;
       this.voices[i].live = false;
       this.voices[i].dx7Note.keyup();
@@ -505,7 +607,12 @@ export class Part {
 
   // ==== Status ====
 
-  getStatus(): { amps: number[]; steps: number[]; pitchStep: number; lfo: number } {
+  /**
+   * Current envelope/LFO state for the meters. Called from the audio thread, so
+   * it fills and returns a reused object instead of allocating. Callers must read
+   * the result before the next render; hold a copy if you need a snapshot.
+   */
+  getStatus(): PartStatus {
     let voice: Voice | null = this.voices[this.lastActiveVoice].live
       ? this.voices[this.lastActiveVoice]
       : null;
@@ -517,22 +624,32 @@ export class Part {
         }
       }
     }
-    const amps = [0, 0, 0, 0, 0, 0];
-    const steps = [4, 4, 4, 4, 4, 4];
-    let pitchStep = 4;
+    const { amps, steps, levels } = this.status;
     if (voice) {
       voice.dx7Note.peekVoiceStatus(this.peekStatus);
       for (let op = 0; op < 6; op++) {
         const a = this.peekStatus.amp[op];
         amps[op] = a > 1024 ? Math.min(1, (Math.log2(a) - 10) / 16) : 0;
         steps[op] = this.peekStatus.ampStep[op];
+        levels[op] = this.peekStatus.level[op];
       }
-      pitchStep = this.peekStatus.pitchStep;
+      this.status.pitchStep = this.peekStatus.pitchStep;
+      this.status.pitchLevel = this.peekStatus.pitchLevel;
+    } else {
+      for (let op = 0; op < 6; op++) {
+        amps[op] = 0;
+        steps[op] = 4;
+        levels[op] = 0;
+      }
+      this.status.pitchStep = 4;
+      this.status.pitchLevel = 0;
     }
     // Scale the LFO excursion by the delay ramp so the meter reflects the
     // modulation that actually reaches the voices.
     const ramp = this.lastLfoDelay / (1 << 24);
-    return { amps, steps, pitchStep, lfo: 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp };
+    this.status.lfo = 0.5 + (this.lastLfoValue / (1 << 24) - 0.5) * ramp;
+    this.status.lfoRestart = this.lfoRestartSeq;
+    return this.status;
   }
 
   /**

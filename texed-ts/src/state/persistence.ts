@@ -9,19 +9,14 @@ const DB_VERSION = 1;
 const STORE = 'state';
 const KEY = 'session';
 
-export const SESSION_SCHEMA = 1;
-
-export interface SessionUiState {
-  volume: number;
-  engine: number;
-  polyphony: number;
-}
+// Bumped to 2 when global settings (engine/volume/polyphony/master tune) moved
+// from a separate `ui` block into the rack snapshot; older records are dropped.
+export const SESSION_SCHEMA = 2;
 
 export interface SessionRecord {
   schema: typeof SESSION_SCHEMA;
   savedAt: number;
   rack: RackState;
-  ui: SessionUiState;
 }
 
 function openDb(): Promise<IDBDatabase> {

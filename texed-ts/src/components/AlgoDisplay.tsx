@@ -2,10 +2,10 @@
 // Carriers are filled, modulators outlined, self-feedback shown as a loop.
 // Node brightness reflects static output level plus live envelope amplitude.
 
-import { useStatus, type SynthStatus } from '../audio/useDexedSynth';
-import { OP, G, opBase } from '@texed/dx7-format/params';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { algoGraph } from '../state/algo';
-import { opColor } from '../state/op-colors';
+import { opColor } from '../ui/op-colors';
 
 const CELL = 26;
 const BOX = 17;
@@ -74,9 +74,21 @@ export function AlgoDisplay({
               opacity,
               filter: glow > 0 ? `drop-shadow(0 0 ${glow}px var(--op))` : undefined,
             }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Select operator ${n.num}${n.carrier ? ' (carrier)' : ''}`}
+            aria-current={n.num === selectedOp}
             onPointerEnter={() => onHover(n.num)}
             onPointerLeave={() => onHover(null)}
             onPointerDown={() => onSelect(n.num)}
+            onFocus={() => onHover(n.num)}
+            onBlur={() => onHover(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect(n.num);
+              }
+            }}
           >
             {n.feedback && (
               <path

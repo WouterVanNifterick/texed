@@ -4,8 +4,11 @@ export interface MidiHandlers {
   noteOn: (note: number, velocity: number, channel: number) => void;
   noteOff: (note: number, channel: number) => void;
   controlChange: (controller: number, value: number, channel: number) => void;
+  programChange: (program: number, channel: number) => void;
   pitchBend: (value: number, channel: number) => void;
   aftertouch: (value: number, channel: number) => void;
+  /** One complete incoming SysEx frame, F0 through F7. */
+  sysex: (data: Uint8Array) => void;
   /** Called with the current input names on connect and whenever devices are (un)plugged. */
   inputsChanged?: (names: string[]) => void;
   /** Called with the current output devices on connect and whenever devices are (un)plugged. */
@@ -40,11 +43,17 @@ function handleMessage(data: Uint8Array, h: MidiHandlers): void {
     case 0xb0:
       h.controlChange(data[1], data[2], channel);
       break;
+    case 0xc0:
+      h.programChange(data[1], channel);
+      break;
     case 0xd0:
       h.aftertouch(data[1], channel);
       break;
     case 0xe0:
       h.pitchBend(data[1] | (data[2] << 7), channel);
+      break;
+    case 0xf0:
+      if (status === 0xf0) h.sysex(data);
       break;
   }
 }

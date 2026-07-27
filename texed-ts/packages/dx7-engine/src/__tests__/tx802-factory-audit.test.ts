@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
-import { OP } from '@texed/dx7-format/params';
+import { OP } from '@texed/dx7-format/voice';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const factory = join(here, '../../../../../patches/TX802_Factory/original');
+const factory = join(here, '../../../../../patches/TX802_Factory');
 
 function loadFactoryCombined(): ReturnType<typeof loadSysexFile> {
   const files = ['A1.SYX', 'A2.SYX', 'B1.SYX', 'B2.SYX', 'P.SYX'];

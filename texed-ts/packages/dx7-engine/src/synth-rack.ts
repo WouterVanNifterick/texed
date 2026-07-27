@@ -6,16 +6,29 @@
 // SynthRack behaves like the single-timbre SynthUnit.
 
 import { PluginFx } from './plugin-fx';
-import { Part, EngineType } from './part';
-import { initSynthTables } from './synth-unit';
+import { PlateReverb } from './plate-reverb';
+import { Compressor } from './compressor';
+import { Part, EngineType, MAX_ACTIVE_NOTES } from './part';
+import { createStandardTuning, createMicroTuning } from './tuning';
+import { decodeMicrotuning } from '@texed/dx7-format/microtuning';
+import { initSynthTables, setEngineAccuracy } from './synth-unit';
+import { getEngineAccuracy, type EngineAccuracy } from './engine-accuracy';
 import type { ParsedPerformance } from '@texed/dx7-format/performance';
 import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import type { RackState } from '@texed/dx7-format/rack-state';
 import { RACK_STATE_SCHEMA } from '@texed/dx7-format/rack-state';
+import {
+  volumeToGain,
+  DEFAULT_REVERB_SETTINGS,
+  type GlobalSettings,
+  type ReverbSettings,
+} from '@texed/dx7-format/global-settings';
 import { identifySysex, SysexKind, cartridgeFromSyx } from '@texed/dx7-format/sysex';
 import { amemPayloadFromFrame } from '@texed/dx7-format/amem';
+import { getVoiceName } from '@texed/dx7-format/voice';
 import {
   VoiceLibrary,
+  VOICE_BANK_ORDER,
   defaultVoiceRef,
   voiceRefEquals,
   type VoiceRef,
@@ -50,8 +63,11 @@ export interface RackStatus {
   selectedPart: number;
   amps: number[];
   steps: number[];
+  levels: number[];
   pitchStep: number;
+  pitchLevel: number;
   lfo: number;
+  lfoRestart: number;
   partActivity: number[];
   totalActive: number;
 }
@@ -59,31 +75,103 @@ export interface RackStatus {
 export class SynthRack {
   private parts: Part[] = [];
   private configs: PartConfig[] = [];
+  /** Per-part gain ramp and ladder filter; DC is handled once on the master. */
+  private partFx: PluginFx[] = [];
+  /** One per part, switched globally, as MiniDexed does. */
+  private compressors: Compressor[] = [];
+  private reverb = new PlateReverb();
+  private reverbSettings: ReverbSettings = { ...DEFAULT_REVERB_SETTINGS };
+  private compressorEnabled = false;
   private fxL = new PluginFx();
   private fxR = new PluginFx();
   private library = new VoiceLibrary();
 
+  /** CC 0 waiting for its CC 32 partner, per part (MIDI 1.0 sends them paired). */
+  private bankMsb = new Array(NUM_PARTS).fill(0);
+  /** Receive channel to restore when CC 124 turns omni back off. */
+  private preOmniChannel = new Array(NUM_PARTS).fill(1);
+
   private polyphonyCap = DEFAULT_POLYPHONY;
-  private masterGain = 0.8;
+  private engineType_: EngineType = EngineType.MarkI;
+  private volume_ = 80;
+  private masterGain = volumeToGain(80);
   private selected = 0;
   private lastLoadReport: LoadReport | null = null;
   private masterTuneCents_ = 0;
+  /** Active micro-tuning index into the library tables, or -1 for standard. */
+  private microtuningIndex_ = -1;
+  /** Name of the currently loaded performance (edit-buffer identity). Set by
+   * every load path; independent of the library performance index. */
+  private performanceName_ = '';
 
   private scratch = new Float32Array(128);
+  /** Reverb send bus and its wet return; grown with `scratch`. */
+  private sendL = new Float32Array(128);
+  private sendR = new Float32Array(128);
+  private wetL = new Float32Array(128);
+  private wetR = new Float32Array(128);
+  // See getStatus: reused so the audio thread does not allocate to report state.
+  private status: RackStatus = {
+    selectedPart: 0,
+    amps: [],
+    steps: [],
+    levels: [],
+    pitchStep: 4,
+    pitchLevel: 0,
+    lfo: 0,
+    lfoRestart: 0,
+    partActivity: new Array(NUM_PARTS).fill(0),
+    totalActive: 0,
+  };
 
   constructor(sampleRate: number) {
     initSynthTables(sampleRate);
     for (let i = 0; i < NUM_PARTS; i++) {
       this.parts.push(new Part());
       this.configs.push(defaultPartConfig(i === 0));
+      const fx = new PluginFx();
+      fx.dcBlock = false;
+      this.partFx.push(fx);
+      this.compressors.push(new Compressor(sampleRate));
     }
+    this.setEngineType(this.engineType_);
     this.setSampleRate(sampleRate);
   }
 
   setSampleRate(sampleRate: number): void {
     initSynthTables(sampleRate);
+    for (const fx of this.partFx) fx.init(sampleRate);
+    for (const c of this.compressors) c.init(sampleRate);
+    this.reverb.init(sampleRate);
     this.fxL.init(sampleRate);
     this.fxR.init(sampleRate);
+  }
+
+  getReverbSettings(): ReverbSettings {
+    return { ...this.reverbSettings };
+  }
+
+  /** Apply a (partial) reverb block; unset fields keep their current value. */
+  setReverbSettings(patch: Partial<ReverbSettings>): void {
+    const r = Object.assign(this.reverbSettings, patch);
+    this.reverb.setSize(r.size);
+    this.reverb.setHiDamp(r.hiDamp);
+    this.reverb.setLoDamp(r.loDamp);
+    this.reverb.setLowpass(r.lowpass);
+    this.reverb.setDiffusion(r.diffusion);
+    this.reverb.setLevel(r.level);
+    // Flush the tail on the way out so re-enabling does not resume it.
+    this.reverb.bypass = !r.enabled;
+  }
+
+  setCompressorEnabled(on: boolean): void {
+    if (on === this.compressorEnabled) return;
+    this.compressorEnabled = on;
+    for (const c of this.compressors) c.reset();
+  }
+
+  get compressorOn(): boolean {
+    return this.compressorEnabled;
   }
 
   get voiceLibrary(): VoiceLibrary {
@@ -95,15 +183,72 @@ export class SynthRack {
   }
 
   setEngineType(type: EngineType): void {
+    this.engineType_ = type;
     for (const p of this.parts) p.setEngineType(type);
   }
 
-  setPolyphonyCap(n: number): void {
-    this.polyphonyCap = Math.max(1, Math.min(NUM_PARTS * 16, Math.floor(n)));
+  /**
+   * Switch the level curves and LFO / pitch EG / portamento rates between the
+   * DX7 ROM calibration and msfa's. Rebuilds the shared rate tables, so it is a
+   * setup change rather than something to automate per note.
+   */
+  setAccuracy(mode: EngineAccuracy): void {
+    setEngineAccuracy(mode);
   }
 
-  setMasterGain(gain: number): void {
-    this.masterGain = gain;
+  setPolyphonyCap(n: number): void {
+    this.polyphonyCap = Math.max(1, Math.min(NUM_PARTS * MAX_ACTIVE_NOTES, Math.floor(n)));
+  }
+
+  /** Set master volume from the 0..99 knob; the perceptual taper yields gain. */
+  setVolume(volume: number): void {
+    this.volume_ = Math.max(0, Math.min(99, Math.round(volume)));
+    this.masterGain = volumeToGain(this.volume_);
+  }
+
+  /** The whole global "system setup" edit buffer as one struct. */
+  getGlobalSettings(): GlobalSettings {
+    return {
+      engine: this.engineType_,
+      volume: this.volume_,
+      polyphony: this.polyphonyCap,
+      masterTuneCents: this.masterTuneCents_,
+      microtuning: this.microtuningIndex_,
+      accuracy: getEngineAccuracy(),
+      compressor: this.compressorEnabled,
+      reverb: { ...this.reverbSettings },
+    };
+  }
+
+  /** Apply a (partial) global-settings snapshot, e.g. on session restore.
+   * Micro-tuning is applied last, so it reads the just-set master tune; callers
+   * must have populated `voiceLibrary.microtunings` first. */
+  applyGlobalSettings(g: Partial<GlobalSettings>): void {
+    if (g.accuracy !== undefined) this.setAccuracy(g.accuracy);
+    if (g.engine !== undefined) this.setEngineType(g.engine as EngineType);
+    if (g.volume !== undefined) this.setVolume(g.volume);
+    if (g.polyphony !== undefined) this.setPolyphonyCap(g.polyphony);
+    if (g.compressor !== undefined) this.setCompressorEnabled(g.compressor);
+    if (g.reverb !== undefined) this.setReverbSettings(g.reverb);
+    if (g.masterTuneCents !== undefined) this.applyMasterTuneCents(g.masterTuneCents);
+    if (g.microtuning !== undefined) this.setMicrotuning(g.microtuning);
+  }
+
+  /** Display names for the loaded micro-tuning tables (DX7II blobs are unnamed). */
+  getMicrotuningNames(): string[] {
+    return this.library.microtunings.map((_, i) => `Micro ${i + 1}`);
+  }
+
+  /** Select the active micro-tuning (index into the loaded tables; -1 = standard)
+   * and apply it to every part, preserving the current master tune. */
+  setMicrotuning(index: number): void {
+    const blobs = this.library.microtunings;
+    const units = index >= 0 && index < blobs.length ? decodeMicrotuning(blobs[index]) : null;
+    this.microtuningIndex_ = units ? index : -1;
+    for (const p of this.parts) {
+      p.setTuning(units ? createMicroTuning(units) : createStandardTuning());
+      p.setMasterTuneCents(this.masterTuneCents_);
+    }
   }
 
   selectPart(index: number): void {
@@ -139,6 +284,11 @@ export class SynthRack {
     Object.assign(cfg, rest);
     if (patch.voice !== undefined) {
       this.applyVoiceToPart(index);
+    }
+    // Remember the last explicit channel so CC 124 (omni off) has something to
+    // go back to instead of guessing.
+    if (patch.rxChannel !== undefined && patch.rxChannel !== 0) {
+      this.preOmniChannel[index] = patch.rxChannel;
     }
     if (patch.noteShift !== undefined) this.parts[index].extraTranspose = cfg.noteShift;
     if (patch.detune !== undefined) this.parts[index].extraDetune = cfg.detune;
@@ -198,6 +348,27 @@ export class SynthRack {
     return this.masterTuneCents_;
   }
 
+  get performanceName(): string {
+    return this.performanceName_;
+  }
+
+  /**
+   * Unified performance load: populate the 8 part configs and voice edit
+   * buffers, and set the performance identity. Used by every load that is not a
+   * library-dropdown pick (MiniDexed .ini, dropped files, etc.). The library
+   * performance index goes to -1 to mark "not a library performance".
+   */
+  loadPerformance(name: string, parts: Partial<PartConfig>[], voices: (Uint8Array | null)[]): void {
+    for (let i = 0; i < NUM_PARTS; i++) {
+      const patch = parts[i];
+      if (patch && Object.keys(patch).length > 0) this.setPartConfig(i, patch);
+      const voice = voices[i];
+      if (voice) this.loadVoiceForPart(i, voice);
+    }
+    this.performanceName_ = name;
+    this.library.performanceIndex = -1;
+  }
+
   loadVoiceForPart(index: number, patch: Uint8Array, supplement?: Uint8Array): void {
     if (index < 0 || index >= NUM_PARTS) return;
     if (supplement) this.parts[index].loadVoiceSlot(patch, supplement);
@@ -227,9 +398,11 @@ export class SynthRack {
       banks,
       performances: copyPerformances(this.library.performances),
       performanceIndex: this.library.performanceIndex,
+      performanceName: this.performanceName_,
       parts: this.configs.map((c) => ({ ...c, voice: { ...c.voice } })),
       selectedPart: this.selected,
-      masterTuneCents: this.masterTuneCents_,
+      global: this.getGlobalSettings(),
+      microtunings: this.library.microtunings.map((m) => m.slice()),
       editBuffers: this.parts.map((p) => ({
         voice: p.getVoiceData(),
         supplement: p.getSupplementData(),
@@ -239,7 +412,9 @@ export class SynthRack {
 
   /** Restore a getFullState snapshot. Throws on schema mismatch or bad data. */
   restoreFullState(state: RackState): void {
-    if (!state || state.schema !== RACK_STATE_SCHEMA) {
+    // Accept the current schema and older ones (new fields default below);
+    // reject only unknown/newer snapshots we cannot interpret.
+    if (!state || typeof state.schema !== 'number' || state.schema > RACK_STATE_SCHEMA) {
       throw new Error('unsupported rack state schema');
     }
     this.library.clear();
@@ -255,10 +430,12 @@ export class SynthRack {
       }
     }
     this.library.performances = copyPerformances(state.performances);
-    this.library.performanceIndex = Math.max(
-      0,
-      Math.min(state.performances.length - 1, state.performanceIndex),
-    );
+    // -1 means "not a library performance" (loaded from a file); otherwise clamp.
+    this.library.performanceIndex =
+      state.performanceIndex < 0
+        ? -1
+        : Math.max(0, Math.min(state.performances.length - 1, state.performanceIndex));
+    this.performanceName_ = state.performanceName ?? '';
     for (let i = 0; i < NUM_PARTS; i++) {
       const src = state.parts[i];
       const { voiceLabel: _label, ...cfg } = src ?? defaultPartConfig(i === 0);
@@ -267,7 +444,13 @@ export class SynthRack {
     if (state.selectedPart >= 0 && state.selectedPart < NUM_PARTS) {
       this.selected = state.selectedPart;
     }
-    this.applyMasterTuneCents(state.masterTuneCents);
+    // Micro-tuning tables must be in place before applyGlobalSettings selects one.
+    this.library.microtunings = (state.microtunings ?? []).map((m) => m.slice());
+    // Global settings (schema 2+); fall back to the v1 top-level masterTuneCents.
+    const legacy = state as unknown as { masterTuneCents?: number };
+    this.applyGlobalSettings(
+      state.global ?? { masterTuneCents: legacy.masterTuneCents ?? 0, microtuning: -1 },
+    );
     // Edit buffers last so unsaved edits win over the bank slot contents.
     state.editBuffers?.forEach((eb, i) => {
       if (i < NUM_PARTS && eb?.voice?.length >= 156 && eb?.supplement?.length >= 35) {
@@ -285,6 +468,7 @@ export class SynthRack {
     const perfs = this.library.performances;
     if (index < 0 || index >= perfs.length) return;
     this.library.performanceIndex = index;
+    this.performanceName_ = perfs[index].name;
     const { parts } = perfs[index];
     for (let i = 0; i < NUM_PARTS; i++) {
       this.setPartConfig(i, { ...defaultPartConfig(false), ...parts[i] });
@@ -296,10 +480,11 @@ export class SynthRack {
     }
   }
 
-  getPerformanceState(): { names: string[]; index: number } {
+  getPerformanceState(): { names: string[]; index: number; name: string } {
     return {
       names: this.library.performances.map((p) => p.name),
       index: this.library.performanceIndex,
+      name: this.performanceName_,
     };
   }
 
@@ -330,6 +515,12 @@ export class SynthRack {
 
   getVoiceData(index = this.selected): Uint8Array {
     return this.parts[index].getVoiceData();
+  }
+
+  /** Voice name held in each part's edit buffer (the live 156-byte voice),
+   * independent of the library slot the part was loaded from. */
+  getVoiceNames(): string[] {
+    return this.parts.map((p) => getVoiceName(p.getVoiceData()));
   }
 
   getSupplementData(index = this.selected): Uint8Array {
@@ -391,7 +582,7 @@ export class SynthRack {
   }
 
   private enforceCap(needed: number): void {
-    let guard = NUM_PARTS * 16 + needed;
+    let guard = NUM_PARTS * MAX_ACTIVE_NOTES + needed;
     while (this.totalActiveVoices() + needed > this.polyphonyCap && guard-- > 0) {
       let bestPart = -1;
       let bestSeq = Infinity;
@@ -448,10 +639,94 @@ export class SynthRack {
     }
   }
 
-  controlChange(ctrl: number, value: number, channel = 1): void {
+  /** Returns true when the rack configuration changed and the UI needs a refresh. */
+  controlChange(ctrl: number, value: number, channel = 1): boolean {
+    let changed = false;
     for (let i = 0; i < NUM_PARTS; i++) {
       if (!this.matches(i, channel)) continue;
+      const res = this.rackControlChange(i, ctrl, value);
+      if (res === 'config') changed = true;
+      if (res !== 'pass') continue;
       for (const m of this.groupMembers(i)) this.parts[m].controlChange(ctrl, value);
+    }
+    return changed;
+  }
+
+  /**
+   * Controllers that belong to the rack rather than to a voice: mixer settings,
+   * bank select and the channel-mode messages. 'pass' lets the CC through to the
+   * part, 'config' also tells the caller the mixer view is now stale.
+   */
+  private rackControlChange(
+    index: number,
+    ctrl: number,
+    value: number,
+  ): 'pass' | 'held' | 'config' {
+    const norm = value / 127;
+    switch (ctrl) {
+      case 0:
+        this.bankMsb[index] = value;
+        return 'held';
+      case 32:
+        this.selectBank(index, (this.bankMsb[index] << 7) | value);
+        return 'config';
+      case 7:
+        this.setPartConfig(index, { volume: norm });
+        return 'config';
+      case 10:
+        this.setPartConfig(index, { pan: (value - 64) / 64 });
+        return 'config';
+      case 71:
+        this.setPartConfig(index, { resonance: norm });
+        return 'config';
+      case 74:
+        this.setPartConfig(index, { cutoff: norm });
+        return 'config';
+      case 91:
+        this.setPartConfig(index, { reverbSend: norm });
+        return 'config';
+      case 94:
+        // Onto the same -7..+7 the part rack offers.
+        this.setPartConfig(index, { detune: Math.round(((value - 64) / 64) * 7) });
+        return 'config';
+      case 124:
+        this.setPartConfig(index, { rxChannel: this.preOmniChannel[index] });
+        return 'config';
+      case 125:
+        this.setPartConfig(index, { rxChannel: 0 });
+        return 'config';
+      case 126:
+      case 127:
+        for (const m of this.groupMembers(index)) this.parts[m].setMonoMode(ctrl === 126);
+        return 'held';
+      default:
+        return 'pass';
+    }
+  }
+
+  /**
+   * Bank select for one part. Our four half-banks are the whole address space,
+   * so anything past them is ignored rather than wrapped - as on MiniDexed,
+   * selecting a bank that is not loaded does nothing.
+   */
+  private selectBank(index: number, bank: number): void {
+    const id = VOICE_BANK_ORDER[bank];
+    if (!id) return;
+    this.setVoiceRefForPart(index, { bank: id, program: this.configs[index].voice.program });
+  }
+
+  /**
+   * Program change. Four half-banks of 32 make one flat 128-program space, so
+   * MiniDexed's ExpandPCAcrossBanks is the natural reading: the top two bits
+   * step forward from the part's current bank without selecting a new one.
+   */
+  programChange(program: number, channel = 1): void {
+    for (let i = 0; i < NUM_PARTS; i++) {
+      if (!this.matches(i, channel)) continue;
+      const cur = this.configs[i].voice;
+      const bank = VOICE_BANK_ORDER[VOICE_BANK_ORDER.indexOf(cur.bank) + (program >> 5)];
+      if (!bank) continue;
+      this.setVoiceRefForPart(i, { bank, program: program & 0x1f });
     }
   }
 
@@ -485,25 +760,54 @@ export class SynthRack {
     for (const p of this.parts) p.panic();
   }
 
+  /**
+   * Rack-wide meter state. Called from the audio thread, so it fills and returns
+   * a reused object (whose arrays alias the selected part's) instead of
+   * allocating. Callers must read the result before the next render; hold a copy
+   * if you need a snapshot.
+   */
   getStatus(): RackStatus {
     const s = this.parts[this.selected].getStatus();
-    const partActivity = this.parts.map((p) => p.activeVoiceCount());
-    return {
-      selectedPart: this.selected,
-      amps: s.amps,
-      steps: s.steps,
-      pitchStep: s.pitchStep,
-      lfo: s.lfo,
-      partActivity,
-      totalActive: partActivity.reduce((a, b) => a + b, 0),
-    };
+    const status = this.status;
+    const activity = status.partActivity;
+    let total = 0;
+    for (let i = 0; i < NUM_PARTS; i++) {
+      const n = this.parts[i].activeVoiceCount();
+      activity[i] = n;
+      total += n;
+    }
+    status.selectedPart = this.selected;
+    status.amps = s.amps;
+    status.steps = s.steps;
+    status.levels = s.levels;
+    status.pitchStep = s.pitchStep;
+    status.pitchLevel = s.pitchLevel;
+    status.lfo = s.lfo;
+    status.lfoRestart = s.lfoRestart;
+    status.totalActive = total;
+    return status;
+  }
+
+  /** Grow the mix scratch buffers to cover a larger block than seen so far. */
+  private ensureBuffers(numSamples: number): void {
+    if (this.scratch.length >= numSamples) return;
+    this.scratch = new Float32Array(numSamples);
+    this.sendL = new Float32Array(numSamples);
+    this.sendR = new Float32Array(numSamples);
+    this.wetL = new Float32Array(numSamples);
+    this.wetR = new Float32Array(numSamples);
   }
 
   render(outL: Float32Array, outR: Float32Array, numSamples: number): void {
-    if (this.scratch.length < numSamples) this.scratch = new Float32Array(numSamples);
+    this.ensureBuffers(numSamples);
     const scratch = this.scratch;
+    const wet = this.reverbSettings.enabled;
     outL.fill(0, 0, numSamples);
     outR.fill(0, 0, numSamples);
+    if (wet) {
+      this.sendL.fill(0, 0, numSamples);
+      this.sendR.fill(0, 0, numSamples);
+    }
 
     for (let i = 0; i < NUM_PARTS; i++) {
       // A linked slave is voiced by its master's volume/pan/enabled so the group
@@ -511,12 +815,40 @@ export class SynthRack {
       const cfg = this.configs[this.masterIndexOf(i)];
       if (!cfg.enabled) continue;
       this.parts[i].render(scratch, numSamples);
+      // Volume runs through the filter's ramped gain rather than the mix, so a
+      // volume change slews over 100 ms instead of stepping.
+      const fx = this.partFx[i];
+      fx.gain = cfg.volume;
+      fx.cutoff = cfg.cutoff;
+      fx.resonance = cfg.resonance;
+      fx.process(scratch, numSamples);
+      if (this.compressorEnabled) this.compressors[i].process(scratch, numSamples);
+
       const th = (cfg.pan + 1) * 0.25 * Math.PI;
-      const gl = Math.cos(th) * cfg.volume;
-      const gr = Math.sin(th) * cfg.volume;
+      const gl = Math.cos(th);
+      const gr = Math.sin(th);
       for (let j = 0; j < numSamples; j++) {
         outL[j] += scratch[j] * gl;
         outR[j] += scratch[j] * gr;
+      }
+
+      // Post-fader and post-pan, on MiniDexed's fourth-power mixer taper.
+      if (!wet || cfg.reverbSend <= 0) continue;
+      const send = cfg.reverbSend ** 4;
+      const sl = gl * send;
+      const sr = gr * send;
+      for (let j = 0; j < numSamples; j++) {
+        this.sendL[j] += scratch[j] * sl;
+        this.sendR[j] += scratch[j] * sr;
+      }
+    }
+
+    if (wet) {
+      this.reverb.process(this.sendL, this.sendR, this.wetL, this.wetR, numSamples);
+      const level = this.reverbSettings.level;
+      for (let j = 0; j < numSamples; j++) {
+        outL[j] += this.wetL[j] * level;
+        outR[j] += this.wetR[j] * level;
       }
     }
 

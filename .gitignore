@@ -47,9 +47,14 @@ out/
 .claude/
 .cursor/
 .vscode/
+.idea/
 
 # JUCE reference tree (separate repo, kept locally only)
 dexed-juce/
+
+# CMake build tree for the plugin
+texed-vst/build/
+texed-vst/libs/
 
 # Local tooling / data (not part of the project)
 tools/

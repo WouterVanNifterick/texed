@@ -2,29 +2,27 @@
 // Result is Q24/octave, subsampled once per N-sample block.
 
 import { N } from './synth';
+import { pitchIncAt, pitchLevelAt } from './env-tables';
+import { EGS_UNIT_Q24, SLOW_TICK_HZ, isHardwareAccurate } from './engine-accuracy';
+
+export { pitchenvRate, pitchenvTab } from './env-tables';
 
 let unit = 0;
 
-// prettier-ignore
-export const pitchenvRate = [
-  1, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12,
-  12, 13, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 21, 22, 23, 24,
-  25, 26, 27, 28, 30, 31, 33, 34, 36, 37, 38, 39, 41, 42, 44, 46, 47,
-  49, 51, 53, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 79, 82,
-  85, 88, 91, 94, 98, 102, 106, 110, 115, 120, 125, 130, 135, 141, 147,
-  153, 159, 165, 171, 178, 185, 193, 202, 211, 232, 243, 254, 255,
-];
-
-// prettier-ignore
-export const pitchenvTab = [
-  -128, -116, -104, -95, -85, -76, -68, -61, -56, -52, -49, -46, -43,
-  -41, -39, -37, -35, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24,
-  -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10,
-  -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
-  28, 29, 30, 31, 32, 33, 34, 35, 38, 40, 43, 46, 49, 53, 58, 65, 73,
-  82, 92, 103, 115, 127,
-];
+/**
+ * Q24 pitch increment per block for one unit of pitch EG rate.
+ *
+ * PITCH_EG_PROCESS adds the rate byte straight to the 4096-per-octave voice
+ * pitch, on every other output-compare interrupt. msfa's 21.3 assumes a
+ * ~192.3 Hz tick against the hardware's ~187.63 Hz, i.e. 2.5% fast.
+ *
+ * Exported so env-sim draws the same curve the engine plays.
+ */
+export function pitchEnvUnit(sampleRate: number): number {
+  return isHardwareAccurate()
+    ? Math.floor((N * EGS_UNIT_Q24 * SLOW_TICK_HZ) / sampleRate + 0.5)
+    : Math.floor((N * (1 << 24)) / (21.3 * sampleRate) + 0.5);
+}
 
 export class PitchEnv {
   private rates = new Int32Array(4);
@@ -37,7 +35,7 @@ export class PitchEnv {
   private down = true;
 
   static init(sampleRate: number): void {
-    unit = Math.floor((N * (1 << 24)) / (21.3 * sampleRate) + 0.5);
+    unit = pitchEnvUnit(sampleRate);
   }
 
   set(r: ArrayLike<number>, l: ArrayLike<number>): void {
@@ -45,7 +43,7 @@ export class PitchEnv {
       this.rates[i] = r[i];
       this.levels[i] = l[i];
     }
-    this.level = pitchenvTab[l[3]] << 19;
+    this.level = pitchLevelAt(l[3]);
     this.down = true;
     this.advance(0);
   }
@@ -80,13 +78,18 @@ export class PitchEnv {
     this.ix = newix;
     if (this.ix < 4) {
       const newlevel = this.levels[this.ix];
-      this.targetlevel = pitchenvTab[newlevel] << 19;
+      this.targetlevel = pitchLevelAt(newlevel);
       this.rising = this.targetlevel > this.level;
-      this.inc = pitchenvRate[this.rates[this.ix]] * unit;
+      this.inc = pitchIncAt(this.rates[this.ix], unit);
     }
   }
 
   getPosition(): number {
     return this.ix;
+  }
+
+  /** Current Q24-per-octave level (matches env-sim's pitch curve units). */
+  getLevel(): number {
+    return this.level;
   }
 }

@@ -3,13 +3,25 @@
 // the same bit math; the wave itself runs during the delay but its effective
 // modulation depth is gated by the ramp, which is what we draw.
 
+import { useEffect, useRef, useState } from 'react';
 import { lfoSource } from '@texed/dx7-engine/lfo';
+import { useStatus, type SynthStatus } from '../audio/useSynth';
+
+type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
+const NO_SUB: Subscribe = () => () => {};
 
 const W = 120;
 const H = 40;
 const PAD = 2;
-const SAMPLES = 360;
+// Enough points for the full DX7 LFO range (~0.06–49 Hz) in WINDOW seconds
+// without the polyline collapsing into an aliased flat density.
+const SAMPLES = 960;
+const MIN_SAMPLES_PER_CYCLE = 4;
 const WINDOW = 2; // seconds shown when the delay fits; extends for long delays
+const START_PHASE = 0.5; // Lfo.keydown() starts synced waves halfway through their cycle
+// Engine: delta = trunc(lfoSource[rate] * 4437500000*N/sampleRate); freq =
+// delta/2^32 * sampleRate/N ⇒ lfoSource[rate] * 4437500000 / 2^32 Hz.
+const LFO_HZ_SCALE = 4437500000 / 2 ** 32;
 
 // Deterministic S&H steps using the engine's LCG (randstate * 179 + 17).
 const SH: number[] = (() => {
@@ -46,9 +58,34 @@ interface LfoGraphProps {
   waveform: number; // 0..5
   speed: number; // 0..99
   delay: number; // 0..99
+  subscribe?: Subscribe; // live status stream, for the playback dot
 }
 
-export function LfoGraph({ waveform, speed, delay }: LfoGraphProps) {
+export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {
+  const playing = useStatus(subscribe ?? NO_SUB, (s) => s.totalActive > 0, false);
+  const restart = useStatus(subscribe ?? NO_SUB, (s) => s.lfoRestart, 0);
+
+  // The dot sweeps a wall-clock anchored at the exact note-on that (re)started
+  // the engine LFO — `lfoRestart` increments there. Using that signal (rather
+  // than "something sounding") means a new note restarts the sweep even while
+  // an earlier note is still ringing out on a long release.
+  const epochRef = useRef(0);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    epochRef.current = performance.now();
+  }, [restart]);
+
+  // Animate smoothly while a note is audible (including the release tail).
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const loop = () => {
+      setTick((t) => t + 1);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
   // Delay hold + ramp durations in seconds (see Lfo.reset: state advances by
   // unit*a per block, unit*samplerate/N ≈ 25190424, target 2^31).
   const a = 99 - Math.min(99, Math.max(0, delay));
@@ -61,11 +98,13 @@ export function LfoGraph({ waveform, speed, delay }: LfoGraphProps) {
     ramp = 2 ** 31 / 25190424 / a2;
   }
 
-  const period = 1 / lfoSource[Math.min(99, Math.max(0, speed))];
-  // Fixed time window so speed reads as cycle density; only stretch it when
-  // a long delay wouldn't fit. Cap the cycle count so fast LFOs stay readable.
+  const period = 1 / (lfoSource[Math.min(99, Math.max(0, speed))] * LFO_HZ_SCALE);
+  // Fixed time window so speed reads as cycle density; stretch only when a
+  // long delay wouldn't fit. Cap cycles from the sample budget so 0-99 stay
+  // visually distinct without the polyline collapsing.
   const total = Math.max(WINDOW, (hold + ramp) * 1.25);
-  const drawPeriod = Math.max(period, total / 28);
+  const maxCycles = SAMPLES / MIN_SAMPLES_PER_CYCLE;
+  const drawPeriod = Math.max(period, total / maxCycles);
 
   const amp = H / 2 - PAD;
   const env = (t: number) => (t < hold ? 0 : t < hold + ramp ? (t - hold) / ramp : 1);
@@ -75,19 +114,41 @@ export function LfoGraph({ waveform, speed, delay }: LfoGraphProps) {
   for (let i = 0; i <= SAMPLES; i++) {
     const t = (total * i) / SAMPLES;
     const x = ((W * i) / SAMPLES).toFixed(1);
-    pts.push(`${x},${(H / 2 - env(t) * wave(waveform, t / drawPeriod) * amp).toFixed(1)}`);
+    pts.push(
+      `${x},${(H / 2 - env(t) * wave(waveform, START_PHASE + t / drawPeriod) * amp).toFixed(1)}`,
+    );
     envTop.push(`${x},${(H / 2 - env(t) * amp).toFixed(1)}`);
   }
 
   const hasDelay = hold + ramp > 0;
   const delayX = (W * (hold + ramp)) / total;
 
+  // Playback dot: elapsed time since the last note-on, mapped onto the time
+  // axis so it starts at the left (note-on), sweeps through the delay ramp and
+  // into the oscillation, sitting exactly on the drawn (delay-gated) waveform.
+  // Past the window it loops one steady cycle so it stays in view.
+  const elapsed = (performance.now() - epochRef.current) / 1000;
+  const delayEnd = hold + ramp;
+  let dotT = elapsed;
+  if (dotT > total) dotT = delayEnd + ((elapsed - delayEnd) % drawPeriod);
+  const dotX = (W * dotT) / total;
+  const dotY = H / 2 - env(dotT) * wave(waveform, START_PHASE + dotT / drawPeriod) * amp;
+
   return (
-    <svg className="lfo-graph" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
-      {hasDelay && <rect x={0} y={0} width={delayX} height={H} className="lfo-delay-zone" />}
-      <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="scale-baseline" />
-      {hasDelay && <polyline className="lfo-env" points={envTop.join(' ')} />}
-      <polyline className="lfo-wave" points={pts.join(' ')} />
-    </svg>
+    <div className="lfo-graph">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+        {hasDelay && <rect x={0} y={0} width={delayX} height={H} className="lfo-delay-zone" />}
+        <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="scale-baseline" />
+        {hasDelay && <polyline className="lfo-env" points={envTop.join(' ')} />}
+        <polyline className="lfo-wave" points={pts.join(' ')} />
+      </svg>
+      {playing && (
+        <span
+          className="lfo-playhead"
+          style={{ left: `${(dotX / W) * 100}%`, top: `${(dotY / H) * 100}%` }}
+          aria-hidden
+        />
+      )}
+    </div>
   );
 }

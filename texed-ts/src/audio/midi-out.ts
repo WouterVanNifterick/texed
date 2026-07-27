@@ -3,13 +3,13 @@
 // inherently one device, so this is a module singleton. All emitters no-op until
 // a connection + target are configured, so the disabled path costs one branch.
 
-import { voiceToSysex } from '@texed/dx7-format/params';
+import { vcedFromVoice } from '@texed/dx7-format/sysex';
 import { acedToSysex } from '@texed/dx7-format/amem';
 import { voiceParamChangeSysex } from '@texed/dx7-format/sysex';
 import { HardwareMidiPort } from './hardware-midi-port';
 import type { MidiConnection } from './midi';
 
-/** Hardware editing port (?hw mode): pass to useDexedSynth to edit a hardware
+/** Hardware editing port (?hw mode): pass to useSynth to edit a hardware
  * synth instead of the local engine. Bound to the same connection and output
  * target as the live mirror below, so the settings UI drives both. */
 export const hardwarePort = new HardwareMidiPort();
@@ -42,7 +42,7 @@ function send(bytes: Uint8Array | number[]): void {
 export function sendVoiceDump(voice: Uint8Array, supplement: Uint8Array): void {
   if (!outId || !conn) return;
   send(acedToSysex(supplement));
-  send(voiceToSysex(voice));
+  send(vcedFromVoice(voice));
 }
 
 /** Live VCED single-parameter change (offset 0-155 into the 156-byte voice). */

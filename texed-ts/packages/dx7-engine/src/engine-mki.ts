@@ -60,6 +60,10 @@ function mkiSin(phase: number, env: number): number {
 }
 
 export class EngineMkI extends FmCore {
+  // Reused copy of the algorithm row, since render patches byte 0 for the
+  // feedback variants of algorithms 4 and 6 and must not touch the shared table.
+  private readonly algBuf = new Uint8Array(6);
+
   private compute(
     output: Int32Array,
     input: Int32Array,
@@ -135,31 +139,30 @@ export class EngineMkI extends FmCore {
     fbBuf: Int32Array,
     fbShift: number,
   ): void {
-    const dgain = [0, 0];
-    const gain = [0, 0];
-    const phase = [parms[0].phase, parms[1].phase];
+    let phase0 = parms[0].phase;
+    let phase1 = parms[1].phase;
     let y0 = fbBuf[0];
     let y = fbBuf[1];
 
     parms[1].gainOut = ENV_MAX - (parms[1].levelIn >> (28 - ENV_BITDEPTH));
 
-    gain[0] = gain01;
-    gain[1] = parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut;
+    let gain0 = gain01;
+    let gain1 = parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut;
 
-    dgain[0] = (gain02 - gain01 + (N >> 1)) >> LG_N;
-    dgain[1] = parms[1].gainOut - (parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut);
+    const dgain0 = (gain02 - gain01 + (N >> 1)) >> LG_N;
+    const dgain1 = parms[1].gainOut - (parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut);
 
     for (let i = 0; i < N; i++) {
       const scaledFb = (y0 + y) >> (fbShift + 1);
 
-      gain[0] = (gain[0] + dgain[0]) | 0;
+      gain0 = (gain0 + dgain0) | 0;
       y0 = y;
-      y = mkiSin((phase[0] + scaledFb) | 0, gain[0]);
-      phase[0] = (phase[0] + parms[0].freq) | 0;
+      y = mkiSin((phase0 + scaledFb) | 0, gain0);
+      phase0 = (phase0 + parms[0].freq) | 0;
 
-      gain[1] = (gain[1] + dgain[1]) | 0;
-      y = mkiSin((phase[1] + y) | 0, gain[1]);
-      phase[1] = (phase[1] + parms[1].freq) | 0;
+      gain1 = (gain1 + dgain1) | 0;
+      y = mkiSin((phase1 + y) | 0, gain1);
+      phase1 = (phase1 + parms[1].freq) | 0;
 
       output[i] = y;
     }
@@ -176,38 +179,38 @@ export class EngineMkI extends FmCore {
     fbBuf: Int32Array,
     fbShift: number,
   ): void {
-    const dgain = [0, 0, 0];
-    const gain = [0, 0, 0];
-    const phase = [parms[0].phase, parms[1].phase, parms[2].phase];
+    let phase0 = parms[0].phase;
+    let phase1 = parms[1].phase;
+    let phase2 = parms[2].phase;
     let y0 = fbBuf[0];
     let y = fbBuf[1];
 
     parms[1].gainOut = ENV_MAX - (parms[1].levelIn >> (28 - ENV_BITDEPTH));
     parms[2].gainOut = ENV_MAX - (parms[2].levelIn >> (28 - ENV_BITDEPTH));
 
-    gain[0] = gain01;
-    gain[1] = parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut;
-    gain[2] = parms[2].gainOut === 0 ? ENV_MAX - 1 : parms[2].gainOut;
+    let gain0 = gain01;
+    let gain1 = parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut;
+    let gain2 = parms[2].gainOut === 0 ? ENV_MAX - 1 : parms[2].gainOut;
 
-    dgain[0] = (gain02 - gain01 + (N >> 1)) >> LG_N;
-    dgain[1] = parms[1].gainOut - (parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut);
-    dgain[2] = parms[2].gainOut - (parms[2].gainOut === 0 ? ENV_MAX - 1 : parms[2].gainOut);
+    const dgain0 = (gain02 - gain01 + (N >> 1)) >> LG_N;
+    const dgain1 = parms[1].gainOut - (parms[1].gainOut === 0 ? ENV_MAX - 1 : parms[1].gainOut);
+    const dgain2 = parms[2].gainOut - (parms[2].gainOut === 0 ? ENV_MAX - 1 : parms[2].gainOut);
 
     for (let i = 0; i < N; i++) {
       const scaledFb = (y0 + y) >> (fbShift + 1);
 
-      gain[0] = (gain[0] + dgain[0]) | 0;
+      gain0 = (gain0 + dgain0) | 0;
       y0 = y;
-      y = mkiSin((phase[0] + scaledFb) | 0, gain[0]);
-      phase[0] = (phase[0] + parms[0].freq) | 0;
+      y = mkiSin((phase0 + scaledFb) | 0, gain0);
+      phase0 = (phase0 + parms[0].freq) | 0;
 
-      gain[1] = (gain[1] + dgain[1]) | 0;
-      y = mkiSin((phase[1] + y) | 0, gain[1]);
-      phase[1] = (phase[1] + parms[1].freq) | 0;
+      gain1 = (gain1 + dgain1) | 0;
+      y = mkiSin((phase1 + y) | 0, gain1);
+      phase1 = (phase1 + parms[1].freq) | 0;
 
-      gain[2] = (gain[2] + dgain[2]) | 0;
-      y = mkiSin((phase[2] + y) | 0, gain[2]);
-      phase[2] = (phase[2] + parms[2].freq) | 0;
+      gain2 = (gain2 + dgain2) | 0;
+      y = mkiSin((phase2 + y) | 0, gain2);
+      phase2 = (phase2 + parms[2].freq) | 0;
 
       output[i] = y;
     }
@@ -223,8 +226,13 @@ export class EngineMkI extends FmCore {
     feedbackShift: number,
   ): void {
     const kLevelThresh = ENV_MAX - 100;
-    const alg = algorithms[algorithm].slice();
-    const hasContents = [true, false, false];
+    const src = algorithms[algorithm];
+    const alg = this.algBuf;
+    for (let i = 0; i < 6; i++) alg[i] = src[i];
+    const hasContents = this.hasContents;
+    hasContents[0] = true;
+    hasContents[1] = false;
+    hasContents[2] = false;
     const fbOn = feedbackShift < 16;
 
     if ((algorithm === 3 || algorithm === 5) && fbOn) {

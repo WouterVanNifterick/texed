@@ -49,12 +49,60 @@ describe('loadSysexFile - TX7 cassette', () => {
     ]);
   });
 
+  // The two 4D param changes tag the halves of one 64-voice memory, not
+  // internal-vs-cartridge; these performances reference INT slots only.
   it('loads both bank groups, AMEM, performances, and system setup', () => {
-    expect(result.library.populatedBanks()).toContain('internalA');
-    expect(result.library.populatedBanks()).toContain('cartridgeA');
+    expect(result.library.populatedBanks()).toEqual(['internalA', 'internalB']);
     expect(result.library.performances.length).toBe(32);
     expect(result.library.systemSetup).not.toBeNull();
     expect(result.report.applied.some((a) => a.includes('8973S'))).toBe(true);
+  });
+
+  it('resolves every referenced part voice', () => {
+    const unresolved = result.library.performances
+      .flatMap((p) => p.parts)
+      .filter((part) => part.enabled !== false && part.voice)
+      .filter((part) => !result.library.resolve(part.voice!));
+    expect(unresolved).toEqual([]);
+  });
+});
+
+/**
+ * `F0 43 10 19 4D vv` selects the half of a 64-voice memory (0 = 1-32,
+ * 1 = 33-64). Which memory - internal or cartridge - is only knowable from the
+ * performances travelling with the dumps, so these files used to land half
+ * their voices in the wrong bank and resolve part references to nothing.
+ */
+describe('loadSysexFile - VMEM half tags', () => {
+  it('puts a tagged internal pair in internalA + internalB', () => {
+    const lib = loadSysexFile(patch('DX7IIFD_Factory/INTERNAL.SYX')).library;
+    expect(lib.populatedBanks()).toEqual(['internalA', 'internalB']);
+  });
+
+  it('puts a tagged cartridge pair in cartridgeA + cartridgeB', () => {
+    const lib = loadSysexFile(patch('DX7s_Factory/CART.syx')).library;
+    expect(lib.populatedBanks()).toEqual(['cartridgeA', 'cartridgeB']);
+  });
+
+  it('sends an untagged pair to the memory its performances reference', () => {
+    // No 4D frames at all; the CRT references are the only signal.
+    const lib = loadSysexFile(patch('DX7II_Collections/ChiNoMaki/A.syx')).library;
+    expect(lib.populatedBanks()).toEqual(['cartridgeA', 'cartridgeB']);
+  });
+
+  it('places a lone dump where its performances point, ignoring the tag', () => {
+    const lib = loadSysexFile(patch('DX7II_Collections/Jugosi/Dera DX7.syx')).library;
+    expect(lib.populatedBanks()).toEqual(['internalB']);
+  });
+
+  it('defaults to internal for a plain bank dump with no performances', () => {
+    const lib = loadSysexFile(patch('TX802_Collections/802PRG1.SYX')).library;
+    expect(lib.populatedBanks()).toEqual(['internalA']);
+  });
+
+  it('sends a half-B bank dump to internalB', () => {
+    const lib = loadSysexFile(patch('TX802_Collections/TXSEL_1B.SYX')).library;
+    expect(lib.populatedBanks()).toEqual(['internalB']);
   });
 });
 

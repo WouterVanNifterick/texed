@@ -6,7 +6,7 @@
 
 import type { VoiceBankId } from './voice-library';
 
-export const LIBRARY_SCHEMA = 1;
+export const LIBRARY_SCHEMA = 2;
 
 /** How a bank's blob file is encoded. */
 export const LibBankFormat = {
@@ -18,7 +18,7 @@ export const LibBankFormat = {
 export type LibBankFormat = (typeof LibBankFormat)[keyof typeof LibBankFormat];
 
 export interface LibBank {
-  /** Unique within the manifest, e.g. "fs1r/bank-0" or "tx802-factory/a1". */
+  /** Unique within the manifest, e.g. "fs1r/bank-0" or "tx802-factory/a1.syx#internalA". */
   id: string;
   name: string;
   /** Path relative to public/library/ (also the blob cache key). */
@@ -36,31 +36,59 @@ export interface LibBank {
    * plain DX7 voices and never set this.
    */
   hasAmem?: boolean;
+  /** Voice indices whose AMEM differs from the default, when hasAmem. */
+  amemVoices?: number[];
   /** Display names, one per voice (32 for syx half-banks, 128 for FS1R). */
   voices: string[];
 }
 
-export interface LibPerfSet {
+/**
+ * Data riding along in a set's files that is neither voices nor performances.
+ * Recorded so the browser can say what a load drags in; loading behaviour is
+ * unchanged (microtunings stored, system setup applied, the rest skipped).
+ */
+export interface LibExtras {
+  microtunings?: number;
+  systemSetup?: boolean;
+  fractionalScale?: number;
+}
+
+/** One half-bank slot of the rack, and the bank a set loads into it. */
+export interface LibSlot {
+  slot: VoiceBankId;
+  bankId: string;
+  /** First voice of the bank to copy; only 128-voice banks span several slots. */
+  start?: number;
+}
+
+/**
+ * A group of files that belong together: a performance bank plus the voice
+ * banks its parts reference, or a standalone voice bank nothing refers to.
+ */
+export interface LibSet {
   /** Unique within the manifest. */
   id: string;
   name: string;
+  kind: 'performance' | 'voices';
   /** Path relative to public/library/ of the syx carrying the performances. */
-  file: string;
+  perfFile?: string;
   /** Performance display names in bank order. */
-  names: string[];
-  /**
-   * Bank blob files (manifest-relative) that must be loaded into the four
-   * half-banks (internalA..cartridgeB order) before these performances
-   * resolve their voice references. Empty when the file is self-contained.
-   */
-  requiresBankFiles: string[];
+  performances?: string[];
+  /** Which bank goes into which half-bank slot when the set is loaded. */
+  slots: LibSlot[];
+  /** Half-banks the performances reference that no bank in the set fills. */
+  unresolvedSlots?: VoiceBankId[];
+  extras?: LibExtras;
+  /** Files grouped here that the sysex loader cannot read. */
+  unsupported?: string[];
 }
 
 export interface LibCollection {
   id: string;
   name: string;
+  /** Every bank in the collection, addressed by id from `sets`. */
   banks: LibBank[];
-  performanceSets: LibPerfSet[];
+  sets: LibSet[];
 }
 
 export interface LibraryManifest {

@@ -5,13 +5,14 @@
 import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
 import { voiceFromRawVced } from '@texed/dx7-format/sysex';
 import { AMEM_SLOT_SIZE } from '@texed/dx7-format/amem';
-import { VOICE_BANK_ORDER, type VoiceLibrary } from '@texed/dx7-format/voice-library';
+import { VoiceLibrary, type VoiceBankId } from '@texed/dx7-format/voice-library';
 import { VOICE_SIZE, VOICES_PER_BANK } from '@texed/dx7-format/voice';
 import {
   isLibraryManifest,
   type LibBank,
-  type LibPerfSet,
+  type LibCollection,
   type LibraryManifest,
+  type LibSet,
 } from '@texed/dx7-format/library-manifest';
 
 /** A VCED is the voice without the operator on/off byte the editor adds. */
@@ -76,6 +77,11 @@ function getParsedSyx(file: string): Promise<VoiceLibrary> {
   return p;
 }
 
+/** The bank a set's slot points at, or undefined when the manifest is stale. */
+export function bankById(collection: LibCollection, id: string): LibBank | undefined {
+  return collection.banks.find((b) => b.id === id);
+}
+
 export interface LibVoiceData {
   /** 156-byte unpacked voice. */
   voice: Uint8Array;
@@ -107,7 +113,7 @@ export interface LibBankData {
 
 /** 32 voices starting at `start`, packed for synth.loadBankInto. */
 export async function getBankVoices(bank: LibBank, start = 0): Promise<LibBankData> {
-  const count = Math.max(0, Math.min(32, bank.voices.length - start));
+  const count = Math.max(0, Math.min(VOICES_PER_BANK, bank.voices.length - start));
   const voices = new Uint8Array(count * VOICE_SIZE);
   if (bank.format === 'vced155') {
     const blob = await getBlob(bank.file);
@@ -160,44 +166,117 @@ export function buildSearchIndex(manifest: LibraryManifest): LibVoiceHit[] {
   return hits;
 }
 
-/** The synth methods loadPerformanceSet needs (subset of Synth). */
-export interface PerformanceLoaderSynth {
-  loadBankInto: (
-    bank: (typeof VOICE_BANK_ORDER)[number],
-    voices: Uint8Array,
-    supplements?: Uint8Array,
-  ) => void;
+/** The synth methods the set loaders need (subset of Synth). */
+export interface SetLoaderSynth {
+  loadBankInto: (bank: VoiceBankId, voices: Uint8Array, supplements?: Uint8Array) => void;
   loadCart: (data: ArrayBuffer) => void;
   selectPerformance: (index: number) => void;
 }
 
+/** The set's banks, resolved and paired with the slot each one fills. */
+function slotBanks(
+  collection: LibCollection,
+  set: LibSet,
+): { slot: VoiceBankId; bank: LibBank; start: number }[] {
+  const out: { slot: VoiceBankId; bank: LibBank; start: number }[] = [];
+  for (const s of set.slots) {
+    const bank = bankById(collection, s.bankId);
+    if (bank) out.push({ slot: s.slot, bank, start: s.start ?? 0 });
+  }
+  return out;
+}
+
 /**
- * Load a built-in performance set and select performance `index`: first the
- * voice banks it references (internalA..cartridgeB order), then the file
- * carrying the performances, then the selection. Worklet messages are
- * processed in order, so this is race-free.
+ * Load a set into the rack: its voice banks into the half-bank slots the
+ * grouping worked out, then the file carrying its performances. Worklet
+ * messages are processed in order, so this is race-free.
  */
-export async function loadPerformanceSet(
-  synth: PerformanceLoaderSynth,
-  set: LibPerfSet,
+export async function loadSet(
+  synth: SetLoaderSynth,
+  collection: LibCollection,
+  set: LibSet,
+): Promise<void> {
+  const staged = await Promise.all(
+    slotBanks(collection, set).map(async (s) => ({
+      slot: s.slot,
+      data: await getBankVoices(s.bank, s.start),
+    })),
+  );
+  for (const { slot, data } of staged) {
+    synth.loadBankInto(slot, data.voices, data.supplements);
+  }
+  if (set.perfFile) {
+    const perfBytes = await getBlob(set.perfFile);
+    synth.loadCart(perfBytes.slice().buffer as ArrayBuffer);
+  }
+}
+
+/** Load a set and select one of its performances. */
+export async function loadPerformanceFromSet(
+  synth: SetLoaderSynth,
+  collection: LibCollection,
+  set: LibSet,
   index: number,
 ): Promise<void> {
-  for (let i = 0; i < set.requiresBankFiles.length && i < VOICE_BANK_ORDER.length; i++) {
-    const lib = await getParsedSyx(set.requiresBankFiles[i]);
-    const source = lib.populatedBanks()[0];
-    if (!source) continue;
-    const voices = new Uint8Array(VOICES_PER_BANK * VOICE_SIZE);
-    const supplements = new Uint8Array(VOICES_PER_BANK * AMEM_SLOT_SIZE);
-    for (let p = 0; p < VOICES_PER_BANK; p++) {
-      const slot = lib.resolve({ bank: source, program: p });
-      if (slot) {
-        voices.set(slot.vmem.subarray(0, VOICE_SIZE), p * VOICE_SIZE);
-        supplements.set(slot.amem.subarray(0, AMEM_SLOT_SIZE), p * AMEM_SLOT_SIZE);
-      }
-    }
-    synth.loadBankInto(VOICE_BANK_ORDER[i], voices, supplements);
-  }
-  const perfBytes = await getBlob(set.file);
-  synth.loadCart(perfBytes.slice().buffer as ArrayBuffer);
+  await loadSet(synth, collection, set);
   synth.selectPerformance(index);
+}
+
+/** One part of one performance, as the browser shows it. */
+export interface PerfPartVoice {
+  part: number;
+  enabled: boolean;
+  /** "INT 05 BRASS   1", or "… (bank not loaded)" when the set cannot fill it. */
+  label: string;
+}
+
+const perfVoiceCache = new Map<string, Promise<PerfPartVoice[][]>>();
+
+/**
+ * Part voice names for every performance in a set, resolved against exactly
+ * the banks `loadSet` would stage. Lazy: the files are the same ones a load
+ * fetches, and both share the blob cache.
+ */
+export function getSetPerfVoices(
+  collection: LibCollection,
+  set: LibSet,
+): Promise<PerfPartVoice[][]> {
+  let p = perfVoiceCache.get(set.id);
+  if (!p) {
+    p = resolveSetPerfVoices(collection, set);
+    p.catch(() => perfVoiceCache.delete(set.id));
+    perfVoiceCache.set(set.id, p);
+  }
+  return p;
+}
+
+async function resolveSetPerfVoices(
+  collection: LibCollection,
+  set: LibSet,
+): Promise<PerfPartVoice[][]> {
+  if (!set.perfFile) return [];
+  const perfLib = await getParsedSyx(set.perfFile);
+
+  // Stage the same wiring loadSet applies, so the labels match what you get.
+  const staged = new VoiceLibrary();
+  for (const { slot, bank, start } of slotBanks(collection, set)) {
+    const { voices, supplements } = await getBankVoices(bank, start);
+    const count = Math.floor(voices.length / VOICE_SIZE);
+    const list: Uint8Array[] = [];
+    const amems: Uint8Array[] = [];
+    for (let i = 0; i < count; i++) {
+      list.push(voices.subarray(i * VOICE_SIZE, (i + 1) * VOICE_SIZE));
+      if (supplements)
+        amems.push(supplements.subarray(i * AMEM_SLOT_SIZE, (i + 1) * AMEM_SLOT_SIZE));
+    }
+    staged.loadVoicesInto(slot, list, supplements ? amems : undefined);
+  }
+
+  return perfLib.performances.map((perf) =>
+    perf.parts.map((part, i) => ({
+      part: i,
+      enabled: part.enabled !== false,
+      label: part.voice ? staged.voiceLabel(part.voice) : 'INIT VOICE',
+    })),
+  );
 }

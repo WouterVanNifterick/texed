@@ -6,13 +6,17 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  bankIdOf,
   buildManifest,
   describeSyxFile,
+  groupDirectory,
   packFs1rBank,
   slugifyPath,
+  type DescribedFile,
   type SourceFile,
 } from './patch-library-core.mts';
-import type { LibBank, LibCollection, LibPerfSet } from '@texed/dx7-format/library-manifest';
+import { VOICE_BANK_ORDER } from '@texed/dx7-format/voice-library';
+import type { LibBank, LibCollection, LibSet } from '@texed/dx7-format/library-manifest';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const PATCHES_DIR = path.resolve(scriptDir, '..', '..', 'patches');
@@ -25,8 +29,8 @@ interface CollectionSpec {
   dir: string;
   kind: 'raw' | 'syx';
   /**
-   * For performance-only files: rel path (forward slashes) → the voice bank
-   * files (in internalA..cartridgeB order) the performances reference.
+   * Override for the grouping heuristic: rel path of a performance-only file
+   * (forward slashes) → the voice bank files it uses, in slot order.
    */
   perfBankMap?: Record<string, string[]>;
 }
@@ -78,9 +82,23 @@ function fileStem(relPath: string): string {
     .replace(/\.[^.]+$/, '');
 }
 
+function dirOf(relPath: string): string {
+  const i = relPath.lastIndexOf('/');
+  return i < 0 ? '' : relPath.slice(0, i);
+}
+
+/** "Bank 0" → "Bank A"; the numeric id and blob path stay as they are. */
+function fs1rBankLabel(n: string): string {
+  const idx = Number(n);
+  return Number.isInteger(idx) && idx >= 0 && idx < 26
+    ? `Bank ${String.fromCharCode(65 + idx)}`
+    : `Bank ${n}`;
+}
+
 async function buildFs1rCollection(spec: CollectionSpec): Promise<LibCollection> {
   const root = path.join(PATCHES_DIR, spec.dir);
   const banks: LibBank[] = [];
+  const sets: LibSet[] = [];
   const bankDirs = (await readdir(root, { withFileTypes: true }))
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
@@ -99,30 +117,41 @@ async function buildFs1rCollection(spec: CollectionSpec): Promise<LibCollection>
     const { blob, names } = packFs1rBank(files);
     const n = dirName.replace(/\D+/g, '') || dirName;
     const file = `${spec.id}/bank-${n}.vced.bin`;
+    const id = `${spec.id}/bank-${n}`;
+    const label = fs1rBankLabel(n);
     await writeOut(file, blob);
-    banks.push({
-      id: `${spec.id}/bank-${n}`,
-      name: `Bank ${n}`,
-      file,
-      format: 'vced155',
-      voices: names,
+    banks.push({ id, name: label, file, format: 'vced155', voices: names });
+    // These banks hold 128 voices, so loading the set fills every half-bank.
+    sets.push({
+      id: `${id}#set`,
+      name: label,
+      kind: 'voices',
+      slots: VOICE_BANK_ORDER.filter((_, i) => i * 32 < names.length).map((slot, i) => ({
+        slot,
+        bankId: id,
+        start: i * 32,
+      })),
     });
   }
-  return { id: spec.id, name: spec.name, banks, performanceSets: [] };
+  return { id: spec.id, name: spec.name, banks, sets };
 }
 
 async function buildSyxCollection(spec: CollectionSpec): Promise<LibCollection> {
   const root = path.join(PATCHES_DIR, spec.dir);
   const banks: LibBank[] = [];
-  const performanceSets: LibPerfSet[] = [];
   const copiedPath = (rel: string): string => `${spec.id}/${slugifyPath(rel)}`;
 
-  const syxFiles = (await walkFiles(root)).filter((f) => /\.syx$/i.test(f));
-  for (const rel of syxFiles) {
+  // Describe every file first, then group each directory on its own.
+  const byDir = new Map<string, DescribedFile[]>();
+  const unsupportedByDir = new Map<string, string[]>();
+  const patchFiles = (await walkFiles(root)).filter((f) => /\.(syx|mx)$/i.test(f));
+
+  for (const rel of patchFiles) {
     const bytes = new Uint8Array(await readFile(path.join(root, rel)));
     const desc = describeSyxFile(bytes);
-    if (desc.banks.length === 0 && desc.performanceNames.length === 0) {
-      console.warn(`  skip (nothing recognized): ${spec.dir}/${rel}`);
+    const dir = dirOf(rel);
+    if (!desc.supported || (desc.banks.length === 0 && desc.performanceNames.length === 0)) {
+      unsupportedByDir.set(dir, [...(unsupportedByDir.get(dir) ?? []), rel]);
       continue;
     }
     const outFile = copiedPath(rel);
@@ -131,28 +160,37 @@ async function buildSyxCollection(spec: CollectionSpec): Promise<LibCollection> 
 
     for (const b of desc.banks) {
       banks.push({
-        id: `${outFile}#${b.sourceBank}`,
+        id: bankIdOf(outFile, b.sourceBank),
         name: desc.banks.length > 1 ? `${stem} · ${b.label}` : stem,
         file: outFile,
         format: 'syx',
         sourceBank: b.sourceBank,
-        hasAmem: b.hasAmem,
+        ...(b.hasAmem ? { hasAmem: true, amemVoices: b.amemVoices } : {}),
         voices: b.voices,
       });
     }
-
-    if (desc.performanceNames.length > 0) {
-      const mapped = spec.perfBankMap?.[rel];
-      performanceSets.push({
-        id: `${outFile}#perf`,
-        name: stem,
-        file: outFile,
-        names: desc.performanceNames,
-        requiresBankFiles: desc.selfContained ? [] : (mapped ?? []).map(copiedPath),
-      });
-    }
+    byDir.set(dir, [...(byDir.get(dir) ?? []), { rel, outFile, stem, desc }]);
   }
-  return { id: spec.id, name: spec.name, banks, performanceSets };
+
+  const sets: LibSet[] = [];
+  const dirs = [...new Set([...byDir.keys(), ...unsupportedByDir.keys()])].sort();
+  for (const dir of dirs) {
+    const label = dir ? `${spec.dir}/${dir}` : spec.dir;
+    const { sets: dirSets, warnings } = groupDirectory(
+      label,
+      byDir.get(dir) ?? [],
+      unsupportedByDir.get(dir) ?? [],
+      spec.perfBankMap ?? {},
+    );
+    for (const w of warnings) console.warn(`  ${w}`);
+    // Several collections repeat stems like "A" and "B" across subfolders, so
+    // a set in a subfolder is named after it.
+    const folder = dir.split('/').pop();
+    if (folder) for (const s of dirSets) s.name = `${folder} · ${s.name}`;
+    sets.push(...dirSets);
+  }
+
+  return { id: spec.id, name: spec.name, banks, sets };
 }
 
 async function main(): Promise<void> {
@@ -164,7 +202,7 @@ async function main(): Promise<void> {
     console.log(`collection: ${spec.name}`);
     const col =
       spec.kind === 'raw' ? await buildFs1rCollection(spec) : await buildSyxCollection(spec);
-    if (col.banks.length === 0 && col.performanceSets.length === 0) {
+    if (col.banks.length === 0 && col.sets.length === 0) {
       console.warn(`  empty collection, dropped: ${spec.id}`);
       continue;
     }
@@ -179,12 +217,13 @@ async function main(): Promise<void> {
     (a, c) => a + c.banks.reduce((x, b) => x + b.voices.length, 0),
     0,
   );
+  const nSets = collections.reduce((a, c) => a + c.sets.length, 0);
   const performanceCount = collections.reduce(
-    (a, c) => a + c.performanceSets.reduce((x, p) => x + p.names.length, 0),
+    (a, c) => a + c.sets.reduce((x, s) => x + (s.performances?.length ?? 0), 0),
     0,
   );
   console.log(
-    `library: ${collections.length} collections, ${nBanks} banks, ${nVoices} voices, ${performanceCount} performances`,
+    `library: ${collections.length} collections, ${nSets} sets, ${nBanks} banks, ${nVoices} voices, ${performanceCount} performances`,
   );
 }
 

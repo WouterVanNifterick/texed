@@ -55,9 +55,18 @@
   white-space: nowrap;
 }
 
+/* Collections rail on the left, the active view filling the rest. */
+.libbrowser-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
 .libbrowser-columns {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   gap: 8px;
   outline: none;
@@ -77,12 +86,31 @@
   flex: 0 0 190px;
 }
 
-.libbrowser-col-banks {
-  flex: 0 0 220px;
+.libbrowser-col-banks,
+.libbrowser-col-sets {
+  flex: 0 0 250px;
 }
 
+.libbrowser-col-detail {
+  flex: 0 0 260px;
+}
+
+.libbrowser-col-rows,
 .libbrowser-col-voices {
   flex: 1;
+  min-width: 0;
+}
+
+/* Long lists run down 32-row columns instead of one endless strip. The
+   balanced multicol block sits under the sticky head, which stays a direct
+   flex child of the pane. */
+.libbrowser-multicol {
+  column-gap: 12px;
+  column-rule: 1px solid var(--line);
+}
+
+.libbrowser-multicol .libbrowser-row {
+  break-inside: avoid;
 }
 
 .libbrowser-results {
@@ -156,9 +184,62 @@
   vertical-align: baseline;
 }
 
+.libbrowser-badge.warn {
+  background: #6b4a35;
+  color: #ffd2a9;
+}
+
+/* Per-voice sibling of the bank-level II badge. */
+.libbrowser-mark {
+  margin-left: 5px;
+  color: #7fb0e0;
+  font-size: 10px;
+}
+
 .libbrowser-count {
   color: var(--dim);
   font-size: 10px;
+}
+
+/* ==== detail column ==== */
+
+.libbrowser-detail {
+  flex: 0 0 auto;
+  padding: 2px 2px 8px;
+}
+
+.libbrowser-detail-head {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 4px 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.libbrowser-detail-row {
+  padding: 2px 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.libbrowser-detail-row.dim {
+  color: var(--dim);
+}
+
+.libbrowser-detail-row.warn {
+  color: #e0a875;
+}
+
+.libbrowser-slot {
+  display: inline-block;
+  min-width: 58px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .libbrowser-crumb {

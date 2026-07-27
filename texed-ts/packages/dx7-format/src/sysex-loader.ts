@@ -1,7 +1,7 @@
 // Orchestrates loading all frames from a composite .syx file into VoiceLibrary.
 
 import { amemPayloadFromFrame } from './amem';
-import { performancesFromFrame } from './performance';
+import { performancesFromFrame, type ParsedPerformance } from './performance';
 import {
   identifySysex,
   SysexKind,
@@ -22,22 +22,73 @@ export interface LoadReport {
   skipped: string[];
 }
 
-const BANK_SEQUENCE: VoiceBankId[] = VOICE_BANK_ORDER;
+/** Frame kinds `performancesFromFrame` can decode. */
+const PERF_KINDS = new Set<SysexFrame['kind']>([
+  SysexKind.Performance,
+  SysexKind.Dx7iiPerformance,
+  SysexKind.Dx7iiPerformanceEdit,
+]);
 
-function nextFreeBank(lib: VoiceLibrary, startIdx: number): VoiceBankId | null {
+function nextFreeBank(
+  lib: VoiceLibrary,
+  sequence: VoiceBankId[],
+  startIdx: number,
+): VoiceBankId | null {
   const populated = new Set(lib.populatedBanks());
-  for (let i = startIdx; i < BANK_SEQUENCE.length; i++) {
-    if (!populated.has(BANK_SEQUENCE[i])) return BANK_SEQUENCE[i];
+  for (let i = startIdx; i < sequence.length; i++) {
+    if (!populated.has(sequence[i])) return sequence[i];
   }
   return null;
 }
 
-function paramChangeBankTag(frame: SysexFrame): VoiceBankId | null {
+/**
+ * `F0 43 1n 19 4D vv F7` precedes each VMEM dump of a DX7II-family bulk save.
+ * `vv` selects the *half* of the 64-voice memory being sent (0 = voices 1-32,
+ * 1 = voices 33-64) - it does not say internal or cartridge. Which memory the
+ * pair belongs to comes from the file's own performances (see `memorySideOf`).
+ */
+function paramChangeHalf(frame: SysexFrame): 0 | 1 | null {
   const raw = frame.raw;
   if (raw.length < 6) return null;
   if (raw[4] !== 0x4d) return null;
-  const val = raw[5] & 0x7f;
-  return val === 1 ? 'cartridgeA' : 'internalA';
+  return (raw[5] & 0x7f) === 1 ? 1 : 0;
+}
+
+const MEMORY_HALVES: Record<'internal' | 'cartridge', [VoiceBankId, VoiceBankId]> = {
+  internal: ['internalA', 'internalB'],
+  cartridge: ['cartridgeA', 'cartridgeB'],
+};
+
+/**
+ * Which memory a file's voice dumps belong to. A cartridge save carries
+ * performances whose parts point at CRT slots, an internal save at INT slots;
+ * files with no performances (plain bank dumps) are treated as internal.
+ * Mixed references mean the performances also reach into a memory this file
+ * does not carry, and the majority wins.
+ */
+function memorySideOf(perfs: ParsedPerformance[]): 'internal' | 'cartridge' {
+  let internal = 0;
+  let cartridge = 0;
+  for (const perf of perfs) {
+    for (const part of perf.parts) {
+      if (part.enabled === false || !part.voice) continue;
+      if (part.voice.bank.startsWith('cartridge')) cartridge++;
+      else internal++;
+    }
+  }
+  return cartridge > internal ? 'cartridge' : 'internal';
+}
+
+/** Every half-bank the performances point at, in VOICE_BANK_ORDER. */
+function referencedBanks(perfs: ParsedPerformance[]): VoiceBankId[] {
+  const used = new Set<VoiceBankId>();
+  for (const perf of perfs) {
+    for (const part of perf.parts) {
+      if (part.enabled === false || !part.voice) continue;
+      used.add(part.voice.bank);
+    }
+  }
+  return VOICE_BANK_ORDER.filter((b) => used.has(b));
 }
 
 function payloadFromFrame(frame: SysexFrame): Uint8Array | null {
@@ -60,6 +111,28 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
   const lib = new VoiceLibrary();
   const report: LoadReport = { frames: frames.length, applied: [], skipped: [] };
 
+  // Pre-pass: the performances decide which memory the voice dumps belong to,
+  // and they can sit either side of those dumps in the file. Parsed once and
+  // reused by the main pass below.
+  const perfByFrame = new Map<number, ParsedPerformance[]>();
+  frames.forEach((frame, i) => {
+    if (!PERF_KINDS.has(frame.kind)) return;
+    const perfs = performancesFromFrame(frame);
+    if (perfs && perfs.length > 0) perfByFrame.set(i, perfs);
+  });
+  const perfs = [...perfByFrame.values()].flat();
+  const halves = MEMORY_HALVES[memorySideOf(perfs)];
+  // Untagged dumps fill the indicated memory first, then the other one.
+  const bankSequence = [...halves, ...VOICE_BANK_ORDER.filter((b) => !halves.includes(b))];
+  // A file with a single voice dump whose performances all point at one
+  // half-bank puts the dump there, whatever the half tag says: the references
+  // are the only unambiguous statement of where these voices live.
+  const refs = referencedBanks(perfs);
+  const soleBank =
+    refs.length === 1 && frames.filter((f) => f.kind === SysexKind.Cartridge).length === 1
+      ? refs[0]
+      : null;
+
   let bankAssignIdx = 0;
   let pendingBankTag: VoiceBankId | null = null;
   let pendingAmem: Uint8Array | null = null;
@@ -80,13 +153,13 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
     }
   };
 
-  for (const frame of frames) {
+  for (const [frameIdx, frame] of frames.entries()) {
     switch (frame.kind) {
       case SysexKind.ParamChange: {
-        const tag = paramChangeBankTag(frame);
-        if (tag) {
-          pendingBankTag = tag;
-          report.applied.push(`bank tag ${tag}`);
+        const half = paramChangeHalf(frame);
+        if (half !== null) {
+          pendingBankTag = halves[half];
+          report.applied.push(`bank tag ${pendingBankTag}`);
         } else {
           report.skipped.push('paramChange');
         }
@@ -97,7 +170,11 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
         const packed = amemPayloadFromFrame(frame.raw);
         if (packed) {
           pendingAmem = packed;
-          pendingAmemBank = pendingBankTag ?? nextFreeBank(lib, bankAssignIdx) ?? 'internalA';
+          pendingAmemBank =
+            soleBank ??
+            pendingBankTag ??
+            nextFreeBank(lib, bankSequence, bankAssignIdx) ??
+            halves[0];
           report.applied.push(`AMEM pending → ${pendingAmemBank}`);
         }
         break;
@@ -108,19 +185,19 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
           report.skipped.push('VMEM (parse failed)');
           break;
         }
-        let bank = pendingBankTag ?? nextFreeBank(lib, bankAssignIdx);
-        if (!bank) bank = 'internalA';
+        const bank =
+          soleBank ?? pendingBankTag ?? nextFreeBank(lib, bankSequence, bankAssignIdx) ?? halves[0];
         flushAmemPair(bank);
         lib.loadVmemBank(bank, cart);
         report.applied.push(`VMEM → ${bank}`);
-        bankAssignIdx = BANK_SEQUENCE.indexOf(bank) + 1;
+        bankAssignIdx = bankSequence.indexOf(bank) + 1;
         pendingBankTag = null;
         break;
       }
       case SysexKind.Dx7iiPerformance:
       case SysexKind.Dx7iiPerformanceEdit: {
-        const perfs = performancesFromFrame(frame);
-        if (perfs && perfs.length > 0) {
+        const perfs = perfByFrame.get(frameIdx);
+        if (perfs) {
           lib.performances = perfs;
           lib.performanceIndex = 0;
           report.applied.push(`performances (${perfs.length})`);
@@ -128,8 +205,8 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
         break;
       }
       case SysexKind.Performance: {
-        const perfs = performancesFromFrame(frame);
-        if (perfs && perfs.length > 0) {
+        const perfs = perfByFrame.get(frameIdx);
+        if (perfs) {
           if (lib.performances.length === 0) {
             lib.performances = perfs;
             lib.performanceIndex = 0;

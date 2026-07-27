@@ -438,6 +438,14 @@ export default function App() {
             yMode={yMode}
           />
 
+          {showLibrary && (
+            <LibraryBrowser
+              synth={synth}
+              showMsg={showLoadMsg}
+              onClose={() => setShowLibrary(false)}
+            />
+          )}
+
           {showParts && (
             <PartRack
               configs={synth.partConfigs}
@@ -468,10 +476,6 @@ export default function App() {
           onConfirm={onStoreConfirm}
           onClose={() => setShowStore(false)}
         />
-      )}
-
-      {showLibrary && (
-        <LibraryBrowser synth={synth} showMsg={showLoadMsg} onClose={() => setShowLibrary(false)} />
       )}
 
       {dragging && (

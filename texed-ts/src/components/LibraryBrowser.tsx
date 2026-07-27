@@ -1,28 +1,43 @@
-// Built-in patch library browser: collections → banks → voices with search,
-// instant audition into the current part, bank loading into half-bank slots,
-// and a performances tab. Content comes from public/library (see
+// Built-in patch library browser. Two views over the same collections:
+// PERFORMANCES browses the sets the build script grouped (a performance bank
+// plus the voice banks its parts reference), VOICES browses banks voice by
+// voice. Content comes from public/library (see
 // scripts/build-patch-library.mts); the LOADED LIBRARY pseudo-collection
 // mirrors whatever is in the rack's voice memory.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Synth } from '../audio/useSynth';
-import type { VoiceBankId } from '@texed/dx7-format/voice-library';
+import { VOICE_BANK_LABELS, type VoiceBankId } from '@texed/dx7-format/voice-library';
+import { NUM_PARTS, defaultPartConfig } from '@texed/dx7-format/part-config';
 import {
+  bankById,
   buildSearchIndex,
   fetchLibraryManifest,
   getBankVoices,
+  getSetPerfVoices,
   getVoiceBytes,
-  loadPerformanceSet,
+  loadPerformanceFromSet,
+  loadSet,
   type LibVoiceHit,
+  type PerfPartVoice,
 } from '../state/library';
-import type { LibBank, LibPerfSet, LibraryManifest } from '@texed/dx7-format/library-manifest';
-import { isFillerVoiceName } from '@texed/dx7-format/voice';
+import { libraryUi, type LibraryUiState } from '../state/library-ui';
+import type {
+  LibBank,
+  LibCollection,
+  LibSet,
+  LibraryManifest,
+} from '@texed/dx7-format/library-manifest';
+import { getVoiceName, isFillerVoiceName, VOICES_PER_BANK } from '@texed/dx7-format/voice';
 import { helpProps } from '../state/help';
 import { Segmented } from '../ui/Segmented';
 
 const LOADED_ID = '__loaded';
 const AUDITION_NOTE = 60;
 const SEARCH_LIMIT = 200;
+/** Voices per column before the list splits into another one. */
+const ROWS_PER_COLUMN = 32;
+const MAX_COLUMNS = 4;
 
 interface LibraryBrowserProps {
   synth: Synth;
@@ -30,30 +45,91 @@ interface LibraryBrowserProps {
   onClose: () => void;
 }
 
+/** A row of the middle column: a performance, or a voice of a voices set. */
+type SetRow =
+  | { kind: 'performance'; name: string }
+  | { kind: 'voice'; name: string; bank: LibBank; index: number; filler: boolean };
+
+function columnsFor(count: number): number {
+  return Math.max(1, Math.min(MAX_COLUMNS, Math.ceil(count / ROWS_PER_COLUMN)));
+}
+
+/** The banks a set wires up, each listed once however many slots it fills. */
+function setBanks(collection: LibCollection, set: LibSet): LibBank[] {
+  const seen = new Set<string>();
+  const out: LibBank[] = [];
+  for (const slot of set.slots) {
+    if (seen.has(slot.bankId)) continue;
+    seen.add(slot.bankId);
+    const bank = bankById(collection, slot.bankId);
+    if (bank) out.push(bank);
+  }
+  return out;
+}
+
+/** Every voice a set brings in, counting each bank once. */
+function setVoiceCount(collection: LibCollection, set: LibSet): number {
+  return setBanks(collection, set).reduce((n, b) => n + b.voices.length, 0);
+}
+
+function extrasLabel(set: LibSet): string | null {
+  const e = set.extras;
+  if (!e) return null;
+  const parts: string[] = [];
+  if (e.microtunings) parts.push(`+MICROTUNE ×${e.microtunings}`);
+  if (e.systemSetup) parts.push('+SYSTEM SETUP');
+  if (e.fractionalScale) parts.push(`+FRAC SCALE ×${e.fractionalScale}`);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+/**
+ * A piece of browser state that outlives the component. The setter writes the
+ * record straight away rather than from an effect, so a gesture that changes
+ * something and closes in one go (double-click to load and close) is still
+ * remembered.
+ */
+function useRemembered<K extends keyof LibraryUiState>(key: K) {
+  const [value, setValue] = useState<LibraryUiState[K]>(libraryUi[key]);
+  const set = useCallback(
+    (next: LibraryUiState[K]) => {
+      libraryUi[key] = next;
+      setValue(next);
+    },
+    [key],
+  );
+  return [value, set] as const;
+}
+
 export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps) {
   const [manifest, setManifest] = useState<LibraryManifest | null>(null);
   const [manifestPending, setManifestPending] = useState(true);
-  const [tab, setTab] = useState<'voices' | 'performances'>('voices');
-  const [search, setSearch] = useState('');
-  const [colId, setColId] = useState<string>(LOADED_ID);
-  const [bankIdx, setBankIdx] = useState(0);
-  const [voiceIdx, setVoiceIdx] = useState(-1);
-  const [audition, setAudition] = useState(true);
-  const [target, setTarget] = useState<VoiceBankId | 'auto'>('auto');
-  const [perfSetIdx, setPerfSetIdx] = useState(0);
-  const [perfVoiceIdx, setPerfVoiceIdx] = useState(-1);
+  const [tab, setTab] = useRemembered('tab');
+  const [search, setSearch] = useRemembered('search');
+  const [colId, setColId] = useRemembered('colId');
+  const [setIdx, setSetIdx] = useRemembered('setIdx');
+  const [rowIdx, setRowIdx] = useRemembered('rowIdx');
+  const [bankIdx, setBankIdx] = useRemembered('bankIdx');
+  const [voiceIdx, setVoiceIdx] = useRemembered('voiceIdx');
+  const [audition, setAudition] = useRemembered('audition');
+  const [target, setTarget] = useRemembered('target');
+  const [perfVoices, setPerfVoices] = useState<PerfPartVoice[][] | null>(null);
   const walkTimer = useRef<number | null>(null);
   const voiceListRef = useRef<HTMLDivElement>(null);
+  const banksPaneRef = useRef<HTMLDivElement>(null);
+  const setsPaneRef = useRef<HTMLDivElement>(null);
+  const rowsPaneRef = useRef<HTMLDivElement>(null);
+  const restored = useRef(false);
 
   useEffect(() => {
     fetchLibraryManifest().then(({ manifest: m, error }) => {
       setManifest(m);
       setManifestPending(false);
       if (error) showMsg(`Built-in library unavailable · ${error}`);
-      if (m && m.collections.length > 0)
-        setColId((cur) => (cur === LOADED_ID ? m.collections[0].id : cur));
+      // Only choose a collection when nothing was remembered.
+      if (libraryUi.colId) return;
+      setColId(m && m.collections.length > 0 ? m.collections[0].id : LOADED_ID);
     });
-  }, [showMsg]);
+  }, [showMsg, setColId]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -62,6 +138,17 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
+
+  /**
+   * Record each pane's offset as it scrolls. Reading it back at unmount would
+   * be tidier, but React has already detached the refs by then.
+   */
+  const onPaneScroll = useCallback(
+    (key: keyof LibraryUiState['scroll']) => (e: React.UIEvent<HTMLDivElement>) => {
+      libraryUi.scroll[key] = e.currentTarget.scrollTop;
+    },
+    [],
+  );
 
   // ==== data shaping ====
 
@@ -73,14 +160,55 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   }, [manifest, synth.programOptions.length]);
 
   const activeCollection = manifest?.collections.find((c) => c.id === colId) ?? null;
+  const sets = activeCollection?.sets ?? [];
+  const activeSet = colId === LOADED_ID ? null : (sets[setIdx] ?? null);
 
-  /** Voice rows of the active bank column (built-in bank or loaded programs). */
-  const voiceRows: { name: string; filler: boolean }[] = useMemo(() => {
+  /** Middle-column rows of the performances view. */
+  const setRows: SetRow[] = useMemo(() => {
     if (colId === LOADED_ID) {
-      return synth.programOptions.map((o) => ({ name: o.label, filler: o.filler === true }));
+      return synth.performanceNames.map((name) => ({
+        kind: 'performance' as const,
+        name: name || 'INIT',
+      }));
+    }
+    if (!activeSet || !activeCollection) return [];
+    if (activeSet.kind === 'performance') {
+      return (activeSet.performances ?? []).map((name) => ({
+        kind: 'performance' as const,
+        name: name || 'INIT',
+      }));
+    }
+    return setBanks(activeCollection, activeSet).flatMap((bank) =>
+      bank.voices.map((name, index) => ({
+        kind: 'voice' as const,
+        name,
+        bank,
+        index,
+        filler: isFillerVoiceName(name),
+      })),
+    );
+  }, [colId, activeCollection, activeSet, synth.performanceNames]);
+
+  /** Voices-view rows of the selected bank (or the whole loaded library). */
+  const voiceRows: { name: string; filler: boolean; amem: boolean }[] = useMemo(() => {
+    if (colId === LOADED_ID) {
+      return synth.programOptions.map((o) => ({
+        name: o.label,
+        filler: o.filler === true,
+        amem: false,
+      }));
     }
     const bank = activeCollection?.banks[bankIdx];
-    return bank ? bank.voices.map((name) => ({ name, filler: isFillerVoiceName(name) })) : [];
+    if (!bank) return [];
+    // The bank-level II badge already says "this bank carries supplements", so
+    // the per-voice mark only earns its place where the bank is mixed.
+    const amem = new Set(bank.amemVoices ?? []);
+    const mixed = amem.size > 0 && amem.size < bank.voices.length;
+    return bank.voices.map((name, i) => ({
+      name,
+      filler: isFillerVoiceName(name),
+      amem: mixed && amem.has(i),
+    }));
   }, [colId, activeCollection, bankIdx, synth.programOptions]);
 
   const searchIndex = useMemo(() => (manifest ? buildSearchIndex(manifest) : []), [manifest]);
@@ -101,6 +229,19 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
       .slice(0, SEARCH_LIMIT);
     return { builtIn, loaded };
   }, [query, searchIndex, synth.programOptions]);
+
+  // Part voice names for the selected performance set, resolved on demand.
+  useEffect(() => {
+    setPerfVoices(null);
+    if (!activeCollection || !activeSet || activeSet.kind !== 'performance') return;
+    let live = true;
+    getSetPerfVoices(activeCollection, activeSet)
+      .then((v) => live && setPerfVoices(v))
+      .catch(() => live && setPerfVoices([]));
+    return () => {
+      live = false;
+    };
+  }, [activeCollection, activeSet]);
 
   // ==== actions ====
 
@@ -124,6 +265,27 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     [synth, auditionVoice, showMsg],
   );
 
+  /** Replace the whole rack with a one-part performance holding this voice. */
+  const soloVoice = useCallback(
+    (bank: LibBank, index: number) => {
+      getVoiceBytes(bank, index)
+        .then(({ voice, supplement }) => {
+          const parts = Array.from({ length: NUM_PARTS }, (_, i) => defaultPartConfig(i === 0));
+          const voices = Array.from({ length: NUM_PARTS }, (_, i) => (i === 0 ? voice : null));
+          const name = getVoiceName(voice).trim() || bank.voices[index] || 'VOICE';
+          synth.loadPerformance(name, parts, voices);
+          showMsg(
+            supplement
+              ? `${name} → part 1 only, parts 2-8 off (DX7II supplement not carried)`
+              : `${name} → part 1 only, parts 2-8 off`,
+          );
+          auditionVoice();
+        })
+        .catch(() => showMsg(`Could not load ${bank.voices[index] ?? 'voice'}`));
+    },
+    [synth, auditionVoice, showMsg],
+  );
+
   const activateVoiceRow = useCallback(
     (index: number) => {
       setVoiceIdx(index);
@@ -138,7 +300,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
       const bank = activeCollection?.banks[bankIdx];
       if (bank) loadBuiltInVoice(bank, index);
     },
-    [colId, activeCollection, bankIdx, synth, auditionVoice, loadBuiltInVoice],
+    [colId, activeCollection, bankIdx, synth, auditionVoice, loadBuiltInVoice, setVoiceIdx],
   );
 
   /**
@@ -169,10 +331,41 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
         80,
       );
     },
-    [voiceIdx, voiceRows, activeCollection, bankIdx, activateVoiceRow, loadBuiltInVoice],
+    [
+      voiceIdx,
+      voiceRows,
+      activeCollection,
+      bankIdx,
+      activateVoiceRow,
+      loadBuiltInVoice,
+      setBankIdx,
+      setVoiceIdx,
+    ],
   );
 
+  /**
+   * Put the panes back where they were, once. The manifest arrives a render or
+   * two after mount, so this waits for a pane long enough to hold its offset -
+   * setting scrollTop on an empty list would silently clamp to zero.
+   */
+  useLayoutEffect(() => {
+    if (restored.current) return;
+    const panes: [HTMLDivElement | null, number][] = [
+      [setsPaneRef.current, libraryUi.scroll.sets],
+      [rowsPaneRef.current, libraryUi.scroll.rows],
+      [banksPaneRef.current, libraryUi.scroll.banks],
+      [voiceListRef.current, libraryUi.scroll.voices],
+    ];
+    // Only the visible tab's panes are mounted; wait for those to fill, and
+    // let the hidden tab's remembered offsets simply go unused.
+    const wanted = panes.filter(([el, top]) => el && top > 0);
+    if (!wanted.every(([el]) => el!.scrollHeight > el!.clientHeight)) return;
+    restored.current = true;
+    for (const [el, top] of panes) if (el) el.scrollTop = top;
+  });
+
   useEffect(() => {
+    if (!restored.current) return;
     const el = voiceListRef.current?.querySelector('.libbrowser-row.selected');
     el?.scrollIntoView({ block: 'nearest' });
   }, [voiceIdx, bankIdx, colId]);
@@ -198,7 +391,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
         activateVoiceRow(voiceIdx);
       }
     },
-    [walk, voiceIdx, activeCollection, bankIdx, activateVoiceRow],
+    [walk, voiceIdx, activeCollection, bankIdx, activateVoiceRow, setBankIdx, setVoiceIdx],
   );
 
   const resolveTarget = useCallback((): VoiceBankId => {
@@ -222,45 +415,108 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     [synth, showMsg],
   );
 
-  const loadAll128 = useCallback(
-    (bank: LibBank) => {
-      const order: VoiceBankId[] = ['internalA', 'internalB', 'cartridgeA', 'cartridgeB'];
-      order.forEach((dest, i) => loadBankRange(bank, i * 32, dest));
-      showMsg(`Loaded ${bank.name} into all four half-banks`);
+  /** Load the whole set: its voice banks into their slots, then its file. */
+  const onLoadSet = useCallback(
+    (collection: LibCollection, set: LibSet) => {
+      const banks = setBanks(collection, set).length;
+      showMsg(
+        set.kind === 'performance'
+          ? `Loading ${set.name} · ${set.performances?.length ?? 0} performances + ${banks} banks…`
+          : `Loading ${set.name} · ${banks} banks…`,
+      );
+      loadSet(synth, collection, set).catch(() => showMsg(`Could not load ${set.name}`));
     },
-    [loadBankRange, showMsg],
+    [synth, showMsg],
   );
 
   const onSelectPerformance = useCallback(
-    (set: LibPerfSet, index: number, collectionName: string) => {
+    (collection: LibCollection, set: LibSet, index: number) => {
       showMsg(
-        set.requiresBankFiles.length > 0
-          ? `Loading ${collectionName} banks + "${set.names[index]}" (replaces bank slots)…`
-          : `Loading "${set.names[index]}"…`,
+        `Loading "${set.performances?.[index] ?? 'performance'}" · 8 parts + its voice banks…`,
       );
-      loadPerformanceSet(synth, set, index).catch(() => showMsg('Performance load failed'));
+      loadPerformanceFromSet(synth, collection, set, index).catch(() =>
+        showMsg('Performance load failed'),
+      );
     },
     [synth, showMsg],
+  );
+
+  const activateSetRow = useCallback(
+    (index: number) => {
+      setRowIdx(index);
+      const row = setRows[index];
+      if (!row) return;
+      if (row.kind === 'voice') {
+        loadBuiltInVoice(row.bank, row.index);
+        return;
+      }
+      if (colId === LOADED_ID) {
+        synth.selectPerformance(index);
+        return;
+      }
+      if (activeCollection && activeSet) onSelectPerformance(activeCollection, activeSet, index);
+    },
+    [
+      setRows,
+      colId,
+      synth,
+      activeCollection,
+      activeSet,
+      onSelectPerformance,
+      loadBuiltInVoice,
+      setRowIdx,
+    ],
   );
 
   // ==== render ====
 
   const banksOfCollection = activeCollection?.banks ?? [];
   const activeBank = colId === LOADED_ID ? null : banksOfCollection[bankIdx];
-  const perfCollections = (manifest?.collections ?? []).filter((c) => c.performanceSets.length > 0);
-  const perfSets = perfCollections.flatMap((c) =>
-    c.performanceSets.map((set) => ({ collection: c.name, set })),
+  const selectedRow = setRows[rowIdx];
+  const selectedVoiceRow = selectedRow?.kind === 'voice' ? selectedRow : null;
+  const selectedPerfParts =
+    selectedRow?.kind === 'performance' && perfVoices ? (perfVoices[rowIdx] ?? null) : null;
+  /** For the LOADED collection, the live parts stand in for the active perf. */
+  const loadedPerfParts =
+    colId === LOADED_ID && rowIdx === synth.performanceIndex
+      ? synth.partConfigs.map((cfg, i) => ({
+          part: i,
+          enabled: cfg.enabled,
+          label: cfg.voiceLabel ?? 'INIT VOICE',
+        }))
+      : null;
+  const detailParts = selectedPerfParts ?? loadedPerfParts;
+
+  const renderVoiceRows = (rows: { name: string; filler: boolean; amem: boolean }[]) => (
+    <div className="libbrowser-multicol" style={{ columnCount: columnsFor(rows.length) }}>
+      {rows.map((row, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`libbrowser-row${i === voiceIdx ? ' selected' : ''}`}
+          onClick={() => activateVoiceRow(i)}
+          onDoubleClick={onClose}
+        >
+          <span className="libbrowser-num">{String(i + 1).padStart(3, '0')}</span> {row.name}
+          {row.amem && (
+            <span className="libbrowser-mark" title="Carries a DX7II AMEM supplement">
+              ⅱ
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
   );
 
   return (
-    <div className="libbrowser-overlay">
+    <div className="libbrowser-overlay libbrowser-overlay--region">
       <button
         type="button"
         className="overlay-dismiss"
         aria-label="Close library"
         onClick={onClose}
       />
-      <div className="libbrowser" role="dialog" aria-modal="true" aria-label="Patch library">
+      <div className="libbrowser" role="dialog" aria-label="Patch library">
         <div className="libbrowser-header">
           <span className="libbrowser-title">LIBRARY</span>
           <Segmented
@@ -268,223 +524,370 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
             onChange={setTab}
             options={[
               {
-                value: 'voices',
-                label: 'VOICES',
-                help: 'Browse built-in and loaded voices; click to load into the current part.',
-              },
-              {
                 value: 'performances',
                 label: 'PERFORMANCES',
-                help: 'Browse loaded and built-in multi-part performances.',
+                help: 'Browse the grouped sets: a performance bank and the voice banks it uses.',
+              },
+              {
+                value: 'voices',
+                label: 'VOICES',
+                help: 'Browse built-in and loaded voices bank by bank; click to load into the current part.',
               },
             ]}
           />
           {tab === 'voices' && (
-            <>
-              <input
-                className="libbrowser-search"
-                placeholder="Search voices…"
-                value={search}
-                spellCheck={false}
-                onChange={(e) => setSearch(e.target.value)}
-                {...helpProps(
-                  'SEARCH',
-                  'Filters every built-in and loaded voice by name, bank, and collection.',
-                )}
-              />
-              <label
-                className="libbrowser-audition"
-                {...helpProps(
-                  'AUDITION',
-                  'Plays a short middle C on the current part whenever a voice is selected.',
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={audition}
-                  onChange={(e) => setAudition(e.target.checked)}
-                />
-                AUDITION
-              </label>
-            </>
+            <input
+              className="libbrowser-search"
+              placeholder="Search voices…"
+              value={search}
+              spellCheck={false}
+              onChange={(e) => setSearch(e.target.value)}
+              {...helpProps(
+                'SEARCH',
+                'Filters every built-in and loaded voice by name, bank, and collection.',
+              )}
+            />
           )}
+          <label
+            className="libbrowser-audition"
+            {...helpProps(
+              'AUDITION',
+              'Plays a short middle C on the current part whenever a voice is selected.',
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={audition}
+              onChange={(e) => setAudition(e.target.checked)}
+            />
+            AUDITION
+          </label>
           <span className="libbrowser-part">→ PART {synth.selectedPart + 1}</span>
           <button type="button" className="libbrowser-btn" onClick={onClose}>
             CLOSE
           </button>
         </div>
 
-        {tab === 'voices' && searchResults && (
-          <div className="libbrowser-results" ref={voiceListRef}>
-            {searchResults.loaded.map(({ opt, i }) => (
+        <div className="libbrowser-body">
+          <div className="libbrowser-col libbrowser-col-collections">
+            <div className="libbrowser-colhead">COLLECTIONS</div>
+            {collections.map((c) => (
               <button
-                key={`l${i}`}
+                key={c.id}
                 type="button"
-                className="libbrowser-row"
+                className={`libbrowser-row${c.id === colId ? ' selected' : ''}`}
                 onClick={() => {
-                  synth.setVoiceRef(opt.ref);
-                  auditionVoice();
+                  setColId(c.id);
+                  setSetIdx(0);
+                  setRowIdx(-1);
+                  setBankIdx(0);
+                  setVoiceIdx(-1);
                 }}
-                onDoubleClick={onClose}
               >
-                <span className="libbrowser-crumb">LOADED ›</span> {opt.label}
+                {c.name}
               </button>
             ))}
-            {searchResults.builtIn.map((hit, i) => (
-              <button
-                key={`b${i}`}
-                type="button"
-                className="libbrowser-row"
-                onClick={() => loadBuiltInVoice(hit.bank, hit.index)}
-                onDoubleClick={onClose}
-              >
-                <span className="libbrowser-crumb">
-                  {hit.collectionName} › {hit.bank.name} ›
-                </span>{' '}
-                {hit.name}
-              </button>
-            ))}
-            {searchResults.loaded.length === 0 && searchResults.builtIn.length === 0 && (
-              <p className="libbrowser-empty">No voices match “{search.trim()}”.</p>
+            {manifestPending && <p className="libbrowser-empty">Loading library…</p>}
+            {!manifestPending && !manifest && (
+              <p className="libbrowser-empty">
+                Built-in library unavailable - LOAD or drop your own .syx files.
+              </p>
             )}
           </div>
-        )}
 
-        {/* The columns form one composite widget: a single tab stop that moves
-            its selection with the arrow keys and auditions with Enter, with
-            every entry also reachable as a real button. That needs a focusable
-            container, which the two rules below would otherwise forbid. */}
-        {tab === 'voices' && !searchResults && (
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
-          <div
-            className="libbrowser-columns"
-            role="group"
-            aria-label="Voice browser"
-            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-            tabIndex={0}
-            onKeyDown={onListKeyDown}
-          >
-            <div className="libbrowser-col libbrowser-col-collections">
-              <div className="libbrowser-colhead">COLLECTIONS</div>
-              {collections.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`libbrowser-row${c.id === colId ? ' selected' : ''}`}
-                  onClick={() => {
-                    setColId(c.id);
-                    setBankIdx(0);
-                    setVoiceIdx(-1);
-                  }}
-                >
-                  {c.name}
-                </button>
-              ))}
-              {manifestPending && <p className="libbrowser-empty">Loading library…</p>}
-              {!manifestPending && !manifest && (
-                <p className="libbrowser-empty">
-                  Built-in library unavailable - LOAD or drop your own .syx files.
-                </p>
-              )}
-            </div>
-
-            <div className="libbrowser-col libbrowser-col-banks">
-              <div className="libbrowser-colhead">
-                {colId === LOADED_ID ? 'VOICE MEMORY' : 'BANKS'}
-              </div>
-              {colId === LOADED_ID ? (
-                <div className="libbrowser-bankinfo">
-                  {synth.banks.map((b) => (
-                    <div key={b.id} className={`libbrowser-bankrow${b.populated ? '' : ' empty'}`}>
-                      {b.label} {b.populated ? '' : '· empty'}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                banksOfCollection.map((b, i) => (
+          {tab === 'performances' && (
+            <div className="libbrowser-columns libbrowser-perf">
+              <div
+                className="libbrowser-col libbrowser-col-sets"
+                ref={setsPaneRef}
+                onScroll={onPaneScroll('sets')}
+              >
+                <div className="libbrowser-colhead">SETS</div>
+                {colId === LOADED_ID && (
+                  <button type="button" className="libbrowser-row selected">
+                    LOADED <span className="libbrowser-count">{synth.performanceNames.length}</span>
+                  </button>
+                )}
+                {sets.map((s, i) => (
                   <button
-                    key={b.id}
+                    key={s.id}
                     type="button"
-                    className={`libbrowser-row${i === bankIdx ? ' selected' : ''}`}
+                    className={`libbrowser-row${i === setIdx ? ' selected' : ''}`}
                     onClick={() => {
-                      setBankIdx(i);
-                      setVoiceIdx(-1);
+                      setSetIdx(i);
+                      setRowIdx(-1);
                     }}
                   >
-                    {b.name} <span className="libbrowser-count">{b.voices.length}</span>
-                    {b.hasAmem && (
+                    {s.name}{' '}
+                    <span className="libbrowser-count">
+                      {s.kind === 'performance'
+                        ? `${s.performances?.length ?? 0} PERF`
+                        : `${activeCollection ? setVoiceCount(activeCollection, s) : 0} VOICES`}
+                    </span>
+                    {s.unresolvedSlots && (
                       <span
-                        className="libbrowser-badge"
-                        title="Carries DX7II AMEM supplements (fractional scaling, unison, extended controllers)"
+                        className="libbrowser-badge warn"
+                        title="References a bank nothing provides"
                       >
-                        II
+                        !
                       </span>
                     )}
                   </button>
-                ))
-              )}
-            </div>
-
-            <div className="libbrowser-col libbrowser-col-voices" ref={voiceListRef}>
-              <div className="libbrowser-colhead">
-                {activeBank
-                  ? `VOICES · ${activeBank.hasAmem ? 'DX7II (VMEM + AMEM)' : 'DX7 (VMEM)'}`
-                  : 'VOICES'}
+                ))}
+                {colId !== LOADED_ID && sets.length === 0 && (
+                  <p className="libbrowser-empty">Nothing in this collection.</p>
+                )}
               </div>
-              {voiceRows.map((row, i) => (
+
+              <div
+                className="libbrowser-col libbrowser-col-rows"
+                ref={rowsPaneRef}
+                onScroll={onPaneScroll('rows')}
+              >
+                <div className="libbrowser-colhead">
+                  {activeSet?.kind === 'voices' ? 'VOICES' : 'PERFORMANCES · 8-PART SETUPS'}
+                </div>
+                <div
+                  className="libbrowser-multicol"
+                  style={{
+                    columnCount: activeSet?.kind === 'voices' ? columnsFor(setRows.length) : 1,
+                  }}
+                >
+                  {setRows.map((row, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className={`libbrowser-row${i === rowIdx ? ' selected' : ''}`}
+                      onClick={() => activateSetRow(i)}
+                      onDoubleClick={onClose}
+                    >
+                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span>{' '}
+                      {row.name}
+                    </button>
+                  ))}
+                </div>
+                {setRows.length === 0 && <p className="libbrowser-empty">Nothing here yet.</p>}
+              </div>
+
+              <div className="libbrowser-col libbrowser-col-detail">
+                <div className="libbrowser-colhead">DETAIL</div>
+                {activeSet && activeCollection && (
+                  <div className="libbrowser-detail">
+                    <div className="libbrowser-detail-head">VOICE BANKS USED</div>
+                    {activeSet.slots.map((slot) => {
+                      const bank = bankById(activeCollection, slot.bankId);
+                      return (
+                        <div key={`${slot.slot}${slot.bankId}`} className="libbrowser-detail-row">
+                          <span className="libbrowser-slot">{VOICE_BANK_LABELS[slot.slot]}</span>{' '}
+                          {bank?.name ?? slot.bankId}
+                          {/* Only a bank bigger than a half-bank needs its range spelled out. */}
+                          {bank && bank.voices.length > VOICES_PER_BANK
+                            ? ` · ${(slot.start ?? 0) + 1}–${Math.min((slot.start ?? 0) + VOICES_PER_BANK, bank.voices.length)}`
+                            : ''}
+                          {bank?.hasAmem && (
+                            <span
+                              className="libbrowser-badge"
+                              title="Carries DX7II AMEM supplements"
+                            >
+                              II
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {activeSet.slots.length === 0 && (
+                      <div className="libbrowser-detail-row dim">No voice banks.</div>
+                    )}
+                    {activeSet.unresolvedSlots?.map((slot) => (
+                      <div key={slot} className="libbrowser-detail-row warn">
+                        <span className="libbrowser-slot">{VOICE_BANK_LABELS[slot]}</span>{' '}
+                        referenced, nothing to fill it
+                      </div>
+                    ))}
+                    {extrasLabel(activeSet) && (
+                      <div className="libbrowser-detail-row dim">{extrasLabel(activeSet)}</div>
+                    )}
+                    {activeSet.unsupported?.map((f) => (
+                      <div key={f} className="libbrowser-detail-row dim">
+                        {f} · format not supported
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {detailParts && (
+                  <div className="libbrowser-detail">
+                    <div className="libbrowser-detail-head">
+                      PARTS · {selectedRow?.name ?? synth.performanceName}
+                    </div>
+                    {detailParts.map((p) => (
+                      <div
+                        key={p.part}
+                        className={`libbrowser-detail-row${p.enabled ? '' : ' dim'}`}
+                      >
+                        <span className="libbrowser-slot">{p.part + 1}</span> {p.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {selectedRow?.kind === 'performance' && !detailParts && (
+                  <p className="libbrowser-empty">
+                    {colId === LOADED_ID
+                      ? 'Part voices show for the performance currently loaded.'
+                      : 'Resolving part voices…'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'voices' && searchResults && (
+            <div className="libbrowser-results" ref={voiceListRef}>
+              {searchResults.loaded.map(({ opt, i }) => (
                 <button
-                  key={i}
+                  key={`l${i}`}
                   type="button"
-                  className={`libbrowser-row${i === voiceIdx ? ' selected' : ''}`}
-                  onClick={() => activateVoiceRow(i)}
+                  className="libbrowser-row"
+                  onClick={() => {
+                    synth.setVoiceRef(opt.ref);
+                    auditionVoice();
+                  }}
                   onDoubleClick={onClose}
                 >
-                  <span className="libbrowser-num">{String(i + 1).padStart(3, '0')}</span>{' '}
-                  {row.name}
+                  <span className="libbrowser-crumb">LOADED ›</span> {opt.label}
                 </button>
               ))}
-              {voiceRows.length === 0 && <p className="libbrowser-empty">No voices here yet.</p>}
-            </div>
-          </div>
-        )}
-
-        {tab === 'voices' && !searchResults && activeBank && (
-          <div className="libbrowser-footer">
-            <label
-              {...helpProps(
-                'TARGET',
-                'Which half-bank of voice memory LOAD BANK writes into. AUTO picks the first empty one.',
+              {searchResults.builtIn.map((hit, i) => (
+                <button
+                  key={`b${i}`}
+                  type="button"
+                  className="libbrowser-row"
+                  onClick={() => loadBuiltInVoice(hit.bank, hit.index)}
+                  onDoubleClick={onClose}
+                >
+                  <span className="libbrowser-crumb">
+                    {hit.collectionName} › {hit.bank.name} ›
+                  </span>{' '}
+                  {hit.name}
+                </button>
+              ))}
+              {searchResults.loaded.length === 0 && searchResults.builtIn.length === 0 && (
+                <p className="libbrowser-empty">No voices match “{search.trim()}”.</p>
               )}
+            </div>
+          )}
+
+          {/* The columns form one composite widget: a single tab stop that moves
+            its selection with the arrow keys and auditions with Enter, with
+            every entry also reachable as a real button. That needs a focusable
+            container, which the two rules below would otherwise forbid. */}
+          {tab === 'voices' && !searchResults && (
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
+            <div
+              className="libbrowser-columns"
+              role="group"
+              aria-label="Voice browser"
+              // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+              tabIndex={0}
+              onKeyDown={onListKeyDown}
             >
-              TARGET&nbsp;
-              <select
-                value={target}
-                onChange={(e) => setTarget(e.target.value as VoiceBankId | 'auto')}
+              <div
+                className="libbrowser-col libbrowser-col-banks"
+                ref={banksPaneRef}
+                onScroll={onPaneScroll('banks')}
               >
-                <option value="auto">AUTO</option>
-                {synth.banks.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label}
-                    {b.populated ? ' ●' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {activeBank.voices.length <= 32 ? (
-              <button
-                type="button"
-                className="libbrowser-btn"
-                onClick={() => loadBankRange(activeBank, 0, resolveTarget())}
+                <div className="libbrowser-colhead">
+                  {colId === LOADED_ID ? 'VOICE MEMORY' : 'BANKS'}
+                </div>
+                {colId === LOADED_ID ? (
+                  <div className="libbrowser-bankinfo">
+                    {synth.banks.map((b) => (
+                      <div
+                        key={b.id}
+                        className={`libbrowser-bankrow${b.populated ? '' : ' empty'}`}
+                      >
+                        {b.label} {b.populated ? '' : '· empty'}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  banksOfCollection.map((b, i) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      className={`libbrowser-row${i === bankIdx ? ' selected' : ''}`}
+                      onClick={() => {
+                        setBankIdx(i);
+                        setVoiceIdx(-1);
+                      }}
+                    >
+                      {b.name} <span className="libbrowser-count">{b.voices.length}</span>
+                      {b.hasAmem && (
+                        <span
+                          className="libbrowser-badge"
+                          title="Carries DX7II AMEM supplements (fractional scaling, unison, extended controllers)"
+                        >
+                          II
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div
+                className="libbrowser-col libbrowser-col-voices"
+                ref={voiceListRef}
+                onScroll={onPaneScroll('voices')}
+              >
+                <div className="libbrowser-colhead">
+                  {activeBank
+                    ? `VOICES · ${activeBank.hasAmem ? 'DX7II (VMEM + AMEM)' : 'DX7 (VMEM)'}`
+                    : 'VOICES'}
+                </div>
+                {renderVoiceRows(voiceRows)}
+                {voiceRows.length === 0 && <p className="libbrowser-empty">No voices here yet.</p>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="libbrowser-footer">
+          {tab === 'voices' && !searchResults && activeBank && (
+            <>
+              <label
                 {...helpProps(
-                  'LOAD BANK',
-                  'Copies this 32-voice bank into the target half-bank of voice memory.',
+                  'TARGET',
+                  'Which half-bank of voice memory LOAD BANK writes into. AUTO picks the first empty one.',
                 )}
               >
-                LOAD BANK →
-              </button>
-            ) : (
-              <>
-                {[0, 1, 2, 3].map((q) =>
+                TARGET&nbsp;
+                <select
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value as VoiceBankId | 'auto')}
+                >
+                  <option value="auto">AUTO</option>
+                  {synth.banks.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.label}
+                      {b.populated ? ' ●' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {activeBank.voices.length <= 32 ? (
+                <button
+                  type="button"
+                  className="libbrowser-btn"
+                  onClick={() => loadBankRange(activeBank, 0, resolveTarget())}
+                  {...helpProps(
+                    'LOAD BANK',
+                    'Copies this 32-voice bank into the target half-bank of voice memory.',
+                  )}
+                >
+                  LOAD BANK → {VOICE_BANK_LABELS[resolveTarget()]}
+                </button>
+              ) : (
+                [0, 1, 2, 3].map((q) =>
                   q * 32 < activeBank.voices.length ? (
                     <button
                       key={q}
@@ -499,100 +902,97 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                       {q * 32 + 1}–{Math.min((q + 1) * 32, activeBank.voices.length)} →
                     </button>
                   ) : null,
+                )
+              )}
+              <button
+                type="button"
+                className="libbrowser-btn"
+                disabled={voiceIdx < 0}
+                onClick={() => activateVoiceRow(voiceIdx)}
+                {...helpProps(
+                  'LOAD VOICE',
+                  "Loads the selected voice into the current part's edit buffer; other parts keep playing.",
                 )}
+              >
+                LOAD VOICE → PART {synth.selectedPart + 1}
+              </button>
+              <button
+                type="button"
+                className="libbrowser-btn"
+                disabled={voiceIdx < 0}
+                onClick={() => soloVoice(activeBank, voiceIdx)}
+                {...helpProps(
+                  'SOLO VOICE',
+                  'Replaces the whole rack with a new performance: this voice on part 1, parts 2-8 off.',
+                )}
+              >
+                SOLO VOICE → NEW PERFORMANCE
+              </button>
+            </>
+          )}
+          {tab === 'performances' && activeCollection && activeSet && (
+            <>
+              {activeSet.kind === 'performance' && (
                 <button
                   type="button"
                   className="libbrowser-btn"
-                  onClick={() => loadAll128(activeBank)}
+                  disabled={rowIdx < 0}
+                  onClick={() => onSelectPerformance(activeCollection, activeSet, rowIdx)}
                   {...helpProps(
-                    'LOAD ALL',
-                    'Fills all four half-banks (INT 1–64 + CRT 1–64) with this 128-voice bank.',
+                    'LOAD PERFORMANCE',
+                    'Loads this one performance: all 8 parts plus the voice banks it needs.',
                   )}
                 >
-                  LOAD ALL 128
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {tab === 'performances' && (
-          <div className="libbrowser-columns libbrowser-perf">
-            <div className="libbrowser-col libbrowser-col-banks">
-              <div className="libbrowser-colhead">PERFORMANCE SETS</div>
-              {synth.performanceNames.length > 0 && (
-                <button
-                  type="button"
-                  className={`libbrowser-row${perfSetIdx === -1 ? ' selected' : ''}`}
-                  onClick={() => {
-                    setPerfSetIdx(-1);
-                    setPerfVoiceIdx(-1);
-                  }}
-                >
-                  LOADED <span className="libbrowser-count">{synth.performanceNames.length}</span>
+                  LOAD PERFORMANCE → 8 PARTS
                 </button>
               )}
-              {perfSets.map(({ collection, set }, i) => (
-                <button
-                  key={set.id}
-                  type="button"
-                  className={`libbrowser-row${i === perfSetIdx ? ' selected' : ''}`}
-                  onClick={() => {
-                    setPerfSetIdx(i);
-                    setPerfVoiceIdx(-1);
-                  }}
-                >
-                  <span className="libbrowser-crumb">{collection} ›</span> {set.name}{' '}
-                  <span className="libbrowser-count">{set.names.length}</span>
-                </button>
-              ))}
-              {perfSets.length === 0 && synth.performanceNames.length === 0 && (
-                <p className="libbrowser-empty">No performances available.</p>
+              <button
+                type="button"
+                className="libbrowser-btn"
+                onClick={() => onLoadSet(activeCollection, activeSet)}
+                {...helpProps(
+                  'LOAD SET',
+                  'Loads every performance in this set plus all of its voice banks, replacing voice memory.',
+                )}
+              >
+                {activeSet.kind === 'performance'
+                  ? `LOAD SET → ${activeSet.performances?.length ?? 0} PERFORMANCES + ${setBanks(activeCollection, activeSet).length} BANKS`
+                  : `LOAD SET → ${setVoiceCount(activeCollection, activeSet)} VOICES INTO ${activeSet.slots.length} HALF-BANK${activeSet.slots.length === 1 ? '' : 'S'}`}
+              </button>
+              {selectedVoiceRow && (
+                <>
+                  <button
+                    type="button"
+                    className="libbrowser-btn"
+                    onClick={() => loadBuiltInVoice(selectedVoiceRow.bank, selectedVoiceRow.index)}
+                    {...helpProps(
+                      'LOAD VOICE',
+                      "Loads the selected voice into the current part's edit buffer.",
+                    )}
+                  >
+                    LOAD VOICE → PART {synth.selectedPart + 1}
+                  </button>
+                  <button
+                    type="button"
+                    className="libbrowser-btn"
+                    onClick={() => soloVoice(selectedVoiceRow.bank, selectedVoiceRow.index)}
+                    {...helpProps(
+                      'SOLO VOICE',
+                      'Replaces the whole rack with a new performance: this voice on part 1, parts 2-8 off.',
+                    )}
+                  >
+                    SOLO VOICE → NEW PERFORMANCE
+                  </button>
+                </>
               )}
-            </div>
-            <div className="libbrowser-col libbrowser-col-voices">
-              <div className="libbrowser-colhead">PERFORMANCES · 8-PART SETUPS</div>
-              {perfSetIdx === -1
-                ? synth.performanceNames.map((name, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`libbrowser-row${i === synth.performanceIndex ? ' selected' : ''}`}
-                      onClick={() => synth.selectPerformance(i)}
-                      onDoubleClick={onClose}
-                    >
-                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span>{' '}
-                      {name || 'INIT'}
-                    </button>
-                  ))
-                : perfSets[perfSetIdx] &&
-                  perfSets[perfSetIdx].set.names.map((name, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`libbrowser-row${i === perfVoiceIdx ? ' selected' : ''}`}
-                      onClick={() => {
-                        setPerfVoiceIdx(i);
-                        onSelectPerformance(
-                          perfSets[perfSetIdx].set,
-                          i,
-                          perfSets[perfSetIdx].collection,
-                        );
-                      }}
-                      onDoubleClick={onClose}
-                    >
-                      <span className="libbrowser-num">{String(i + 1).padStart(2, '0')}</span>{' '}
-                      {name || 'INIT'}
-                    </button>
-                  ))}
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
 
         <p className="libbrowser-note">
-          {tab === 'voices'
-            ? 'Click a voice to hear it on the current part; double-click to load and close. ↑/↓ walk and audition, ←/→ switch banks, Enter loads. Loading a bank overwrites that half-bank of voice memory.'
-            : 'Click a performance to load it; double-click to load and close. Selecting a built-in performance loads the banks it needs (overwriting voice memory) and configures all 8 parts.'}
+          {tab === 'performances'
+            ? 'Click a performance to load it (8 parts + the voice banks it uses); double-click to load and close. LOAD SET brings in every performance of the set. Both overwrite the half-banks listed under DETAIL.'
+            : 'Click a voice to hear it on the current part; double-click to load and close. ↑/↓ walk and audition, ←/→ switch banks, Enter loads. LOAD BANK overwrites one half-bank of voice memory; SOLO VOICE replaces the whole rack.'}
         </p>
       </div>
     </div>

@@ -3,10 +3,26 @@
 
 import { N } from './synth';
 import { pitchIncAt, pitchLevelAt } from './env-tables';
+import { EGS_UNIT_Q24, SLOW_TICK_HZ, isHardwareAccurate } from './engine-accuracy';
 
 export { pitchenvRate, pitchenvTab } from './env-tables';
 
 let unit = 0;
+
+/**
+ * Q24 pitch increment per block for one unit of pitch EG rate.
+ *
+ * PITCH_EG_PROCESS adds the rate byte straight to the 4096-per-octave voice
+ * pitch, on every other output-compare interrupt. msfa's 21.3 assumes a
+ * ~192.3 Hz tick against the hardware's ~187.63 Hz, i.e. 2.5% fast.
+ *
+ * Exported so env-sim draws the same curve the engine plays.
+ */
+export function pitchEnvUnit(sampleRate: number): number {
+  return isHardwareAccurate()
+    ? Math.floor((N * EGS_UNIT_Q24 * SLOW_TICK_HZ) / sampleRate + 0.5)
+    : Math.floor((N * (1 << 24)) / (21.3 * sampleRate) + 0.5);
+}
 
 export class PitchEnv {
   private rates = new Int32Array(4);
@@ -19,7 +35,7 @@ export class PitchEnv {
   private down = true;
 
   static init(sampleRate: number): void {
-    unit = Math.floor((N * (1 << 24)) / (21.3 * sampleRate) + 0.5);
+    unit = pitchEnvUnit(sampleRate);
   }
 
   set(r: ArrayLike<number>, l: ArrayLike<number>): void {

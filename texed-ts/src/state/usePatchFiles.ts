@@ -32,9 +32,10 @@ export function usePatchFiles(synth: Synth, showMsg: (text: string) => void): Pa
       const iniFiles = files.filter((f) => /\.ini$/i.test(f.name));
       const syxFiles = files.filter((f) => !/\.ini$/i.test(f.name));
       for (const f of iniFiles) {
-        const { name: iniName, parts, voices, extras } = parseMiniDexedIni(await f.text());
+        const { name: iniName, parts, voices, global, extras } = parseMiniDexedIni(await f.text());
         setMiniDexedExtras(extras);
         const name = iniName || f.name.replace(/\.ini$/i, '');
+        synth.setGlobal(global);
         synth.loadPerformance(name, parts, voices);
         showMsg(`Loaded MiniDexed performance · ${name}`);
       }
@@ -73,6 +74,7 @@ export function usePatchFiles(synth: Synth, showMsg: (text: string) => void): Pa
         name: state.performanceName,
         parts: state.parts,
         voices: state.editBuffers.map((eb) => eb.voice),
+        global: { compressor: state.global.compressor, reverb: state.global.reverb },
         extras: miniDexedExtras,
       });
       downloadBlob(text, 'performance.ini', 'text/plain');

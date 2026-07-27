@@ -45,16 +45,31 @@ MIDIChannel3=5
     expect(parts[2]?.pan).toBeCloseTo(63 / 64);
   });
 
-  it('preserves Cutoff and global reverb keys', () => {
+  it('maps the filter, reverb send and global reverb block', () => {
     const ini = `
 Cutoff1=42
+Resonance1=99
+ReverbSend2=0
 ReverbSize=80
+CompressorEnable=0
 UnknownKey=keep
 `;
-    const { extras } = parseMiniDexedIni(ini);
-    expect(extras.tg[0]?.Cutoff).toBe('42');
-    expect(extras.global.ReverbSize).toBe('80');
+    const { parts, global, extras } = parseMiniDexedIni(ini);
+    expect(parts[0]?.cutoff).toBeCloseTo(42 / 99);
+    expect(parts[0]?.resonance).toBeCloseTo(1);
+    expect(parts[1]?.reverbSend).toBe(0);
+    expect(global.compressor).toBe(false);
+    expect(global.reverb.enabled).toBe(true); // absent key, MiniDexed default
+    expect(global.reverb.size).toBeCloseTo(80 / 99);
     expect(extras.unknown).toEqual([{ key: 'UnknownKey', value: 'keep' }]);
+  });
+
+  it('falls back to MiniDexed defaults for absent keys', () => {
+    const { parts, global } = parseMiniDexedIni('MIDIChannel1=1\n');
+    // Nothing to map, so parts stay untouched and the rack keeps its own values.
+    expect(parts[0]?.cutoff).toBeUndefined();
+    expect(global.compressor).toBe(true);
+    expect(global.reverb.level).toBeCloseTo(1);
   });
 
   it('reads the top-level Name attribute', () => {
@@ -74,12 +89,15 @@ MIDIChannel1=1
 });
 
 describe('serializeMiniDexedIni round-trip', () => {
-  it('keeps preserved keys and unknown keys', () => {
+  it('round-trips mapped, preserved and unknown keys', () => {
     const source = `
 # demo
 Cutoff1=11
 Resonance2=22
 ReverbSend3=33
+PitchBendRange4=7
+ReverbSize=80
+CompressorEnable=0
 Custom=1
 MIDIChannel1=1
 Volume1=100
@@ -94,27 +112,34 @@ Pan1=64
     const text = serializeMiniDexedIni({
       parts,
       voices,
+      global: parsed.global,
       extras: parsed.extras,
     });
     const again = parseMiniDexedIni(text);
-    expect(again.extras.tg[0]?.Cutoff).toBe('11');
-    expect(again.extras.tg[1]?.Resonance).toBe('22');
-    expect(again.extras.tg[2]?.ReverbSend).toBe('33');
+    expect(again.parts[0]?.cutoff).toBeCloseTo(11 / 99);
+    expect(again.parts[1]?.resonance).toBeCloseTo(22 / 99);
+    expect(again.parts[2]?.reverbSend).toBeCloseTo(33 / 99);
+    expect(again.extras.tg[3]?.PitchBendRange).toBe('7');
+    expect(again.global.compressor).toBe(false);
+    expect(again.global.reverb.size).toBeCloseTo(80 / 99);
     expect(again.extras.unknown).toEqual([{ key: 'Custom', value: '1' }]);
     expect(again.parts[0]).toMatchObject({ enabled: true, rxChannel: 1 });
   });
 
   it('writes VoiceData for all TGs', () => {
     const voice = initVoice();
-    voice[10] = 0xab;
+    // A name byte: the only part of a voice where 0x7F is a legal value, so it
+    // survives the clamp and appears nowhere else in an init voice.
+    voice[145] = 0x7f;
     const text = serializeMiniDexedIni({
       parts: Array.from({ length: 8 }, (_, i) => defaultPartConfig(i === 0)),
       voices: Array.from({ length: 8 }, () => voice),
+      global: parseMiniDexedIni('').global,
     });
     expect(text).toContain('VoiceData1=');
-    expect(text).toContain(' AB');
+    expect(text).toContain(' 7F');
     const { voices } = parseMiniDexedIni(text);
-    expect(voices[0]?.[10]).toBe(0xab);
+    expect(voices[0]?.[145]).toBe(0x7f);
   });
 });
 

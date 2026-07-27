@@ -20,6 +20,12 @@ export interface PartConfig {
   noteHigh: number;
   noteShift: number;
   detune: number;
+  /** Ladder filter cutoff 0..1 (MiniDexed Cutoff 0..99); 1 bypasses the filter. */
+  cutoff: number;
+  /** Ladder filter resonance 0..1 (MiniDexed Resonance 0..99). */
+  resonance: number;
+  /** Send into the global plate reverb, 0..1 (MiniDexed ReverbSend 0..99). */
+  reverbSend: number;
   /** TX802 EG Forced Damp (per instrument). ON = stolen voice restarts its
    * envelope; OFF = new note continues the stolen note's envelope. */
   forcedDamp: boolean;
@@ -41,6 +47,9 @@ export function defaultPartConfig(enabled: boolean): PartConfig {
     noteHigh: 127,
     noteShift: 0,
     detune: 0,
+    cutoff: 1,
+    resonance: 0,
+    reverbSend: 0,
     forcedDamp: true,
     link: false,
     voice: defaultVoiceRef(),
@@ -50,4 +59,6 @@ export function defaultPartConfig(enabled: boolean): PartConfig {
 export interface ProgramOption {
   ref: VoiceRef;
   label: string;
+  /** Padding slot (blank, EMPTY, a row of dashes): worth stepping over. */
+  filler?: boolean;
 }

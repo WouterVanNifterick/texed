@@ -44,8 +44,14 @@ export function createSynthActions(port: SynthPort, m: MirrorHandles): SynthActi
     noteOff: (note, channel = 1) => post({ type: MsgType.NoteOff, note, channel }),
     controlChange: (controller, value, channel) =>
       post({ type: MsgType.Cc, controller, value, channel }),
+    programChange: (program, channel = 1) =>
+      post({ type: MsgType.ProgramChange, program, channel }),
     pitchBend: (value, channel) => post({ type: MsgType.PitchBend, value, channel }),
     aftertouch: (value, channel) => post({ type: MsgType.Aftertouch, value, channel }),
+    sysex: (data) => {
+      const buf = detach(data);
+      post({ type: MsgType.Sysex, data: buf }, [buf]);
+    },
     panic: () => post({ type: MsgType.Panic }),
 
     setParam: (offset, value) => {
@@ -113,9 +119,17 @@ export function createSynthActions(port: SynthPort, m: MirrorHandles): SynthActi
       m.setSettings((s) => ({ ...s, engine }));
       post({ type: MsgType.SetEngine, engine });
     },
+    setAccuracy: (accuracy) => {
+      m.setSettings((s) => ({ ...s, accuracy }));
+      post({ type: MsgType.SetAccuracy, accuracy });
+    },
     setVolume: (volume) => {
       m.setSettings((s) => ({ ...s, volume }));
       post({ type: MsgType.SetVolume, volume });
+    },
+    setGlobal: (settings) => {
+      m.setSettings((s) => ({ ...s, ...settings }));
+      post({ type: MsgType.SetGlobal, settings });
     },
     setMasterTune: (cents) => {
       m.setSettings((s) => ({ ...s, masterTuneCents: cents }));
@@ -132,6 +146,8 @@ export function createSynthActions(port: SynthPort, m: MirrorHandles): SynthActi
 
     selectPart: (index) => post({ type: MsgType.SelectPart, index }),
     setPart: (index, config) => post({ type: MsgType.SetPart, index, config }),
+    paramGesture: (index, field, begin) =>
+      post({ type: MsgType.ParamGesture, index, field, begin }),
     selectPerformance: (index) => post({ type: MsgType.SelectPerformance, index }),
 
     loadPerformance: (name, parts, voices) => {

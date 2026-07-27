@@ -14,15 +14,19 @@ export const MsgType = {
   NoteOn: 'noteOn',
   NoteOff: 'noteOff',
   Cc: 'cc',
+  ProgramChange: 'programChange',
   PitchBend: 'pitchBend',
   Aftertouch: 'aftertouch',
+  Sysex: 'sysex',
   LoadVoice: 'loadVoice',
   LoadCart: 'loadCart',
   SetVoiceRef: 'setVoiceRef',
   SetEngine: 'setEngine',
+  SetAccuracy: 'setAccuracy',
   SetVolume: 'setVolume',
   SetParam: 'setParam',
   SetSupplementParam: 'setSupplementParam',
+  SetGlobal: 'setGlobal',
   SetMasterTune: 'setMasterTune',
   SetMicrotuning: 'setMicrotuning',
   Panic: 'panic',
@@ -36,6 +40,7 @@ export const MsgType = {
   LoadBankInto: 'loadBankInto',
   GetFullState: 'getFullState',
   SetFullState: 'setFullState',
+  ParamGesture: 'paramGesture',
 } as const;
 
 export interface NoteOnMsg {
@@ -54,6 +59,16 @@ export interface CcMsg {
   controller: number;
   value: number;
   channel?: number;
+}
+export interface ProgramChangeMsg {
+  type: typeof MsgType.ProgramChange;
+  program: number;
+  channel?: number;
+}
+/** One incoming SysEx frame from a MIDI port: a live edit, or a bulk dump. */
+export interface SysexMsg {
+  type: typeof MsgType.Sysex;
+  data: ArrayBuffer;
 }
 export interface PitchBendMsg {
   type: typeof MsgType.PitchBend;
@@ -113,6 +128,10 @@ export interface SetEngineMsg {
   type: typeof MsgType.SetEngine;
   engine: number; // EngineType
 }
+export interface SetAccuracyMsg {
+  type: typeof MsgType.SetAccuracy;
+  accuracy: GlobalSettings['accuracy'];
+}
 export interface SetVolumeMsg {
   type: typeof MsgType.SetVolume;
   volume: number; // 0..99 knob; engine applies the perceptual taper
@@ -126,6 +145,12 @@ export interface SetSupplementParamMsg {
   type: typeof MsgType.SetSupplementParam;
   offset: number; // byte offset into the 35-byte AMEM supplement
   value: number;
+}
+/** Apply part of the global settings block. Fields left out keep their value,
+ * so this doubles as the setter for the compressor switch and reverb block. */
+export interface SetGlobalMsg {
+  type: typeof MsgType.SetGlobal;
+  settings: Partial<GlobalSettings>;
 }
 export interface SetMasterTuneMsg {
   type: typeof MsgType.SetMasterTune;
@@ -162,18 +187,33 @@ export interface SetFullStateMsg {
   type: typeof MsgType.SetFullState;
   state: RackState;
 }
+/**
+ * Bracket a drag of one part field. A plugin host needs this to record touch
+ * automation and to know not to echo the value back mid-drag; a synth that
+ * owns its own state ignores it.
+ */
+export interface ParamGestureMsg {
+  type: typeof MsgType.ParamGesture;
+  index: number;
+  field: keyof PartConfig;
+  begin: boolean;
+}
 
 export type SynthCommand =
   | NoteOnMsg
   | NoteOffMsg
   | CcMsg
+  | ProgramChangeMsg
+  | SysexMsg
   | PitchBendMsg
   | AftertouchMsg
   | LoadVoiceMsg
   | LoadCartMsg
   | SetVoiceRefMsg
   | SetEngineMsg
+  | SetAccuracyMsg
   | SetVolumeMsg
+  | SetGlobalMsg
   | SetParamMsg
   | SetSupplementParamMsg
   | SetMasterTuneMsg
@@ -188,7 +228,8 @@ export type SynthCommand =
   | StoreVoiceMsg
   | LoadBankIntoMsg
   | GetFullStateMsg
-  | SetFullStateMsg;
+  | SetFullStateMsg
+  | ParamGestureMsg;
 
 export interface ProgramStateMsg {
   type: 'programState';
@@ -260,6 +301,17 @@ export interface FullStateMsg {
   state: RackState;
 }
 
+/**
+ * Raw MIDI the synth received but cannot read on its own. The JUCE plugin
+ * forwards bulk dumps, program change and bank select this way, because
+ * reading them needs the format code and the voice library, both of which
+ * live here rather than in C++.
+ */
+export interface MidiMsg {
+  type: 'midi';
+  data: Uint8Array;
+}
+
 export type SynthEvent =
   | ProgramStateMsg
   | LoadReportMsg
@@ -269,4 +321,5 @@ export type SynthEvent =
   | PartsMsg
   | PerformancesMsg
   | BankDumpMsg
-  | FullStateMsg;
+  | FullStateMsg
+  | MidiMsg;

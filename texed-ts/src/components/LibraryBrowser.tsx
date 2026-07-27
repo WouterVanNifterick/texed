@@ -16,6 +16,7 @@ import {
   type LibVoiceHit,
 } from '../state/library';
 import type { LibBank, LibPerfSet, LibraryManifest } from '@texed/dx7-format/library-manifest';
+import { isFillerVoiceName } from '@texed/dx7-format/voice';
 import { helpProps } from '../state/help';
 import { Segmented } from '../ui/Segmented';
 
@@ -74,10 +75,12 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   const activeCollection = manifest?.collections.find((c) => c.id === colId) ?? null;
 
   /** Voice rows of the active bank column (built-in bank or loaded programs). */
-  const voiceRows: { name: string; sub?: string }[] = useMemo(() => {
-    if (colId === LOADED_ID) return synth.programOptions.map((o) => ({ name: o.label }));
+  const voiceRows: { name: string; filler: boolean }[] = useMemo(() => {
+    if (colId === LOADED_ID) {
+      return synth.programOptions.map((o) => ({ name: o.label, filler: o.filler === true }));
+    }
     const bank = activeCollection?.banks[bankIdx];
-    return bank ? bank.voices.map((name) => ({ name })) : [];
+    return bank ? bank.voices.map((name) => ({ name, filler: isFillerVoiceName(name) })) : [];
   }, [colId, activeCollection, bankIdx, synth.programOptions]);
 
   const searchIndex = useMemo(() => (manifest ? buildSearchIndex(manifest) : []), [manifest]);
@@ -138,16 +141,35 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     [colId, activeCollection, bankIdx, synth, auditionVoice, loadBuiltInVoice],
   );
 
-  /** Arrow-walk: move selection now, load + audition shortly after settling. */
-  const walkTo = useCallback(
-    (index: number) => {
-      const max = voiceRows.length - 1;
-      const next = Math.max(0, Math.min(max, index));
+  /**
+   * Arrow-walk: move selection now, load + audition shortly after settling.
+   * Padding slots are stepped over, and running off the end of a built-in bank
+   * rolls into the next one so one key walks the whole collection. The LOADED
+   * column is already a flat list across every populated half-bank.
+   */
+  const walk = useCallback(
+    (delta: number) => {
+      let next = voiceIdx + delta;
+      while (next >= 0 && next < voiceRows.length && voiceRows[next].filler) {
+        next += delta;
+      }
+      const banks = activeCollection?.banks ?? [];
+      let rollBank: LibBank | null = null;
+      if (next < 0 || next >= voiceRows.length) {
+        if (banks.length < 2) return;
+        const nb = (bankIdx + (delta > 0 ? 1 : banks.length - 1)) % banks.length;
+        rollBank = banks[nb];
+        next = delta > 0 ? 0 : rollBank.voices.length - 1;
+        setBankIdx(nb);
+      }
       setVoiceIdx(next);
       if (walkTimer.current !== null) window.clearTimeout(walkTimer.current);
-      walkTimer.current = window.setTimeout(() => activateVoiceRow(next), 80);
+      walkTimer.current = window.setTimeout(
+        () => (rollBank ? loadBuiltInVoice(rollBank, next) : activateVoiceRow(next)),
+        80,
+      );
     },
-    [voiceRows.length, activateVoiceRow],
+    [voiceIdx, voiceRows, activeCollection, bankIdx, activateVoiceRow, loadBuiltInVoice],
   );
 
   useEffect(() => {
@@ -159,10 +181,10 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     (e: React.KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        walkTo(voiceIdx + 1);
+        walk(1);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        walkTo(voiceIdx - 1);
+        walk(-1);
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const banks = activeCollection?.banks ?? [];
@@ -176,7 +198,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
         activateVoiceRow(voiceIdx);
       }
     },
-    [walkTo, voiceIdx, activeCollection, bankIdx, activateVoiceRow],
+    [walk, voiceIdx, activeCollection, bankIdx, activateVoiceRow],
   );
 
   const resolveTarget = useCallback((): VoiceBankId => {

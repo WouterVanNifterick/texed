@@ -28,6 +28,42 @@ export function initVoice(): Uint8Array {
   return out;
 }
 
+/**
+ * Highest legal value for each byte of the 156-byte unpacked voice. Real-world
+ * .syx files are full of out-of-range bytes (bit 7 set, stale editor state,
+ * truncated dumps); unpacking masks bits but that still lets an EG rate reach
+ * 127 where the DX7 tops out at 99. Clamping here keeps every downstream table
+ * lookup in bounds.
+ */
+// prettier-ignore
+const VOICE_MAXES = Uint8Array.from([
+  // Six operators, 21 bytes each: EG rates/levels, scaling, curves, rate
+  // scaling, AMS, KVS, output level, osc mode, coarse, fine, detune.
+  ...Array.from({ length: 6 }, () => [
+    99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 3, 3, 7, 3, 7, 99, 1, 31, 99, 14,
+  ]).flat(),
+  // Pitch EG rates and levels.
+  99, 99, 99, 99, 99, 99, 99, 99,
+  31, // algorithm
+  7, // feedback
+  1, // osc key sync
+  99, 99, 99, 99, // LFO speed, delay, pitch mod depth, amp mod depth
+  1, // LFO key sync
+  5, // LFO waveform
+  7, // pitch mod sensitivity
+  48, // transpose
+  127, 127, 127, 127, 127, 127, 127, 127, 127, 127, // name
+  63, // operator on/off mask
+]);
+
+/** Clamp a 156-byte voice in place to the DX7's own parameter ranges. */
+export function clampVoice(voice: Uint8Array): void {
+  const n = Math.min(voice.length, VOICE_MAXES.length);
+  for (let i = 0; i < n; i++) {
+    if (voice[i] > VOICE_MAXES[i]) voice[i] = VOICE_MAXES[i];
+  }
+}
+
 export class Cartridge {
   // 6-byte header + 32 * 128 packed voices + checksum + 0xF7 = 4104.
   voiceData = new Uint8Array(4104);
@@ -108,6 +144,7 @@ export class Cartridge {
       out[145 + n] = d[bulk + 118 + n] & 0x7f;
     }
     out[155] = 0x3f;
+    clampVoice(out);
     return out;
   }
 

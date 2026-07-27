@@ -7,6 +7,8 @@ interface KnobProps {
   max: number;
   min?: number;
   onChange: (value: number) => void;
+  /** Start and end of a drag, for hosts that record parameter gestures. */
+  onGesture?: (begin: boolean) => void;
   /** Optional display override (e.g. detune "-7..+7", transpose "C3"). */
   format?: (value: number) => string;
   size?: number;
@@ -42,6 +44,7 @@ export function Knob({
   max,
   min = 0,
   onChange,
+  onGesture,
   format,
   size = 34,
   accent,
@@ -62,8 +65,9 @@ export function Knob({
         parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) ||
         1;
       drag.current = { startY: e.clientY, startValue: value, scale };
+      onGesture?.(true);
     },
-    [value],
+    [value, onGesture],
   );
 
   const onPointerMove = useCallback(
@@ -79,8 +83,9 @@ export function Knob({
   );
 
   const onPointerUp = useCallback(() => {
+    if (drag.current) onGesture?.(false);
     drag.current = null;
-  }, []);
+  }, [onGesture]);
 
   const onWheel = useCallback(
     (e: React.WheelEvent) => {

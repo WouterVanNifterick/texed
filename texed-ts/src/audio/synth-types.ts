@@ -25,10 +25,15 @@ export interface SynthActions {
   noteOn: (note: number, velocity: number, channel?: number) => void;
   noteOff: (note: number, channel?: number) => void;
   controlChange: (controller: number, value: number, channel?: number) => void;
+  programChange: (program: number, channel?: number) => void;
   pitchBend: (value: number, channel?: number) => void;
   aftertouch: (value: number, channel?: number) => void;
+  /** Feed one incoming SysEx frame from a MIDI port to the rack. */
+  sysex: (data: Uint8Array) => void;
   panic: () => void;
   setEngine: (engine: number) => void;
+  /** Switch the DSP calibration between the DX7 ROM and msfa's numbers. */
+  setAccuracy: (accuracy: GlobalSettings['accuracy']) => void;
   setProgram: (index: number) => void;
   setVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
   loadCart: (data: ArrayBuffer) => void;
@@ -39,8 +44,12 @@ export interface SynthActions {
   setMicrotuning: (index: number) => void;
   setVoice: (voice: Uint8Array, opts?: { supplement?: Uint8Array; partIndex?: number }) => void;
   setVolume: (volume: number) => void;
+  /** Patch the global block; used for the compressor switch and reverb. */
+  setGlobal: (settings: Partial<GlobalSettings>) => void;
   selectPart: (index: number) => void;
   setPart: (index: number, config: Partial<PartConfig>) => void;
+  /** Bracket a drag of one part field, so a plugin host can record it. */
+  paramGesture: (index: number, field: keyof PartConfig, begin: boolean) => void;
   setPolyphonyCap: (cap: number) => void;
   selectPerformance: (index: number) => void;
   /** Load a full performance (8 parts + voices) into the edit buffers from a

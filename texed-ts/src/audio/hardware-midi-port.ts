@@ -57,6 +57,9 @@ export class HardwareMidiPort implements SynthPort {
       case MsgType.Cc:
         this.bytes([0xb0 | this.ch(cmd.channel), cmd.controller & 0x7f, cmd.value & 0x7f]);
         break;
+      case MsgType.ProgramChange:
+        this.bytes([0xc0 | this.ch(cmd.channel), cmd.program & 0x7f]);
+        break;
       case MsgType.PitchBend:
         this.bytes([0xe0 | this.ch(cmd.channel), cmd.value & 0x7f, (cmd.value >> 7) & 0x7f]);
         break;

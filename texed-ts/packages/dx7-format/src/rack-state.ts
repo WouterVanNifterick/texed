@@ -7,7 +7,10 @@ import type { PartConfig } from './part-config';
 import type { VoiceBankId } from './voice-library';
 import type { GlobalSettings } from './global-settings';
 
-export const RACK_STATE_SCHEMA = 2;
+// 3 added the per-part filter and reverb send, plus the global compressor
+// switch and reverb block. Older snapshots restore with those at their
+// defaults, which is silence from the reverb and no filtering.
+export const RACK_STATE_SCHEMA = 3;
 
 export interface RackState {
   schema: typeof RACK_STATE_SCHEMA;

@@ -72,8 +72,89 @@ export function lerpAt(
   return lo + (x - i) * (f(i + 1, a, b) - lo);
 }
 
+// ---------------------------------------------------------------------------
+// Keyboard level scaling, from the v1.8 ROM's PATCH_ACTIVATE_OPERATOR_KBD_SCALING_LEVEL.
+//
+// The ROM precomputes a 43-entry curve per operator, indexed by 3-semitone note
+// group, from one of two 36-byte tables. msfa reduced this to a 33-entry table
+// plus a magic multiplier, and its exponential curve is only right up to index
+// 22 - above that it goes linear where the hardware keeps doubling every four
+// groups and then saturates. At depth 50 that is a 24 dB error around group 28.
+
+// prettier-ignore
+/** TABLE_KBD_SCALING_CURVE_EXP: doubles every 4 groups (one octave), then saturates. */
+export const kbdScalingCurveExp = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 14, 16, 19, 23, 28, 33, 39,
+  47, 57, 67, 80, 95, 113, 134, 160, 190, 224, 255, 255, 255, 255,
+  255, 255, 255, 255,
+];
+
+// prettier-ignore
+/**
+ * TABLE_KBD_SCALING_CURVE_LIN: 8 per group, saturating at index 32.
+ * Index 22 is 178, not the 176 the pattern calls for - a genuine ROM anomaly,
+ * reproduced deliberately.
+ */
+export const kbdScalingCurveLin = [
+  0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120,
+  128, 136, 144, 152, 160, 168, 178, 184, 192, 200, 208, 216, 224,
+  232, 240, 248, 255, 255, 255, 255,
+];
+
+// ---------------------------------------------------------------------------
+// Velocity, from the ROM's MIDI note-on handler and
+// VOICE_ADD_LOAD_OPERATOR_DATA_TO_EGS.
+
+// prettier-ignore
+/** TABLE_MIDI_VEL: MIDI velocity >> 2 to the DX7's internal (inverted) scale. */
+const midiVelTable = [
+  110, 100, 90, 85, 80, 75, 70, 65, 58, 54, 50, 46, 42, 38, 34, 30,
+  28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 1, 0,
+];
+
+// prettier-ignore
+/** TABLE_OP_VOLUME_VELOCITY_SCALE: internal velocity >> 2 to a scaling factor. */
+const opVolumeVelocityScale = [
+  0, 4, 12, 21, 30, 40, 46, 52, 58, 64, 70, 76, 82, 88, 94, 100,
+  103, 106, 109, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130,
+  131, 132, 133,
+];
+
 export function scaleoutlevel(outlevel: number): number {
   return outlevel >= 20 ? 28 + outlevel : levellut[outlevel];
+}
+
+/**
+ * The ROM's depth scaler, PATCH_ACTIVATE_SCALE_VALUE: `(660 * v) >> 8`, i.e.
+ * the high byte of a 660x multiply. Used for level scaling depth, LFO speed,
+ * LFO delay, and the LFO pitch/amp mod depths.
+ */
+export function romScaleValue(v: number): number {
+  return (660 * v) >> 8;
+}
+
+/**
+ * Level scaling contribution for one note group, in scaleoutlevel units.
+ * Negative curves (0 = -LIN, 1 = -EXP) attenuate; positive (2 = +EXP, 3 = +LIN) boost.
+ */
+export function kbdScaleCurve(group: number, depth: number, curve: number): number {
+  const table = curve === 0 || curve === 3 ? kbdScalingCurveLin : kbdScalingCurveExp;
+  const raw = table[Math.min(group, table.length - 1)];
+  const scale = Math.min(127, (raw * romScaleValue(depth)) >> 8);
+  return curve < 2 ? -scale : scale;
+}
+
+/**
+ * Velocity attenuation in `P_EGS_OP_LEVELS` units (0 = loudest, 255 = silent),
+ * for MIDI velocity `velocity` and key velocity sensitivity `sensitivity` (0-7).
+ */
+export function velocityAttenuation(velocity: number, sensitivity: number): number {
+  const clamped = velocity < 0 ? 0 : velocity > 127 ? 127 : velocity;
+  const internalVel = midiVelTable[clamped >> 2];
+  const velScale = opVolumeVelocityScale[internalVel >> 2];
+  const lo = sensitivity * 32;
+  const hi = ~((sensitivity << 1) | 0xf0) & 0xff;
+  return Math.min(255, ((lo * velScale) >> 8) + hi);
 }
 
 /** Amp EG target level before the per-operator output level is added in. */

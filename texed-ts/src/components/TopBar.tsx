@@ -364,6 +364,25 @@ export function TopBar({
               <label
                 className="settings-row"
                 {...helpProps(
+                  'ACCURACY',
+                  'HARDWARE follows the DX7 ROM for keyboard scaling, velocity, LFO, pitch EG and portamento. DEXED keeps the older music-synthesizer-for-android numbers, for comparison with other Dexed-derived synths.',
+                )}
+              >
+                <span className="settings-row-label">Accuracy</span>
+                <select
+                  value={synth.settings.accuracy}
+                  onChange={(e) =>
+                    synth.setAccuracy(e.target.value as typeof synth.settings.accuracy)
+                  }
+                >
+                  <option value="hardware">Hardware</option>
+                  <option value="dexed">Dexed</option>
+                </select>
+              </label>
+
+              <label
+                className="settings-row"
+                {...helpProps(
                   'POLY',
                   'Maximum number of simultaneous voices before the oldest notes are stolen.',
                 )}

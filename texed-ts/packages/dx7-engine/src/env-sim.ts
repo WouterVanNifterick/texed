@@ -12,6 +12,7 @@
 // depends on the mutable Env.initSr module state.
 
 import { N } from './synth';
+import { pitchEnvUnit } from './pitchenv';
 import {
   ampIncAt,
   ampLevelBase,
@@ -338,7 +339,9 @@ export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
 
 // ---- Pitch EG (linear in Q24-octaves) --------------------------------------
 
-const PITCH_UNIT = Math.floor((N * (1 << 24)) / (21.3 * SR) + 0.5);
+// Read per call, not cached: the accuracy mode can change at runtime and the
+// drawn curve has to follow the engine.
+const pitchUnit = () => pitchEnvUnit(SR);
 
 /** Q24 per-octave target for a pitch EG level param. */
 export function pitchTargetLevel(newlevel: number): number {
@@ -346,7 +349,7 @@ export function pitchTargetLevel(newlevel: number): number {
 }
 
 function pitchStageBlocks(startLevel: number, target: number, rawRate: number): number {
-  const inc = Math.round(lerpAt(pitchIncAt, rawRate, PITCH_UNIT));
+  const inc = Math.round(lerpAt(pitchIncAt, rawRate, pitchUnit()));
   if (inc <= 0) return 0;
   return Math.ceil(Math.abs(target - startLevel) / inc);
 }

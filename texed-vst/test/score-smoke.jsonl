@@ -1,0 +1,8 @@
+{"at":0.0,"cmd":{"type":"setVolume","volume":99}}
+{"at":0.0,"cmd":{"type":"selectPart","index":0}}
+{"at":0.0,"cmd":{"type":"noteOn","note":60,"velocity":100,"channel":1}}
+{"at":0.5,"cmd":{"type":"noteOn","note":64,"velocity":100,"channel":1}}
+{"at":1.0,"cmd":{"type":"noteOn","note":67,"velocity":100,"channel":1}}
+{"at":1.5,"cmd":{"type":"noteOff","note":60,"channel":1}}
+{"at":1.5,"cmd":{"type":"noteOff","note":64,"channel":1}}
+{"at":1.5,"cmd":{"type":"noteOff","note":67,"channel":1}}

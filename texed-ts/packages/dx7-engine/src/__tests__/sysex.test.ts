@@ -8,10 +8,16 @@ import {
   identifyFrame,
   SysexKind,
   voiceFromVced,
+  voiceFromRawVced,
   vcedFromVoice,
+  voiceParamChangeSysex,
+  parseParamChange,
+  parseMasterVolume,
+  ParamGroup,
   cartridgeFromSyx,
   cartridgeFromVoices,
 } from '@texed/dx7-format/sysex';
+import { isFillerVoiceName } from '@texed/dx7-format/voice';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name: string): Uint8Array => new Uint8Array(readFileSync(join(here, 'fixtures', name)));
@@ -86,6 +92,68 @@ describe('VCED round-trip', () => {
     expect(identifyFrame(vced).checksumOk).toBe(true);
     const back = voiceFromVced(vced)!;
     expect(Array.from(back)).toEqual(Array.from(voice));
+  });
+});
+
+describe('voice clamping', () => {
+  it('pulls out-of-range bytes back to the DX7 maxima', () => {
+    const raw = new Uint8Array(155).fill(0x7f);
+    const voice = voiceFromRawVced(raw)!;
+    expect(voice[0]).toBe(99); // EG rate
+    expect(voice[11]).toBe(3); // scaling curve
+    expect(voice[13]).toBe(7); // rate scaling
+    expect(voice[18]).toBe(31); // coarse frequency
+    expect(voice[20]).toBe(14); // detune
+    expect(voice[134]).toBe(31); // algorithm
+    expect(voice[142]).toBe(5); // LFO waveform
+    expect(voice[144]).toBe(48); // transpose
+    expect(voice[145]).toBe(127); // name bytes stay printable ASCII
+    expect(voice[155]).toBe(0x3f);
+  });
+
+  it('leaves a real cartridge voice untouched', () => {
+    const cart = cartridgeFromSyx(fx('rom1a.syx'))!;
+    const before = cart.unpackProgram(0);
+    const after = voiceFromRawVced(before)!;
+    expect(Array.from(after)).toEqual(Array.from(before));
+  });
+});
+
+describe('isFillerVoiceName', () => {
+  it('recognizes the usual bank padding', () => {
+    for (const n of ['', '   ', 'EMPTY', 'empty', '----------', '~~~~~~~~~~', '**********']) {
+      expect(isFillerVoiceName(n)).toBe(true);
+    }
+  });
+
+  it('leaves real names alone', () => {
+    for (const n of ['E.PIANO 1', 'BRASS   1', 'X', 'TUB BELLS']) {
+      expect(isFillerVoiceName(n)).toBe(false);
+    }
+  });
+});
+
+describe('live sysex frames', () => {
+  it('round-trips a voice parameter change', () => {
+    const frame = voiceParamChangeSysex(134, 42, 3);
+    expect(parseParamChange(frame)).toEqual({
+      device: 3,
+      group: ParamGroup.VoiceHigh,
+      param: 6,
+      value: 42,
+    });
+  });
+
+  it('is not fooled by a bulk dump header', () => {
+    expect(parseParamChange(fx('rom1a.syx'))).toBeNull();
+  });
+
+  it('decodes universal master volume into a 0..1 gain', () => {
+    const full = Uint8Array.of(0xf0, 0x7f, 0x7f, 0x04, 0x01, 0x7f, 0x7f, 0xf7);
+    expect(parseMasterVolume(full)).toBe(1);
+    const off = Uint8Array.of(0xf0, 0x7f, 0x7f, 0x04, 0x01, 0x00, 0x00, 0xf7);
+    expect(parseMasterVolume(off)).toBe(0);
+    expect(parseMasterVolume(voiceParamChangeSysex(0, 0))).toBeNull();
   });
 });
 

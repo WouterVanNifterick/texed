@@ -1,9 +1,11 @@
 // Multi-timbral part rack (TX802 / TX816). Eight parts, each with an on/off,
-// MIDI receive channel, program, volume, pan, note range and transpose. Clicking
-// a part selects it as the target for the voice editor.
+// MIDI receive channel, program, volume, pan, note range, transpose, filter and
+// reverb send, over a global reverb and compressor. Clicking a part selects it
+// as the target for the voice editor.
 
 import { useEffect, useState } from 'react';
 import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
+import type { GlobalSettings, ReverbSettings } from '@texed/dx7-format/global-settings';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 import { programIndexForVoice } from '../audio/useSynth';
 import type { SynthStatus } from '../audio/useSynth';
@@ -17,21 +19,41 @@ interface PartRackProps {
   voiceNames: string[];
   selectedPart: number;
   programOptions: ProgramOption[];
+  settings: GlobalSettings;
   onSelect: (index: number) => void;
   onSetPart: (index: number, config: Partial<PartConfig>) => void;
+  onGesture: (index: number, field: keyof PartConfig, begin: boolean) => void;
   onSetVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
+  onSetGlobal: (settings: Partial<GlobalSettings>) => void;
   subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
   onClose: () => void;
 }
+
+/** These controls are 0..99 on MiniDexed hardware; the engine wants 0..1. */
+const toKnob = (v: number) => Math.round(v * 99);
+const fromKnob = (v: number) => v / 99;
+
+const REVERB_KNOBS: { key: keyof Omit<ReverbSettings, 'enabled'>; label: string; help: string }[] =
+  [
+    { key: 'size', label: 'Size', help: 'Reverb time' },
+    { key: 'hiDamp', label: 'Hi Damp', help: 'High frequency loss in the tail' },
+    { key: 'loDamp', label: 'Lo Damp', help: 'Low frequency loss in the tail' },
+    { key: 'lowpass', label: 'Lowpass', help: 'Darkens the reverb output' },
+    { key: 'diffusion', label: 'Diffuse', help: 'Lower settings make the tail echoey' },
+    { key: 'level', label: 'Level', help: 'Wet return level' },
+  ];
 
 export function PartRack({
   configs,
   voiceNames,
   selectedPart,
   programOptions,
+  settings,
   onSelect,
   onSetPart,
+  onGesture,
   onSetVoiceRef,
+  onSetGlobal,
   subscribeStatus,
   onClose,
 }: PartRackProps) {
@@ -77,6 +99,9 @@ export function PartRack({
                 'Range',
                 'Shift',
                 'Detune',
+                'Cutoff',
+                'Reso',
+                'Send',
                 'Damp',
                 'Act',
               ].map((h) => (
@@ -132,7 +157,7 @@ export function PartRack({
                           aria-label={`Part ${i + 1} on (follows part ${masterIdx + 1})`}
                         />
                       </td>
-                      <td colSpan={8} className="part-linked">
+                      <td colSpan={11} className="part-linked">
                         ← linked to part {masterIdx + 1}
                       </td>
                     </>
@@ -197,6 +222,7 @@ export function PartRack({
                           max={100}
                           value={Math.round(cfg.volume * 100)}
                           onChange={(volume) => onSetPart(i, { volume: volume / 100 })}
+                          onGesture={(begin) => onGesture(i, 'volume', begin)}
                           onClick={(e) => e.stopPropagation()}
                         />
                       </td>
@@ -208,6 +234,7 @@ export function PartRack({
                           max={100}
                           value={Math.round(cfg.pan * 100)}
                           onChange={(pan) => onSetPart(i, { pan: pan / 100 })}
+                          onGesture={(begin) => onGesture(i, 'pan', begin)}
                           onClick={(e) => e.stopPropagation()}
                         />
                       </td>
@@ -228,13 +255,15 @@ export function PartRack({
                           onPointerDown={(e) => e.stopPropagation()}
                         >
                           <Knob
+                            label=""
+                            helpLabel={`Part ${i + 1} transpose`}
                             value={cfg.noteShift}
                             min={-24}
                             max={24}
                             center={0}
                             size={28}
                             layout="inline"
-                            label={`Part ${i + 1} transpose`}
+                            help={`Part ${i + 1} transpose`}
                             format={(s) => (s > 0 ? `+${s}` : `${s}`)}
                             onChange={(noteShift) => onSetPart(i, { noteShift })}
                           />
@@ -247,18 +276,48 @@ export function PartRack({
                           onPointerDown={(e) => e.stopPropagation()}
                         >
                           <Knob
+                            label=""
+                            helpLabel={`Part ${i + 1} detune`}
                             value={cfg.detune}
                             min={-7}
                             max={7}
                             center={0}
                             size={28}
                             layout="inline"
-                            label={`Part ${i + 1} detune`}
+                            help={`Part ${i + 1} detune`}
                             format={(d) => (d > 0 ? `+${d}` : `${d}`)}
                             onChange={(detune) => onSetPart(i, { detune })}
+                            onGesture={(begin) => onGesture(i, 'detune', begin)}
                           />
                         </div>
                       </td>
+                      {(
+                        [
+                          ['cutoff', 'filter cutoff'],
+                          ['resonance', 'filter resonance'],
+                          ['reverbSend', 'reverb send'],
+                        ] as const
+                      ).map(([field, what]) => (
+                        <td key={field}>
+                          <div
+                            role="presentation"
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <Knob
+                              label=""
+                              helpLabel={`Part ${i + 1} ${what}`}
+                              value={toKnob(cfg[field])}
+                              max={99}
+                              size={28}
+                              layout="inline"
+                              help={`Part ${i + 1} ${what}`}
+                              onChange={(v) => onSetPart(i, { [field]: fromKnob(v) })}
+                              onGesture={(begin) => onGesture(i, field, begin)}
+                            />
+                          </div>
+                        </td>
+                      ))}
                       <td>
                         <input
                           type="checkbox"
@@ -281,6 +340,39 @@ export function PartRack({
             })}
           </tbody>
         </table>
+
+        <div className="partrack-global">
+          <label className="partrack-toggle">
+            <input
+              type="checkbox"
+              checked={settings.compressor}
+              onChange={(e) => onSetGlobal({ compressor: e.target.checked })}
+            />
+            COMPRESSOR
+          </label>
+          <label className="partrack-toggle">
+            <input
+              type="checkbox"
+              checked={settings.reverb.enabled}
+              onChange={(e) =>
+                onSetGlobal({ reverb: { ...settings.reverb, enabled: e.target.checked } })
+              }
+            />
+            REVERB
+          </label>
+          {REVERB_KNOBS.map(({ key, label, help }) => (
+            <Knob
+              key={key}
+              label={label}
+              value={toKnob(settings.reverb[key])}
+              max={99}
+              size={30}
+              help={help}
+              onChange={(v) => onSetGlobal({ reverb: { ...settings.reverb, [key]: fromKnob(v) } })}
+            />
+          ))}
+        </div>
+
         <p className="partrack-note">
           Click a row to edit that part's voice in the main editor. Drop or LOAD .syx or .Dx7Voice
           files (e.g. TX802 factory A1–B2 + P, or FS1R voice banks) to import banks, AMEM

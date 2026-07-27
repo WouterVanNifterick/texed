@@ -77,6 +77,10 @@ is making sound. Two implementations exist:
 - `WorkletPort` runs the TypeScript engine locally in an AudioWorklet. This is the default.
 - `HardwareMidiPort` translates the same commands into DX7 / DX7II / TX802 SysEx, so the editor
   drives real hardware. Enable it with the `?hw` query parameter.
+- `NativeBridgePort` talks to the JUCE plugin in `texed-vst/` when the page is its WebView. The
+  C++ side owns the audio and everything a DAW can automate; the port keeps a `SynthHost` here as
+  the librarian, so the file formats and the voice library stay in one implementation. See
+  `texed-vst/README.md`.
 
 Because the seam is a message protocol rather than a function call, adding a parameter means
 touching the protocol type, the worklet's message switch, and `useSynth`. Keep new commands
@@ -87,6 +91,81 @@ coarse enough that this stays worthwhile.
 The envelope and LFO graphs are not schematic drawings. `packages/dx7-engine/src/env-sim.ts`
 replays the real envelope generator to produce the curve, which is why the display matches what
 you hear. This is the one place where UI code depends on engine internals on purpose.
+
+## Hardware accuracy
+
+The engine started as a port of music-synthesizer-for-android, which reconstructed much of the
+DX7 by inference. The v1.8 firmware disassembly and the OPS/EGS die analysis have since settled a
+lot of it, and `packages/dx7-engine/src/__tests__/rom-tables.test.ts` pins our tables to the ROM
+bytes so a transcription slip shows up there rather than as an unexplained golden-hash diff.
+
+Primary sources, in the order they are worth reaching for:
+
+- ROM disassembly — <https://github.com/ajxs/yamaha_dx7_rom_disassembly> (`yamaha_dx7_rom_v1.8.asm`,
+  one 17k-line file; the `TABLE_*` and `PATCH_ACTIVATE_*` labels are where the parameter
+  conversions live)
+- OPS/EGS die analysis — Ken Shirriff's six-part series starting at
+  <https://www.righto.com/2021/11/reverse-engineering-yamaha-dx7.html>
+- Firmware overview — <https://ajxs.me/blog/Yamaha_DX7_Technical_Analysis.html>
+- Measured envelope shapes — <https://tlbflush.org/notes/>
+- VDX7, another bit-accurate emulator that runs the real firmware —
+  <https://github.com/chiaccona/VDX7>
+
+The framing that matters: **on real hardware the envelope generators live in the EGS chip, not in
+firmware.** The ROM only converts patch bytes into EGS register writes. So the disassembly is
+authoritative for parameter conversion, and says nothing about chip-internal behaviour.
+
+[vs-dexed.md](vs-dexed.md) is the item-by-item list of what we changed and why, with line
+references into both trees; it is written so the fixes could be handed upstream.
+
+Where the two calibrations genuinely disagree — the keyboard level scaling curves, the velocity
+chain, and the LFO / pitch EG / portamento rates — `engine-accuracy.ts` selects between them, and
+the setting is exposed as ACCURACY in the settings menu. It defaults to `hardware`; `dexed` keeps
+the msfa numbers for A/B against other Dexed-derived synths. Everything else the ROM settled was
+a plain bug and is fixed unconditionally. The rate tables are built at init time, so changing the
+mode rebuilds them — it is a setup change, not something to automate per note.
+
+`env-sim.ts` and the scaling graph call the same functions from the main thread, which has its own
+copy of the module state; `useSynth` mirrors the worklet's mode on every settings echo so the
+pictures keep matching the sound.
+
+### Known divergences we do not model
+
+Found and quantified against the primary sources, deliberately not implemented:
+
+- **COM carrier compensation.** The OPS algorithm ROM holds _(carrier count − 1)_ per operator and
+  attenuates carriers by log2(N) before summing, so the user hears a consistent level as they
+  change algorithm. `algorithms.ts` has no such field, which leaves algorithm 32 about 15.6 dB
+  hotter than algorithm 16 relative to hardware. The largest single outstanding item.
+- **Hardware quantisation grids**: 7-bit pitch bend input with a three-code centre detent
+  (18.75 cent steps at range 12), an 8-bit 256-step LFO sine that never crosses zero, the
+  0 / −0.39 / −0.78 cent three-semitone keyboard tuning ripple, the 4096-per-octave EGS pitch
+  grid, coarse-ratio table errors up to +0.51 cents, and the pitch EG's MSB-only target compare
+  (which snaps up to 74.7 cents at each stage end).
+- **The fixed ~375 Hz modulation grid.** We advance the LFO once per 64-sample block (689 Hz at
+  44.1 kHz); hardware updates on a 2.66 ms grid and skips the pitch EG and portamento entirely
+  while MIDI RX is pending.
+- **The output stage**: 15-bit operator output, a time-multiplexed 12-bit DAC plus 2-bit exponent
+  level shifter, two alternating sample-and-holds summing the last two samples, a fixed 16 kHz
+  analogue lowpass, and a 49096 Hz native rate. We do `>>4`, hard clip, `>>9`, `/0x8000` and a DC
+  blocker. `Tanh` is built in `exp2.ts` and initialised but never used.
+- **Voice allocation.** Hardware is pure round-robin over 16 slots, treats releasing and
+  sustain-pedal-held voices as free, and drops the 17th note rather than stealing from a held key;
+  a steal is an EGS key-off/key-on microseconds apart with no damping, which is the classic DX7
+  steal click. Ours scores `+4 not playing`, so we chop release tails far less often.
+- **Portamento FOLLOW mode** (`portamentoMode` is parsed in `amem.ts` but never applied) and
+  **DX7II fractional key scaling** (`scalingMode` / `fksEnabled` likewise).
+- **Master tune** is ±74.7 cents in 0.586 cent steps on hardware and reaches only the voice
+  register, so fixed-frequency operators are unaffected. We fold it into `pitchBase`, unbounded.
+
+### Not answerable from the ROM
+
+The firmware writes a register and stops, so the disassembly can neither confirm nor refute these
+msfa models: keyboard **rate** scaling (the EGS derives it from the transposed, master-tuned,
+pitch-EG-modulated frequency; we use the bare MIDI note), the EG increment mantissa/exponent
+formula, the `statics[]` hold table, the `1716` attack floor, the detune register's mapping to
+frequency, and the AMS 0-3 coefficients — hence `extendedAmsTable` in `amem.ts` stays a documented
+guess.
 
 ## Audio thread constraints
 

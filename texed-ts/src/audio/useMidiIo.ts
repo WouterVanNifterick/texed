@@ -54,6 +54,8 @@ export function useMidiIo({ synth, noteOn, noteOff, hardwareMode }: MidiIoOption
           trackCc(controller, value);
           synth.controlChange(controller, value, channel);
         },
+        programChange: synth.programChange,
+        sysex: synth.sysex,
         pitchBend: synth.pitchBend,
         aftertouch: (value, channel) => {
           trackAftertouch(value);

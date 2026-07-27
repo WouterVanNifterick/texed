@@ -3,6 +3,18 @@
 
 import { N } from './synth';
 import { Sin } from './sin';
+import { OCF_TICK_HZ, isHardwareAccurate } from './engine-accuracy';
+
+/**
+ * PATCH_ACTIVATE_SCALE_LFO_SPEED: the 16-bit phase increment the ROM writes for
+ * LFO speed 0-99. The multiplier steps once every four units above 160, which is
+ * where the visible 10.1 -> 11.3 Hz knee at speed 63/64 comes from; speed 0 is a
+ * special case (`INCA`) that would otherwise be silent.
+ */
+export function romLfoIncrement(speed: number): number {
+  const a = speed === 0 ? 1 : (165 * speed) >> 6;
+  return a * (a < 160 ? 11 : 11 + ((a - 160) >> 2));
+}
 
 // prettier-ignore
 export const lfoSource = [
@@ -44,14 +56,22 @@ export class Lfo {
   private delayinc2 = 0;
 
   static init(sampleRate: number): void {
-    // constant is (1 << 32) / 15.5s / 11
-    unit = Math.floor((N * 25190424) / sampleRate + 0.5);
+    // Both the LFO phase and the LFO delay live in 16-bit accumulators clocked
+    // once per output-compare interrupt, so one constant converts both to our
+    // 32-bit per-block domain: 65536 counts advance in 1/OCF_TICK_HZ seconds.
+    // msfa's 25190424 (and its 4437500000 phase ratio) put the tick at ~384.6 Hz,
+    // roughly 2.5% fast.
+    unit = isHardwareAccurate()
+      ? Math.floor((N * 65536 * OCF_TICK_HZ) / sampleRate + 0.5)
+      : Math.floor((N * 25190424) / sampleRate + 0.5);
     lforatio = Math.trunc((4437500000.0 * N) / sampleRate);
   }
 
   reset(params: ArrayLike<number>): void {
     const rate = params[0]; // 0..99
-    this.delta = Math.trunc(lfoSource[rate] * lforatio) >>> 0;
+    this.delta = isHardwareAccurate()
+      ? (unit * romLfoIncrement(rate)) >>> 0
+      : Math.trunc(lfoSource[rate] * lforatio) >>> 0;
     let a = 99 - params[1]; // LFO delay
     if (a === 99) {
       this.delayinc = U32;
@@ -68,6 +88,7 @@ export class Lfo {
   }
 
   getsample(): number {
+    const prevPhase = this.phase;
     this.phase = (this.phase + this.delta) >>> 0;
     let x: number;
     switch (this.waveform) {
@@ -85,7 +106,12 @@ export class Lfo {
       case 4: // sine
         return (1 << 23) + (Sin.lookup(this.phase >>> 8) >> 1);
       case 5: // s&h
-        if (this.phase < this.delta) {
+        // LFO_GET_AMPLITUDE branches on the *signed overflow* flag after adding
+        // the increment to the 16-bit phase, so the hold re-samples when the
+        // phase crosses the halfway point, not when it wraps through zero. Key
+        // sync parks the phase just below halfway, so a synced note gets a fresh
+        // value on its very first tick.
+        if (prevPhase >>> 31 === 0 && this.phase >>> 31 === 1) {
           this.randstate = (this.randstate * 179 + 17) & 0xff;
         }
         x = this.randstate ^ 0x80;

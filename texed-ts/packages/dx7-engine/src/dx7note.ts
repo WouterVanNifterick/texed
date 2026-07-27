@@ -3,12 +3,15 @@
 // the MTS_HasMaster path is never taken.
 
 import { Env, scaleoutlevel } from './env';
+import { kbdScaleCurve, velocityAttenuation } from './env-tables';
+import { isHardwareAccurate } from './engine-accuracy';
 import { PitchEnv } from './pitchenv';
 import { FmOpParams } from './fm-op-kernel';
 import { isCarrier } from './fm-core';
 import { Freqlut } from './freqlut';
 import { Exp2 } from './exp2';
-import { Porta } from './porta';
+import { Porta, portaStep } from './porta';
+import { clamp } from './synth';
 import { sar64 } from './fixedpoint';
 import {
   kControllerPitch,
@@ -32,10 +35,12 @@ const coarsemul = [
 ];
 
 /** Quantize a Q24 log-frequency to `semis`-semitone steps (DX7II portamento step). */
-function logfreqRoundSemi(freq: number, semis: number): number {
+export function logfreqRoundSemi(freq: number, semis: number): number {
   const base = 50857777;
   const step = Math.trunc(((1 << 24) / 12) * semis);
-  const rem = (freq - base) % step;
+  // JS `%` keeps the sign of the dividend, which flips the rounding direction
+  // below MIDI 0 (reachable with a 0.5x coarse ratio on a low note).
+  const rem = (((freq - base) % step) + step) % step;
   return freq - rem;
 }
 
@@ -51,7 +56,20 @@ const velocityData = [
   252, 253, 254,
 ];
 
+/**
+ * Velocity contribution to an operator's logical output level.
+ *
+ * The hardware path is the ROM's chain: MIDI velocity is quantised to 32 buckets
+ * on an inverted internal scale, looked up again, then combined with key velocity
+ * sensitivity into an 8-bit attenuation. One of those attenuation LSBs is 16 of
+ * our level units, hence the `<< 4`. It agrees with the msfa path at full
+ * velocity for every sensitivity; below MIDI velocity ~24 msfa falls away about
+ * twice as fast as the hardware does (84 dB of range at KVS 7 instead of 42 dB).
+ */
 export function scaleVelocity(velocity: number, sensitivity: number): number {
+  if (isHardwareAccurate()) {
+    return (15 - velocityAttenuation(velocity, sensitivity)) << 4;
+  }
   const clampedVel = Math.max(0, Math.min(127, velocity));
   const velValue = velocityData[clampedVel >> 1] - 239;
   return ((sensitivity * velValue + 7) >> 3) << 4;
@@ -69,6 +87,7 @@ const expScaleData = [
 ];
 
 function scaleCurve(group: number, depth: number, curve: number): number {
+  if (isHardwareAccurate()) return kbdScaleCurve(group, depth, curve);
   let scale: number;
   if (curve === 0 || curve === 3) {
     scale = (group * depth * 329) >> 12;
@@ -93,6 +112,39 @@ export function scaleLevel(
     return scaleCurve(Math.trunc((offset + 1) / 3), rightDepth, rightCurve);
   }
   return scaleCurve(Math.trunc(-(offset - 1) / 3), leftDepth, leftCurve);
+}
+
+// The EGS operator-level register is an 8-bit attenuation the ROM clamps to
+// 4..255 (VOICE_ADD_LOAD_OPERATOR_DATA_TO_EGS) - a DX7 never runs an operator at
+// absolute full output. In our units `outlevel = 4304 - 16 * attenuation`.
+const OUTLEVEL_MAX = 4240;
+const OUTLEVEL_MIN = 224;
+
+/**
+ * Logical output level for one operator: the patch output level on the
+ * logarithmic scale, plus keyboard level scaling, plus the velocity term,
+ * clamped the way the EGS register is.
+ *
+ * Exported so the envelope graph plots the level the engine actually plays.
+ * `off` is the operator's base offset into the 155-byte voice.
+ */
+export function operatorOutLevel(
+  patch: ArrayLike<number>,
+  off: number,
+  midinote: number,
+  velocity: number,
+): number {
+  const levelScaling = scaleLevel(
+    midinote,
+    patch[off + 8],
+    patch[off + 9],
+    patch[off + 10],
+    patch[off + 11],
+    patch[off + 12],
+  );
+  const scaled = clamp(scaleoutlevel(patch[off + 16]) + levelScaling, 0, 127);
+  const outlevel = (scaled << 5) + scaleVelocity(velocity, patch[off + 15]);
+  return clamp(outlevel, OUTLEVEL_MIN, OUTLEVEL_MAX);
 }
 
 const pitchmodsenstab = [0, 10, 20, 33, 55, 92, 153, 255];
@@ -120,7 +172,13 @@ export class Dx7Note {
   private pitchenv = new PitchEnv();
 
   private basepitch = new Int32Array(6);
-  private portaCurpitch = new Int32Array(6);
+  // Portamento is a property of the voice, not of each operator: the EGS holds
+  // one gliding voice frequency and the OPS adds the per-operator ratio on top.
+  // Gliding each operator separately (as msfa does) makes glissando quantise on
+  // a different phase per operator, so the ratios drift by up to a semitone
+  // mid-glide.
+  private notePitch = 0;
+  private portaCur = 0;
   private opMode = new Int32Array(6);
   private ampmodsens = new Int32Array(6);
   private fbBuf = new Int32Array(2);
@@ -194,7 +252,10 @@ export class Dx7Note {
       }
     } else {
       logfreq = (4458616 * ((coarse & 3) * 100 + fine)) >> 3;
-      logfreq += detune > 7 ? 13457 * (detune - 7) : 0;
+      // PATCH_ACTIVATE_OPERATOR_DETUNE writes the same signed +/-7 register whatever
+      // PATCH_OP_MODE says, so detune is symmetric here too. msfa dropped the
+      // negative half.
+      logfreq += 13457 * (detune - 7);
     }
     return logfreq | 0;
   }
@@ -226,21 +287,7 @@ export class Dx7Note {
         rates[i] = patch[off + i];
         levels[i] = patch[off + 4 + i];
       }
-      let outlevel = patch[off + 16];
-      outlevel = scaleoutlevel(outlevel);
-      const levelScaling = scaleLevel(
-        midinote,
-        patch[off + 8],
-        patch[off + 9],
-        patch[off + 10],
-        patch[off + 11],
-        patch[off + 12],
-      );
-      outlevel += levelScaling;
-      outlevel = Math.min(127, outlevel);
-      outlevel = outlevel << 5;
-      outlevel += scaleVelocity(velocity, patch[off + 15]);
-      outlevel = Math.max(0, outlevel);
+      const outlevel = operatorOutLevel(patch, off, midinote, velocity);
       const rateScaling = scaleRate(midinote, patch[off + 13]);
       this.env[op].init(rates, levels, outlevel, rateScaling, continueEnv);
 
@@ -253,9 +300,10 @@ export class Dx7Note {
         (mode === 0 ? this.randPitchOffset : 0);
       this.opMode[op] = mode;
       this.basepitch[op] = freq;
-      this.portaCurpitch[op] = freq;
       this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
     }
+    this.notePitch = this.tuningState.midinoteToLogfreq(midinote) + this.randPitchOffset;
+    this.portaCur = this.notePitch;
     const pegRateAdj =
       sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
     for (let i = 0; i < 4; i++) {
@@ -273,20 +321,25 @@ export class Dx7Note {
     this.mpePitchBend = 8192;
   }
 
+  /** Seed the glide from where the previous note currently is (portamento RETAIN). */
   initPortamento(src: Dx7Note): void {
-    for (let i = 0; i < 6; i++) {
-      this.portaCurpitch[i] = src.portaCurpitch[i];
-    }
+    this.portaCur = src.portaCur;
   }
 
   compute(buf: Int32Array, lfoVal: number, lfoDelay: number, ctrls: Controllers): void {
     // ==== PITCH ====
-    const pmd = (this.pitchmoddepth * lfoDelay) >>> 0; // Q32 (fits uint32)
+    // MOD_PITCH_LOAD_TO_EGS builds one 8-bit factor by *adding* the delay-scaled
+    // patch depth to the summed controller contributions and saturating at 255,
+    // then multiplies the LFO by it. msfa takes the larger of the two instead, so
+    // LFO vibrato plus mod-wheel vibrato came out as the deeper of the two rather
+    // than the sum. `ctrls.pitchMod` runs 0-127 against the depth's 0-255, hence
+    // the doubling.
     const senslfo = (this.pitchmodsens * (lfoVal - (1 << 23))) | 0;
-    // product can reach ~9.2e18 (> 2^53), so BigInt is required here.
-    const pmod1 = Math.abs(Number((BigInt(pmd) * BigInt(senslfo)) >> 39n));
-    const pmod2 = Math.abs(sar64(ctrls.pitchMod * senslfo, 14) | 0);
-    let pitchMod = Math.max(pmod1, pmod2);
+    const pitchModFactor = Math.min(
+      255,
+      ((this.pitchmoddepth * lfoDelay) >> 24) + ctrls.pitchMod * 2,
+    );
+    let pitchMod = Math.abs(sar64(pitchModFactor * senslfo, 15));
     let peg = this.pitchenv.getsample();
     if (this.pegShift) peg >>= this.pegShift;
     if (this.pegVelScale !== 1) peg = Math.trunc(peg * this.pegVelScale);
@@ -319,16 +372,17 @@ export class Dx7Note {
     const pitchBase = (pb + ctrls.masterTune + ctrls.pitchBiasMod) | 0;
     pitchMod += pitchBase;
 
-    // ==== AMP MOD ====
-    const lfoValAmp = (1 << 24) - lfoVal;
-    let amod1 = sar64(this.ampmoddepth * lfoDelay, 8); // Q24
-    amod1 = sar64(amod1 * lfoValAmp, 24);
-    const amod2 = sar64(ctrls.ampMod * lfoValAmp, 7);
-    let amdMod = Math.max(amod1, amod2);
-
-    // ==== EG AMP MOD ====
-    const amod3 = (ctrls.egMod + 1) << 17;
-    amdMod = Math.max((1 << 24) - amod3, amdMod);
+    // ==== AMP MOD + EG BIAS ====
+    // MOD_AMP_LOAD_TO_EGS: sum the delay-scaled depth and the controller amount,
+    // clamp so adding the EG bias cannot overflow, scale by the LFO, then add the
+    // bias. msfa took the maximum of all three, so EG bias and LFO amp mod never
+    // stacked.
+    const FULL = 1 << 24;
+    const lfoValAmp = FULL - lfoVal;
+    const bias = FULL - ((ctrls.egMod + 1) << 17);
+    let amdMod = Math.min(FULL, sar64(this.ampmoddepth * lfoDelay, 8) + (ctrls.ampMod << 17));
+    amdMod = Math.min(FULL, amdMod + bias) - bias;
+    amdMod = Math.min(FULL, sar64(amdMod * lfoValAmp, 24) + bias);
 
     let portaRate: number;
     if (ctrls.portamentoEnableCc) {
@@ -339,31 +393,36 @@ export class Dx7Note {
       portaRate = Porta.rates[0];
     }
 
+    // ==== PORTAMENTO ====
+    // One glide for the whole voice; operators ride on it via their fixed ratio
+    // offset. `portaOffset` is the pre-advance position, matching msfa's ordering.
+    let portaOffset = 0;
+    if (this.portaCur !== this.notePitch) {
+      const cur = this.portaCur;
+      const dst = this.notePitch;
+      const glide = ctrls.portamentoGlissCc
+        ? logfreqRoundSemi(cur, Math.max(1, ctrls.portamentoStepCc))
+        : cur;
+      portaOffset = glide - dst;
+
+      const rate = portaStep(portaRate, dst - cur, ctrls.portamentoGlissCc);
+      const goingUp = cur < dst;
+      const next = cur + (goingUp ? rate : -rate);
+      this.portaCur = goingUp ? Math.min(next, dst) : Math.max(next, dst);
+    }
+
     // ==== OP RENDER ====
     for (let op = 0; op < 6; op++) {
       if (ctrls.opSwitch[op] === '0') {
         this.env[op].getsample(); // advance envelope even when not playing
         this.params[op].levelIn = 0;
       } else {
-        let basepitch = this.basepitch[op];
+        const basepitch = this.basepitch[op];
 
         if (this.opMode[op]) {
           this.params[op].freq = Freqlut.lookup(basepitch + pitchBase);
         } else {
-          if (this.portaCurpitch[op] !== this.basepitch[op]) {
-            basepitch = this.portaCurpitch[op];
-            if (ctrls.portamentoGlissCc) {
-              basepitch = logfreqRoundSemi(basepitch, Math.max(1, ctrls.portamentoStepCc));
-            }
-
-            const cur = this.portaCurpitch[op];
-            const dst = this.basepitch[op];
-            const goingUp = cur < dst;
-            let newpitch = cur + (goingUp ? portaRate : -portaRate);
-            if ((goingUp && newpitch > dst) || (!goingUp && newpitch < dst)) newpitch = dst;
-            this.portaCurpitch[op] = newpitch;
-          }
-          this.params[op].freq = Freqlut.lookup(basepitch + pitchMod);
+          this.params[op].freq = Freqlut.lookup(basepitch + portaOffset + pitchMod);
         }
 
         let level = this.env[op].getsample();
@@ -421,24 +480,12 @@ export class Dx7Note {
         rates[i] = patch[off + i];
         levels[i] = patch[off + 4 + i];
       }
-      let outlevel = patch[off + 16];
-      outlevel = scaleoutlevel(outlevel);
-      const levelScaling = scaleLevel(
-        midinote,
-        patch[off + 8],
-        patch[off + 9],
-        patch[off + 10],
-        patch[off + 11],
-        patch[off + 12],
-      );
-      outlevel += levelScaling;
-      outlevel = Math.min(127, outlevel);
-      outlevel = outlevel << 5;
-      outlevel += scaleVelocity(velocity, patch[off + 15]);
-      outlevel = Math.max(0, outlevel);
+      const outlevel = operatorOutLevel(patch, off, midinote, velocity);
       const rateScaling = scaleRate(midinote, patch[off + 13]);
       this.env[op].update(rates, levels, outlevel, rateScaling);
     }
+    // Keep the glide anchored if the tuning moved under us.
+    this.notePitch = this.tuningState.midinoteToLogfreq(midinote) + this.randPitchOffset;
     this.algorithm = patch[134];
     const feedback = patch[135];
     this.fbShift = feedback !== 0 ? FEEDBACK_BITDEPTH - feedback : 16;

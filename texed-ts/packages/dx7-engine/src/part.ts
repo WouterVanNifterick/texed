@@ -47,7 +47,12 @@ interface Voice {
   velocity: number;
   channel: number;
   keydown: boolean;
+  /** Held by the sustain pedal (CC 64). */
   sustained: boolean;
+  /** Held by the sostenuto pedal (CC 66): keys that were down when it engaged. */
+  sostenuto: boolean;
+  /** Held by hold-2 (CC 69), which lets go on the next note with no key down. */
+  hold2: boolean;
   live: boolean;
   keydownSeq: number;
   /** Forced-damp fade in progress: still audible, but no longer counts toward
@@ -70,6 +75,7 @@ export class Part {
   private nextKeydownSeq = 0;
   private lastActiveVoice = 0;
   private sustain = false;
+  private hold2 = false;
 
   /** Performance-level transpose (semitones) added to engine pitch only; does
    * not affect note-on/off matching. Set by SynthRack from the part's noteShift. */
@@ -126,6 +132,8 @@ export class Part {
         channel: 1,
         keydown: false,
         sustained: false,
+        sostenuto: false,
+        hold2: false,
         live: false,
         keydownSeq: -1,
         damping: false,
@@ -227,6 +235,8 @@ export class Part {
       if (!v.live) continue;
       v.keydown = false;
       v.sustained = false;
+      v.sostenuto = false;
+      v.hold2 = false;
       v.damping = false;
       v.dx7Note.keyup();
       v.live = false;
@@ -300,6 +310,16 @@ export class Part {
       }
     }
 
+    // Hold-2 keeps notes ringing after key-up, and lets go of them when a new
+    // note starts a fresh phrase rather than when the pedal lifts.
+    if (this.hold2 && !this.anyKeyDown()) {
+      for (const v of this.voices) {
+        if (!v.hold2) continue;
+        v.hold2 = false;
+        this.maybeRelease(v);
+      }
+    }
+
     // LFO key trigger: "single" restarts only on the first key down; "multi"
     // (AMEM LTRG) retriggers on every note-on.
     let triggerLfo = this.supplement.lfoKeyTrigger;
@@ -342,6 +362,8 @@ export class Part {
     v.midiNote = pitch;
     v.velocity = velocity;
     v.sustained = this.sustain;
+    v.sostenuto = false;
+    v.hold2 = false;
     v.keydown = true;
     v.damping = false;
     v.keydownSeq = this.nextKeydownSeq++;
@@ -388,22 +410,33 @@ export class Part {
     for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
       const v = this.voices[note];
       if (v.midiNote === pitch && v.keydown && v.channel === channel) {
-        v.keydown = false;
+        this.keyUp(v);
         released = true;
-        if (this.sustain) v.sustained = true;
-        else v.dx7Note.keyup();
       }
     }
     if (released) return;
 
     for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
       const v = this.voices[note];
-      if (v.midiNote === pitch && v.keydown) {
-        v.keydown = false;
-        if (this.sustain) v.sustained = true;
-        else v.dx7Note.keyup();
-      }
+      if (v.midiNote === pitch && v.keydown) this.keyUp(v);
     }
+  }
+
+  private anyKeyDown(): boolean {
+    for (const v of this.voices) if (v.keydown) return true;
+    return false;
+  }
+
+  private keyUp(v: Voice): void {
+    v.keydown = false;
+    if (this.sustain) v.sustained = true;
+    if (this.hold2) v.hold2 = true;
+    this.maybeRelease(v);
+  }
+
+  /** Let a voice go once no pedal is still holding it. */
+  private maybeRelease(v: Voice): void {
+    if (!v.keydown && !v.sustained && !v.sostenuto && !v.hold2) v.dx7Note.keyup();
   }
 
   controlChange(ctrl: number, value: number): void {
@@ -439,6 +472,12 @@ export class Part {
       case 65:
         this.controllers.portamentoEnableCc = value >= 64;
         break;
+      case 66:
+        this.setSostenuto(value > 63);
+        break;
+      case 69:
+        this.setHold2(value > 63);
+        break;
       case 120:
       case 123:
         this.panic();
@@ -446,15 +485,39 @@ export class Part {
     }
   }
 
+  setMonoMode(on: boolean): void {
+    this.monoMode = on;
+  }
+
   private setSustain(on: boolean): void {
     this.sustain = on;
-    if (!on) {
-      for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
-        if (this.voices[note].sustained && !this.voices[note].keydown) {
-          this.voices[note].dx7Note.keyup();
-          this.voices[note].sustained = false;
-        }
+    if (on) return;
+    for (const v of this.voices) {
+      if (!v.sustained) continue;
+      v.sustained = false;
+      this.maybeRelease(v);
+    }
+  }
+
+  /** Sostenuto captures the keys that are down right now and holds only those. */
+  private setSostenuto(on: boolean): void {
+    for (const v of this.voices) {
+      if (on) {
+        if (v.live && v.keydown) v.sostenuto = true;
+      } else if (v.sostenuto) {
+        v.sostenuto = false;
+        this.maybeRelease(v);
       }
+    }
+  }
+
+  private setHold2(on: boolean): void {
+    this.hold2 = on;
+    if (on) return;
+    for (const v of this.voices) {
+      if (!v.hold2) continue;
+      v.hold2 = false;
+      this.maybeRelease(v);
     }
   }
 
@@ -472,6 +535,8 @@ export class Part {
       this.voices[i].midiNote = -1;
       this.voices[i].keydown = false;
       this.voices[i].sustained = false;
+      this.voices[i].sostenuto = false;
+      this.voices[i].hold2 = false;
       this.voices[i].damping = false;
       this.voices[i].live = false;
       this.voices[i].dx7Note.keyup();

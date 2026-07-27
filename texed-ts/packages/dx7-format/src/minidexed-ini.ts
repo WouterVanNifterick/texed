@@ -3,6 +3,7 @@
 
 import type { PartConfig } from './part-config';
 import { NUM_PARTS } from './part-config';
+import { DEFAULT_REVERB_SETTINGS, type GlobalSettings } from './global-settings';
 import { voiceFromRawVced } from './sysex';
 
 const TG_SUFFIX = /^(.+?)(\d+)$/;
@@ -16,6 +17,9 @@ const MAPPED_TG_KEYS = new Set([
   'NoteLimitLow',
   'NoteLimitHigh',
   'NoteShift',
+  'Cutoff',
+  'Resonance',
+  'ReverbSend',
   'VoiceData',
 ]);
 
@@ -23,9 +27,6 @@ const MAPPED_TG_KEYS = new Set([
 const PRESERVED_TG_KEYS = [
   'BankNumber',
   'VoiceNumber',
-  'Cutoff',
-  'Resonance',
-  'ReverbSend',
   'PitchBendRange',
   'PitchBendStep',
   'PortamentoMode',
@@ -42,16 +43,19 @@ const PRESERVED_TG_KEYS = [
   'AftertouchTarget',
 ] as const;
 
-const GLOBAL_KEYS = [
-  'CompressorEnable',
-  'ReverbEnable',
-  'ReverbSize',
-  'ReverbHighDamp',
-  'ReverbLowDamp',
-  'ReverbLowPass',
-  'ReverbDiffusion',
-  'ReverbLevel',
-] as const;
+/** Global keys mapped onto GlobalSettings, with MiniDexed's own defaults. */
+const GLOBAL_KEY_DEFAULTS = {
+  CompressorEnable: 1,
+  ReverbEnable: 1,
+  ReverbSize: 70,
+  ReverbHighDamp: 50,
+  ReverbLowDamp: 50,
+  ReverbLowPass: 30,
+  ReverbDiffusion: 65,
+  ReverbLevel: 99,
+} as const;
+
+type GlobalKey = keyof typeof GLOBAL_KEY_DEFAULTS;
 
 export type MiniDexedTgExtras = Partial<Record<(typeof PRESERVED_TG_KEYS)[number], string>>;
 
@@ -60,16 +64,19 @@ export interface MiniDexedExtras {
   preamble: string[];
   /** TG index 0..7 */
   tg: MiniDexedTgExtras[];
-  global: Partial<Record<(typeof GLOBAL_KEYS)[number], string>>;
   /** Unknown keys in file order (full Key=Value lines). */
   unknown: { key: string; value: string }[];
 }
+
+/** The compressor switch and reverb block a performance carries. */
+export type MiniDexedGlobals = Pick<GlobalSettings, 'compressor' | 'reverb'>;
 
 export interface ParsedMiniDexedIni {
   /** Value of the top-level `Name=` key, if present. */
   name: string | null;
   parts: Partial<PartConfig>[];
   voices: (Uint8Array | null)[];
+  global: MiniDexedGlobals;
   extras: MiniDexedExtras;
 }
 
@@ -78,6 +85,7 @@ export interface SerializeMiniDexedIniInput {
   name?: string | null;
   parts: PartConfig[];
   voices: Uint8Array[];
+  global: MiniDexedGlobals;
   extras?: MiniDexedExtras | null;
 }
 
@@ -85,7 +93,6 @@ function emptyExtras(): MiniDexedExtras {
   return {
     preamble: [],
     tg: Array.from({ length: NUM_PARTS }, () => ({})),
-    global: {},
     unknown: [],
   };
 }
@@ -94,9 +101,6 @@ function defaultTgExtras(_tg: number): MiniDexedTgExtras {
   return {
     BankNumber: '0',
     VoiceNumber: '1',
-    Cutoff: '99',
-    Resonance: '0',
-    ReverbSend: '50',
     PitchBendRange: '2',
     PitchBendStep: '0',
     PortamentoMode: '0',
@@ -114,22 +118,18 @@ function defaultTgExtras(_tg: number): MiniDexedTgExtras {
   };
 }
 
-function defaultGlobalExtras(): MiniDexedExtras['global'] {
-  return {
-    CompressorEnable: '1',
-    ReverbEnable: '1',
-    ReverbSize: '70',
-    ReverbHighDamp: '50',
-    ReverbLowDamp: '50',
-    ReverbLowPass: '30',
-    ReverbDiffusion: '65',
-    ReverbLevel: '99',
-  };
-}
-
 function parseIntValue(raw: string, fallback: number): number {
   const n = Number.parseInt(raw.trim(), 10);
   return Number.isFinite(n) ? n : fallback;
+}
+
+/** MiniDexed's controls run 0..99; ours are normalised. */
+function fromCc99(raw: number): number {
+  return Math.max(0, Math.min(1, raw / 99));
+}
+
+function toCc99(value: number): number {
+  return Math.round(Math.max(0, Math.min(1, value)) * 99);
 }
 
 function mapMidiChannel(raw: number): Pick<PartConfig, 'enabled' | 'rxChannel'> {
@@ -144,6 +144,14 @@ function unmapMidiChannel(cfg: PartConfig): number {
   return cfg.rxChannel;
 }
 
+/**
+ * MiniDexed's own mixer feeds `sin()` (which is 0 at Pan=0) to the left sum and
+ * `cos()` to the right, so on real hardware Pan=0 is hard right. That
+ * contradicts MIDI CC 10, where 0 is hard left, and it applies to their CC 10
+ * handling too, so it is a bug rather than a convention. Imports follow the
+ * MIDI meaning; a MiniDexed performance therefore comes in mirrored, which for
+ * their shipped files (Pan1=0 / Pan2=127) only swaps a symmetric spread.
+ */
 function mapPan(raw: number): number {
   return (raw - 64) / 64;
 }
@@ -192,14 +200,15 @@ function isPreservedTgKey(base: string): base is (typeof PRESERVED_TG_KEYS)[numb
   return (PRESERVED_TG_KEYS as readonly string[]).includes(base);
 }
 
-function isGlobalKey(key: string): key is (typeof GLOBAL_KEYS)[number] {
-  return (GLOBAL_KEYS as readonly string[]).includes(key);
+function isGlobalKey(key: string): key is GlobalKey {
+  return key in GLOBAL_KEY_DEFAULTS;
 }
 
 export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
   const extras = emptyExtras();
   const parts: Partial<PartConfig>[] = Array.from({ length: NUM_PARTS }, () => ({}));
   const voices: (Uint8Array | null)[] = Array.from({ length: NUM_PARTS }, () => null);
+  const globalRaw: Partial<Record<GlobalKey, number>> = {};
   let name: string | null = null;
 
   const tgRaw: {
@@ -210,6 +219,9 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
     noteLow?: number;
     noteHigh?: number;
     noteShift?: number;
+    cutoff?: number;
+    resonance?: number;
+    reverbSend?: number;
     voiceData?: string;
   }[] = Array.from({ length: NUM_PARTS }, () => ({}));
 
@@ -267,6 +279,15 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
           case 'NoteShift':
             slot.noteShift = parseIntValue(value, 0);
             break;
+          case 'Cutoff':
+            slot.cutoff = parseIntValue(value, 99);
+            break;
+          case 'Resonance':
+            slot.resonance = parseIntValue(value, 0);
+            break;
+          case 'ReverbSend':
+            slot.reverbSend = parseIntValue(value, 50);
+            break;
           case 'VoiceData':
             slot.voiceData = value;
             break;
@@ -282,7 +303,7 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
     if (key === 'Name') {
       name = value;
     } else if (isGlobalKey(key)) {
-      extras.global[key] = value;
+      globalRaw[key] = parseIntValue(value, GLOBAL_KEY_DEFAULTS[key]);
     } else {
       extras.unknown.push({ key, value });
     }
@@ -298,13 +319,31 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
     if (raw.noteLow !== undefined) patch.noteLow = raw.noteLow;
     if (raw.noteHigh !== undefined) patch.noteHigh = raw.noteHigh;
     if (raw.noteShift !== undefined) patch.noteShift = raw.noteShift;
+    if (raw.cutoff !== undefined) patch.cutoff = fromCc99(raw.cutoff);
+    if (raw.resonance !== undefined) patch.resonance = fromCc99(raw.resonance);
+    if (raw.reverbSend !== undefined) patch.reverbSend = fromCc99(raw.reverbSend);
     parts[i] = patch;
     if (raw.voiceData !== undefined) {
       voices[i] = decodeVoiceDataHex(raw.voiceData);
     }
   }
 
-  return { name, parts, voices, extras };
+  const g = { ...GLOBAL_KEY_DEFAULTS, ...globalRaw };
+  const global: MiniDexedGlobals = {
+    compressor: g.CompressorEnable !== 0,
+    reverb: {
+      ...DEFAULT_REVERB_SETTINGS,
+      enabled: g.ReverbEnable !== 0,
+      size: fromCc99(g.ReverbSize),
+      hiDamp: fromCc99(g.ReverbHighDamp),
+      loDamp: fromCc99(g.ReverbLowDamp),
+      lowpass: fromCc99(g.ReverbLowPass),
+      diffusion: fromCc99(g.ReverbDiffusion),
+      level: fromCc99(g.ReverbLevel),
+    },
+  };
+
+  return { name, parts, voices, global, extras };
 }
 
 function mergeExtras(base: MiniDexedExtras | null | undefined): MiniDexedExtras {
@@ -312,7 +351,6 @@ function mergeExtras(base: MiniDexedExtras | null | undefined): MiniDexedExtras 
   if (base) {
     out.preamble = [...base.preamble];
     out.unknown = [...base.unknown];
-    out.global = { ...base.global };
     for (let i = 0; i < NUM_PARTS; i++) {
       out.tg[i] = { ...base.tg[i] };
     }
@@ -320,7 +358,6 @@ function mergeExtras(base: MiniDexedExtras | null | undefined): MiniDexedExtras 
   for (let i = 0; i < NUM_PARTS; i++) {
     out.tg[i] = { ...defaultTgExtras(i), ...out.tg[i] };
   }
-  out.global = { ...defaultGlobalExtras(), ...out.global };
   return out;
 }
 
@@ -354,9 +391,12 @@ export function serializeMiniDexedIni(input: SerializeMiniDexedIniInput): string
       lines.push(`Volume${tg}=${Math.round(Math.max(0, Math.min(1, cfg.volume)) * 127)}`);
       lines.push(`Pan${tg}=${unmapPan(cfg.pan)}`);
       lines.push(`Detune${tg}=${cfg.detune}`);
+      lines.push(`Cutoff${tg}=${toCc99(cfg.cutoff)}`);
+      lines.push(`Resonance${tg}=${toCc99(cfg.resonance)}`);
       lines.push(`NoteLimitLow${tg}=${cfg.noteLow}`);
       lines.push(`NoteLimitHigh${tg}=${cfg.noteHigh}`);
       lines.push(`NoteShift${tg}=${cfg.noteShift}`);
+      lines.push(`ReverbSend${tg}=${toCc99(cfg.reverbSend)}`);
     }
 
     for (const key of PRESERVED_TG_KEYS) {
@@ -369,9 +409,15 @@ export function serializeMiniDexedIni(input: SerializeMiniDexedIniInput): string
     lines.push('');
   }
 
-  for (const key of GLOBAL_KEYS) {
-    lines.push(`${key}=${extras.global[key] ?? defaultGlobalExtras()[key]}`);
-  }
+  const { compressor, reverb } = input.global;
+  lines.push(`CompressorEnable=${compressor ? 1 : 0}`);
+  lines.push(`ReverbEnable=${reverb.enabled ? 1 : 0}`);
+  lines.push(`ReverbSize=${toCc99(reverb.size)}`);
+  lines.push(`ReverbHighDamp=${toCc99(reverb.hiDamp)}`);
+  lines.push(`ReverbLowDamp=${toCc99(reverb.loDamp)}`);
+  lines.push(`ReverbLowPass=${toCc99(reverb.lowpass)}`);
+  lines.push(`ReverbDiffusion=${toCc99(reverb.diffusion)}`);
+  lines.push(`ReverbLevel=${toCc99(reverb.level)}`);
 
   for (const { key, value } of extras.unknown) {
     lines.push(`${key}=${value}`);

@@ -4,6 +4,8 @@ interface PartSliderProps {
   max: number;
   onChange: (value: number) => void;
   onClick?: (e: React.MouseEvent<HTMLInputElement>) => void;
+  /** Start and end of a drag, for hosts that record parameter gestures. */
+  onGesture?: (begin: boolean) => void;
   /** Fill grows from center (for pan); default fills from the left (volume). */
   center?: boolean;
   label?: string;
@@ -16,6 +18,7 @@ export function PartSlider({
   max,
   onChange,
   onClick,
+  onGesture,
   center = false,
   label,
 }: PartSliderProps) {
@@ -38,6 +41,9 @@ export function PartSlider({
         aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
         onClick={onClick}
+        onPointerDown={() => onGesture?.(true)}
+        onPointerUp={() => onGesture?.(false)}
+        onPointerCancel={() => onGesture?.(false)}
       />
     </div>
   );

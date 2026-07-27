@@ -21,7 +21,7 @@
 //           "LM  MCRYE"   DX7II microtuning (edit)
 //           "LM  MCRYM"   DX7II microtuning (memory)
 
-import { sysexChecksum, Cartridge, initVoice } from './cartridge';
+import { sysexChecksum, clampVoice, Cartridge, initVoice } from './cartridge';
 
 export const SysexKind = {
   Voice: 'voice',
@@ -222,16 +222,18 @@ export function isRawVcedBuffer(bytes: Uint8Array): boolean {
  * 155-byte dumps omit the operator on/off mask; it defaults to 0x3F (all ops on).
  */
 export function voiceFromRawVced(data: Uint8Array): Uint8Array | null {
+  let out: Uint8Array;
   if (data.length === 155) {
-    const out = new Uint8Array(156);
+    out = new Uint8Array(156);
     out.set(data);
     out[155] = 0x3f;
-    return out;
+  } else if (data.length === 156) {
+    out = data.slice();
+  } else {
+    return null;
   }
-  if (data.length === 156) {
-    return data.slice();
-  }
-  return null;
+  clampVoice(out);
+  return out;
 }
 
 /**
@@ -243,6 +245,48 @@ export function voiceFromRawVced(data: Uint8Array): Uint8Array | null {
 export function voiceFromVced(frame: Uint8Array): Uint8Array | null {
   if (frame.length < 6 + 155) return null;
   return voiceFromRawVced(frame.subarray(6, 6 + 155));
+}
+
+/** Parameter groups carried by an `F0 43 1n g pp vv F7` frame. */
+export const ParamGroup = {
+  /** The 156-byte voice; parameters 128 and up arrive as group 1. */
+  Voice: 0,
+  VoiceHigh: 1,
+  /** TX802 / TX816 performance edit buffer. */
+  Performance: 4,
+  /** DX7II additional voice data (the 35-byte AMEM supplement). */
+  Supplement: 5,
+} as const;
+
+export interface ParamChange {
+  /**
+   * Sub-status nibble. Nominally the MIDI channel, but MiniDexed reads it as a
+   * tone generator index and we follow that, which gives software addressing of
+   * all eight parts down one cable.
+   */
+  device: number;
+  group: number;
+  param: number;
+  value: number;
+}
+
+/** Decode `F0 43 1n g pp vv F7`, or null when the frame is not one. */
+export function parseParamChange(frame: Uint8Array): ParamChange | null {
+  if (frame.length < 7 || frame[0] !== 0xf0 || frame[1] !== 0x43) return null;
+  if ((frame[2] & 0xf0) !== 0x10) return null;
+  return {
+    device: frame[2] & 0x0f,
+    group: frame[3] & 0x7f,
+    param: frame[4] & 0x7f,
+    value: frame[5] & 0x7f,
+  };
+}
+
+/** Decode universal master volume `F0 7F 7F 04 01 ll mm F7` to a 0..1 gain. */
+export function parseMasterVolume(frame: Uint8Array): number | null {
+  if (frame.length < 8) return null;
+  if (frame[0] !== 0xf0 || frame[1] !== 0x7f || frame[3] !== 0x04 || frame[4] !== 0x01) return null;
+  return (((frame[6] & 0x7f) << 7) | (frame[5] & 0x7f)) / 16383;
 }
 
 /** DX7 VCED single-parameter change: live edit of one byte of the 156-byte voice. */

@@ -13,6 +13,7 @@ import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { createDefaultAmem } from '@texed/dx7-format/amem';
 import { DEFAULT_GLOBAL_SETTINGS, type GlobalSettings } from '@texed/dx7-format/global-settings';
+import { setEngineAccuracy } from '@texed/dx7-engine/synth-unit';
 import { WorkletPort } from './worklet-port';
 import { createSynthActions } from './synth-actions';
 import type { BankInfo, Synth, SynthStatus } from './synth-types';
@@ -107,6 +108,11 @@ export function useSynth(externalPort?: SynthPort): Synth {
         case 'settings':
           setSettings(m.settings);
           setMicrotuningNames(m.microtuningNames);
+          // The scaling and envelope graphs call into the engine's own scaling
+          // functions from the main thread, which has a separate copy of the
+          // module state. Mirror the worklet's mode so the pictures keep
+          // matching the sound.
+          setEngineAccuracy(m.settings.accuracy);
           break;
         case 'parts':
           setPartConfigs(m.configs);

@@ -26,7 +26,7 @@ function Probe() {
   useEnvZoomPan(ref, INSET);
   return (
     <div ref={ref} data-testid="plot">
-      <button className="env-node" data-testid="node" />
+      <button className="env-node" data-testid="node" aria-label="node" />
     </div>
   );
 }

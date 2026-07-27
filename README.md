@@ -26,6 +26,14 @@ envelope generator sample by sample, which is why the graph matches what you hea
 including the awkward parts, like a rate that stalls or a level that never arrives.
 The nodes are draggable, so you can edit a stage by pulling it where you want it.
 
+The engine also fixes a set of long-standing inaccuracies in the shared
+music-synthesizer-for-android code, checked against the DX7 ROM disassembly: keyboard level scaling
+that was up to 24 dB out at the top of the curve, a velocity response about twice too deep at low
+velocities, portamento running 5–16× too fast, and modulation sources combining with a maximum
+where the hardware sums them. Every one is written up with its ROM citation in
+[docs/vs-dexed.md](docs/vs-dexed.md), which doubles as the list for a possible upstream
+contribution.
+
 Beyond that: hundreds of factory and community banks built in
 ([docs/patch-library.md](docs/patch-library.md)), cartridge and single-voice SysEx
 import/export, MiniDexed `.ini` performances, micro-tuning, undo/redo, a session that
@@ -81,6 +89,8 @@ push and PR; [deploy](.github/workflows/deploy.yml) publishes Pages from `master
 Start with [docs/architecture.md](docs/architecture.md) — it explains why the patch state
 lives in the AudioWorklet rather than in React, which is the one thing worth knowing before
 changing anything. Then [CONTRIBUTING.md](CONTRIBUTING.md).
+[docs/vs-dexed.md](docs/vs-dexed.md) tracks every divergence from Dexed's engine, in both
+directions, with file and line references into both trees.
 
 ## License
 

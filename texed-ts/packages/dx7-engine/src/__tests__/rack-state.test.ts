@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { SynthRack } from '../synth-rack';
 import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
 import { RACK_STATE_SCHEMA, type RackState } from '@texed/dx7-format/rack-state';
+import { DEFAULT_REVERB_SETTINGS } from '@texed/dx7-format/global-settings';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name: string) => new Uint8Array(readFileSync(join(here, 'fixtures', name)));
@@ -20,12 +21,22 @@ describe('SynthRack.getFullState / restoreFullState', () => {
   it('round-trips banks, parts, edits, and selection byte-exactly', () => {
     const rack = loadedRack();
     rack.setVoiceRefForPart(0, { bank: 'internalA', program: 7 });
-    rack.setPartConfig(1, { enabled: true, rxChannel: 2, volume: 0.5, pan: -0.3 });
+    rack.setPartConfig(1, {
+      enabled: true,
+      rxChannel: 2,
+      volume: 0.5,
+      pan: -0.3,
+      cutoff: 0.4,
+      resonance: 0.6,
+      reverbSend: 0.25,
+    });
     rack.selectPart(1);
     rack.applyMasterTuneCents(23);
     rack.setEngineType(2);
     rack.setVolume(55);
     rack.setPolyphonyCap(64);
+    rack.setCompressorEnabled(true);
+    rack.setReverbSettings({ enabled: true, size: 0.5 });
     rack.setVoiceParamForPart(0, 0, 42); // unsaved edit on part 0's buffer
 
     const state = rack.getFullState();
@@ -47,6 +58,9 @@ describe('SynthRack.getFullState / restoreFullState', () => {
     expect(cfg.enabled).toBe(true);
     expect(cfg.rxChannel).toBe(2);
     expect(cfg.volume).toBeCloseTo(0.5);
+    expect(cfg.cutoff).toBeCloseTo(0.4);
+    expect(cfg.resonance).toBeCloseTo(0.6);
+    expect(cfg.reverbSend).toBeCloseTo(0.25);
     expect(fresh.getPartConfig(0).voice).toEqual({ bank: 'internalA', program: 7 });
     expect(fresh.selectedPart).toBe(1);
     expect(fresh.masterTuneCents).toBe(23);
@@ -57,6 +71,9 @@ describe('SynthRack.getFullState / restoreFullState', () => {
       polyphony: 64,
       masterTuneCents: 23,
       microtuning: -1,
+      accuracy: 'hardware',
+      compressor: true,
+      reverb: { ...DEFAULT_REVERB_SETTINGS, enabled: true, size: 0.5 },
     });
     // Unsaved edit buffer wins over the bank slot on restore.
     expect(fresh.getVoiceData(0)[0]).toBe(42);

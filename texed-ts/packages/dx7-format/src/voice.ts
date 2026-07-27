@@ -74,6 +74,17 @@ export function getVoiceName(voice: Uint8Array): string {
   return s;
 }
 
+/**
+ * True for the placeholder names banks use to pad unused slots: blank, EMPTY,
+ * and runs of a single filler character such as `----------` or `~~~~~~~~~~`.
+ * Stepping through a library should pass straight over these.
+ */
+export function isFillerVoiceName(name: string): boolean {
+  const s = name.trim();
+  if (s === '' || s.toUpperCase() === 'EMPTY') return true;
+  return /^[-~_.*=+ ]+$/.test(s);
+}
+
 /** Returns a copy of `voice` with the 10-char name set (padded with spaces). */
 export function withVoiceName(voice: Uint8Array, name: string): Uint8Array {
   const out = new Uint8Array(voice);

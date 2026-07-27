@@ -5,6 +5,7 @@ import { useSynth } from './audio/useSynth';
 import type { MidiConnection } from './audio/midi';
 import { useMidiIo } from './audio/useMidiIo';
 import { hardwarePort } from './audio/midi-out';
+import { NativeBridgePort, hasNativeBridge } from './audio/native-bridge-port';
 import { getVoiceName, withVoiceName } from '@texed/dx7-format/voice';
 import {
   useFileDrop,
@@ -45,7 +46,16 @@ const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 
 export default function App() {
-  const synth = useSynth(HW_MODE ? hardwarePort : undefined);
+  // Detect the JUCE bridge when the component mounts, not at module load time.
+  // Document-created scripts run before module scripts, but checking here avoids
+  // a stale false if the import graph ever changes.
+  const nativePortRef = useRef<NativeBridgePort | null>(null);
+  if (nativePortRef.current === null && hasNativeBridge()) {
+    nativePortRef.current = new NativeBridgePort();
+  }
+  const nativeMode = nativePortRef.current !== null;
+
+  const synth = useSynth(HW_MODE ? hardwarePort : (nativePortRef.current ?? undefined));
   const [started, setStarted] = useState(false);
   /** Startup finished, including any session restore. */
   const [loaded, setLoaded] = useState(false);
@@ -140,7 +150,7 @@ export default function App() {
   );
 
   const midi = useMidiIo({ synth, noteOn, noteOff, hardwareMode: HW_MODE });
-  const session = useSession(synth, started);
+  const session = useSession(synth, started && !nativeMode);
   const files = usePatchFiles(synth, showLoadMsg);
   // Armed only once the session has been restored, so its baseline is the patch
   // the user actually sees. Arming at `started` would make the restore itself the
@@ -150,10 +160,22 @@ export default function App() {
   const handleStart = useCallback(async () => {
     await synth.start();
     setStarted(true);
-    if (await session.restore()) showLoadMsg('Session restored');
+    // In the plugin the host owns both the session (it saves plugin state) and
+    // the MIDI input, so neither belongs to the UI.
+    if (!nativeMode) {
+      if (await session.restore()) showLoadMsg('Session restored');
+      midiRef.current = await midi.connect();
+    }
     setLoaded(true);
-    midiRef.current = await midi.connect();
-  }, [synth, session, midi, showLoadMsg]);
+  }, [synth, session, midi, showLoadMsg, nativeMode]);
+
+  // There is no AudioContext to unlock inside the plugin, so skip the gesture.
+  useEffect(() => {
+    if (nativeMode) void handleStart();
+    // Only ever on mount: handleStart is idempotent but re-running it would
+    // re-request the initial snapshot for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useQwertyKeyboard(started, noteOn, noteOff);
   useSelectKeys(started, synth.selectPart, setSelectedOp);
@@ -422,9 +444,12 @@ export default function App() {
               voiceNames={synth.partVoiceNames}
               selectedPart={synth.selectedPart}
               programOptions={synth.programOptions}
+              settings={synth.settings}
               onSelect={synth.selectPart}
               onSetPart={synth.setPart}
+              onGesture={synth.paramGesture}
               onSetVoiceRef={synth.setVoiceRef}
+              onSetGlobal={synth.setGlobal}
               subscribeStatus={synth.subscribeStatus}
               onClose={() => setShowParts(false)}
             />
@@ -464,7 +489,7 @@ export default function App() {
         </div>
       )}
 
-      {!started && (
+      {!started && !nativeMode && (
         <div className="start-overlay">
           <div className="start-card">
             <header className="start-head">

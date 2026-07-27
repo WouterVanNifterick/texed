@@ -80,6 +80,16 @@ const QWERTY_MAP: Record<string, number> = {
 
 const OCTAVE_BASE = 60;
 
+/** Shift limits that keep every mapped key (base .. base+16) inside MIDI 0-127. */
+const MIN_OCTAVE_SHIFT = -5;
+const MAX_OCTAVE_SHIFT = 4;
+
+/** Note name for the lowest QWERTY key, used in the octave-shift readout. */
+function noteLabel(note: number): string {
+  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  return `${names[note % 12]}${Math.floor(note / 12) - 1}`;
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el) return false;
@@ -87,29 +97,46 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 
-/** Plays notes from the QWERTY row (A–K etc.) while `enabled`. */
+/**
+ * Plays notes from the QWERTY row (A–K etc.) while `enabled`; `[` and `]`
+ * transpose the whole mapping down and up an octave.
+ */
 export function useQwertyKeyboard(
   enabled: boolean,
   noteOn: (note: number, velocity: number) => void,
   noteOff: (note: number) => void,
+  onOctaveChange?: (label: string) => void,
 ): void {
-  const heldKeys = useRef<Set<string>>(new Set());
+  // Key -> the note it actually started, so a note held across an octave shift
+  // still releases the note that is sounding rather than a stuck one.
+  const heldKeys = useRef<Map<string, number>>(new Map());
+  const octave = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
     const down = (e: KeyboardEvent) => {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       if (isEditableTarget(e.target)) return;
-      const semi = QWERTY_MAP[e.key.toLowerCase()];
-      if (semi === undefined || heldKeys.current.has(e.key)) return;
-      heldKeys.current.add(e.key);
-      noteOn(OCTAVE_BASE + semi, 100);
+      if (e.key === '[' || e.key === ']') {
+        const next = octave.current + (e.key === '[' ? -1 : 1);
+        if (next < MIN_OCTAVE_SHIFT || next > MAX_OCTAVE_SHIFT) return;
+        octave.current = next;
+        onOctaveChange?.(noteLabel(OCTAVE_BASE + next * 12));
+        return;
+      }
+      const key = e.key.toLowerCase();
+      const semi = QWERTY_MAP[key];
+      if (semi === undefined || heldKeys.current.has(key)) return;
+      const note = OCTAVE_BASE + semi + octave.current * 12;
+      heldKeys.current.set(key, note);
+      noteOn(note, 100);
     };
     const up = (e: KeyboardEvent) => {
-      const semi = QWERTY_MAP[e.key.toLowerCase()];
-      if (semi === undefined) return;
-      heldKeys.current.delete(e.key);
-      noteOff(OCTAVE_BASE + semi);
+      const key = e.key.toLowerCase();
+      const note = heldKeys.current.get(key);
+      if (note === undefined) return;
+      heldKeys.current.delete(key);
+      noteOff(note);
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -117,7 +144,7 @@ export function useQwertyKeyboard(
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
     };
-  }, [enabled, noteOn, noteOff]);
+  }, [enabled, noteOn, noteOff, onOctaveChange]);
 }
 
 /** F1–F8 select multi-timbral parts 1–8; digits 1–6 select the edited operator. */

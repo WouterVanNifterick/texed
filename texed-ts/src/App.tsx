@@ -186,7 +186,12 @@ export default function App() {
     [clipboard, selectedOp],
   );
 
-  useQwertyKeyboard(started, noteOn, noteOff);
+  const showOctave = useCallback(
+    (label: string) => showLoadMsg(`Keyboard starts at ${label}`),
+    [showLoadMsg],
+  );
+
+  useQwertyKeyboard(started, noteOn, noteOff, showOctave);
   useSelectKeys(started, synth.selectPart, setSelectedOp);
   useUndoKeys(loaded, history.undo, history.redo);
   useClipboardKeys(loaded, copySelected, pasteSelected);

@@ -16,6 +16,9 @@ let unit = 0;
  * pitch, on every other output-compare interrupt. msfa's 21.3 assumes a
  * ~192.3 Hz tick against the hardware's ~187.63 Hz, i.e. 2.5% fast.
  *
+ * Rate 99 is not a discontinuity (unlike porta time 0 / `INSTANT`). See
+ * "Pitch EG rate 99 is a ramp" in docs/architecture.md.
+ *
  * Exported so env-sim draws the same curve the engine plays.
  */
 export function pitchEnvUnit(sampleRate: number): number {
@@ -54,11 +57,7 @@ export class PitchEnv {
       this.rates[i] = r[i];
       this.levels[i] = l[i];
     }
-    if (this.ix < 4) {
-      this.targetlevel = pitchLevelAt(this.levels[this.ix]);
-      this.rising = this.targetlevel > this.level;
-      this.inc = pitchIncAt(this.rates[this.ix], unit);
-    }
+    this.advance(this.ix);
   }
 
   getsample(): number {
@@ -89,12 +88,10 @@ export class PitchEnv {
 
   private advance(newix: number): void {
     this.ix = newix;
-    if (this.ix < 4) {
-      const newlevel = this.levels[this.ix];
-      this.targetlevel = pitchLevelAt(newlevel);
-      this.rising = this.targetlevel > this.level;
-      this.inc = pitchIncAt(this.rates[this.ix], unit);
-    }
+    if (this.ix >= 4) return;
+    this.targetlevel = pitchLevelAt(this.levels[this.ix]);
+    this.rising = this.targetlevel > this.level;
+    this.inc = pitchIncAt(this.rates[this.ix], unit);
   }
 
   getPosition(): number {

@@ -167,6 +167,28 @@ formula, the `statics[]` hold table, the `1716` attack floor, the detune registe
 frequency, and the AMS 0-3 coefficients — hence `extendedAmsTable` in `amem.ts` stays a documented
 guess.
 
+### Pitch EG rate 99 is a ramp, not a jump
+
+The manual calls rate 99 "fastest", but that is not a discontinuity, and other Yamaha FM synths
+behave differently. `PATCH_ACTIVATE_PITCH_EG_VALUES` converts the rate through
+`TABLE_PITCH_EG_RATE`, whose last entry is `$FF`, and `PITCH_EG_PROCESS` then adds that 255 to the
+voice's pitch EG level once per slow tick. There is no short-circuit for the maximum rate, so the
+glide is audible whenever the level distance is large:
+
+| Move at rate 99            | Time   |
+| -------------------------- | ------ |
+| Level 50 to 99 (+4 octave) | 340 ms |
+| Level 50 to 55             | 13 ms  |
+
+The one place the ROM really does jump is **portamento time 0**: `PORTA_COMPUTE_RATE_VALUE` indexes
+the same table with `99 - time`, and `VOICE_ADD` tests the result with `CMPA #$FE / BHI` and writes
+the pitch straight to the EGS. `porta.ts` mirrors that with `INSTANT`; `pitchenv.ts` deliberately
+has no equivalent. The MSB-only target compare under Known divergences shortens the tail of a
+stage, but it does not turn a rate 99 stage into a discontinuity.
+
+An FS1R is not a reference here. Its AFM envelopes are times rather than rates, inverted against the
+DX7's numbering (`99 - rate`), so the same patch value means the opposite thing.
+
 ## Audio thread constraints
 
 `texed-processor.ts` `process()` runs on the real-time audio thread. Code reached from it must

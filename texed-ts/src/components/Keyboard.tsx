@@ -28,6 +28,15 @@ export function Keyboard({
   const notes: number[] = [];
   for (let i = 0; i < octaves * 12; i++) notes.push(startNote + i);
   const whiteNotes = notes.filter((n) => !isBlack(n));
+  // Precompute whites-below counts so black-key layout is O(n), not O(n²).
+  const whitesBelow = new Map<number, number>();
+  {
+    let wi = 0;
+    for (const note of notes) {
+      while (wi < whiteNotes.length && whiteNotes[wi]! < note) wi++;
+      if (isBlack(note)) whitesBelow.set(note, wi);
+    }
+  }
 
   const press = useCallback(
     (pointerId: number, note: number) => {
@@ -110,8 +119,7 @@ export function Keyboard({
       {notes
         .filter((n) => isBlack(n))
         .map((note) => {
-          // position relative to the white key before it
-          const whiteBefore = whiteNotes.filter((w) => w < note).length;
+          const whiteBefore = whitesBelow.get(note) ?? 0;
           const left = whiteBefore * whiteWidth - whiteWidth * 0.3;
           return (
             <button

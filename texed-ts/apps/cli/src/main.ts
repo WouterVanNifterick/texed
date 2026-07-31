@@ -59,8 +59,13 @@ const events = parseSmf(new Uint8Array(readFileSync(midiPath)));
 if (events.length === 0) fail('MIDI file contains no channel events');
 
 // One part per MIDI channel present (first 8 channels win), like a TX816.
+const seen = new Set<number>();
 const channels: number[] = [];
-for (const e of events) if (!channels.includes(e.channel)) channels.push(e.channel);
+for (const e of events) {
+  if (seen.has(e.channel)) continue;
+  seen.add(e.channel);
+  channels.push(e.channel);
+}
 const partForChannel = new Map<number, number>();
 for (let i = 0; i < NUM_PARTS; i++) {
   const ch = channels[i];

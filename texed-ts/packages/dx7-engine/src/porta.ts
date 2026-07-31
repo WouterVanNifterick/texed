@@ -60,18 +60,13 @@ export const Porta = {
 
     this.distanceScaled = false;
     const step = (1 << 24) / 12;
-    for (let i = 0; i < 128; i++) {
-      // number of semitones travelled
-      let sps = 2100.0 * Math.pow(2.0, -0.062 * i); // per second
-      let spf = sps / sampleRate; // per frame
-      let spp = spf * N; // per period
-      this.rates[i] = Math.trunc(0.5 + step * spp);
-
-      // glissando is slower when enabled
-      sps = 1300.0 * Math.pow(2.0, -0.062 * i);
-      spf = sps / sampleRate;
-      spp = spf * N;
-      this.ratesGlissando[i] = Math.trunc(0.5 + step * spp);
-    }
+    const fill = (target: Int32Array, baseSps: number) => {
+      for (let i = 0; i < 128; i++) {
+        const spp = ((baseSps * Math.pow(2.0, -0.062 * i)) / sampleRate) * N;
+        target[i] = Math.trunc(0.5 + step * spp);
+      }
+    };
+    fill(this.rates, 2100.0);
+    fill(this.ratesGlissando, 1300.0); // glissando is slower when enabled
   },
 };

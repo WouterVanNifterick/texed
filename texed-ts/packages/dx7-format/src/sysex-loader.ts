@@ -91,10 +91,6 @@ function referencedBanks(perfs: ParsedPerformance[]): VoiceBankId[] {
   return VOICE_BANK_ORDER.filter((b) => used.has(b));
 }
 
-function payloadFromFrame(frame: SysexFrame): Uint8Array | null {
-  return bulkPayloadFromFrame(frame);
-}
-
 export interface LoadResult {
   library: VoiceLibrary;
   report: LoadReport;
@@ -226,7 +222,7 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
         break;
       }
       case SysexKind.Microtune: {
-        const data = payloadFromFrame(frame);
+        const data = bulkPayloadFromFrame(frame);
         if (data) {
           lib.microtunings.push(data.slice());
           report.applied.push('microtuning (stored)');

@@ -67,10 +67,8 @@ export class Env {
       }
     }
 
-    if (this.ix < 3 || (this.ix < 4 && !this.down)) {
-      if (this.staticcount) {
-        // holding: no level change this block
-      } else if (this.rising) {
+    if ((this.ix < 3 || (this.ix < 4 && !this.down)) && !this.staticcount) {
+      if (this.rising) {
         const jumptarget = 1716;
         if (this.level < jumptarget << 16) {
           this.level = jumptarget << 16;
@@ -81,7 +79,6 @@ export class Env {
           this.advance(this.ix + 1);
         }
       } else {
-        // !rising
         this.level = (this.level - this.inc) | 0;
         if (this.level <= this.targetlevel) {
           this.level = this.targetlevel;

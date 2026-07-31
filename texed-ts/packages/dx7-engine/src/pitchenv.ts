@@ -42,10 +42,7 @@ export class PitchEnv {
   }
 
   set(r: ArrayLike<number>, l: ArrayLike<number>): void {
-    for (let i = 0; i < 4; i++) {
-      this.rates[i] = r[i];
-      this.levels[i] = l[i];
-    }
+    this.copyParams(r, l);
     this.level = pitchLevelAt(l[3]);
     this.down = true;
     this.advance(0);
@@ -53,30 +50,27 @@ export class PitchEnv {
 
   /** Live edit: refresh rates/levels without restarting the running envelope. */
   update(r: ArrayLike<number>, l: ArrayLike<number>): void {
-    for (let i = 0; i < 4; i++) {
-      this.rates[i] = r[i];
-      this.levels[i] = l[i];
-    }
+    this.copyParams(r, l);
     this.advance(this.ix);
   }
 
   getsample(): number {
     if (this.ix < 3 || (this.ix < 4 && !this.down)) {
-      if (this.rising) {
-        this.level += this.inc;
-        if (this.level >= this.targetlevel) {
-          this.level = this.targetlevel;
-          this.advance(this.ix + 1);
-        }
-      } else {
-        this.level -= this.inc;
-        if (this.level <= this.targetlevel) {
-          this.level = this.targetlevel;
-          this.advance(this.ix + 1);
-        }
+      const up = this.rising;
+      this.level += up ? this.inc : -this.inc;
+      if (up ? this.level >= this.targetlevel : this.level <= this.targetlevel) {
+        this.level = this.targetlevel;
+        this.advance(this.ix + 1);
       }
     }
     return this.level;
+  }
+
+  private copyParams(r: ArrayLike<number>, l: ArrayLike<number>): void {
+    for (let i = 0; i < 4; i++) {
+      this.rates[i] = r[i];
+      this.levels[i] = l[i];
+    }
   }
 
   keydown(d: boolean): void {

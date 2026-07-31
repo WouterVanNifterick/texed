@@ -4,7 +4,8 @@
 // rate (inverted from the engine timing), vertical sets the stage level.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { useStatus } from '../audio/useSynth';
+import type { StatusSubscribe } from '../audio/synth-types';
 import {
   simulateAmpEnv,
   simulatePitchEnv,
@@ -227,7 +228,12 @@ export function EnvEditor(props: EnvEditorProps) {
 
   // Selecting another envelope mid-drag unmounts this editor; without this the
   // axis would stay frozen with no gesture left to end it.
-  useEffect(() => endDrag, []);
+  useEffect(
+    () => () => {
+      endDrag();
+    },
+    [],
+  );
 
   const onNodeKey = (e: React.KeyboardEvent, s: number) => {
     let dr = 0;
@@ -378,11 +384,9 @@ export function EnvEditor(props: EnvEditorProps) {
   );
 }
 
-type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
-
 /** EnvEditor wired to the live status stream for the active-stage highlight. */
 export function LiveEnvEditor(
-  props: Omit<EnvEditorProps, 'stage'> & { subscribe: Subscribe; opIdx?: number },
+  props: Omit<EnvEditorProps, 'stage'> & { subscribe: StatusSubscribe; opIdx?: number },
 ) {
   const { subscribe, opIdx, ...rest } = props;
   const stage = useStatus(

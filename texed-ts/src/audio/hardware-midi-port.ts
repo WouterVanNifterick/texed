@@ -5,8 +5,7 @@
 
 import { MsgType, type SynthCommand, type SynthEvent } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
-import { voiceParamChangeSysex } from '@texed/dx7-format/sysex';
-import { vcedFromVoice } from '@texed/dx7-format/sysex';
+import { voiceParamChangeSysex, vcedFromVoice } from '@texed/dx7-format/sysex';
 import { acedToSysex, createDefaultAmem } from '@texed/dx7-format/amem';
 import { initVoice } from '@texed/dx7-format/cartridge';
 import { NUM_PARTS, defaultPartConfig } from '@texed/dx7-format/part-config';

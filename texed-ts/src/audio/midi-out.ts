@@ -3,9 +3,8 @@
 // inherently one device, so this is a module singleton. All emitters no-op until
 // a connection + target are configured, so the disabled path costs one branch.
 
-import { vcedFromVoice } from '@texed/dx7-format/sysex';
+import { vcedFromVoice, voiceParamChangeSysex } from '@texed/dx7-format/sysex';
 import { acedToSysex } from '@texed/dx7-format/amem';
-import { voiceParamChangeSysex } from '@texed/dx7-format/sysex';
 import { HardwareMidiPort } from './hardware-midi-port';
 import type { MidiConnection } from './midi';
 

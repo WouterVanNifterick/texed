@@ -6,7 +6,7 @@
 // (live mode and the ?hw editor), and undo folds the burst into a single step
 // anyway, since useHistory coalesces for 350 ms.
 
-import { useMemo, useRef, useState, type DragEvent, type DragEventHandler } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type DragEventHandler } from 'react';
 import type { Synth } from '../audio/synth-types';
 import type { EnvSelection } from '../envelope/env-draw';
 import {
@@ -141,7 +141,9 @@ export function useOpDropTarget(
 
   // A drag released over something else never delivers a leave here, so the
   // hint is retired from the drag ending rather than from an event.
-  if (hint && !drag) setHint(null);
+  useEffect(() => {
+    if (!drag) setHint(null);
+  }, [drag]);
 
   const actionFor = (e: DragEvent): DropAction | null => {
     const overEnv = envOnly || !!(e.target as Element | null)?.closest('.env-editor');

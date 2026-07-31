@@ -168,19 +168,3 @@ export function playheadPoint(
   }
   return best;
 }
-
-export interface NodeGeom {
-  x01: number; // 0..1 across width
-  y01: number; // 0..1 down height
-  stage: number;
-  reached: boolean;
-}
-
-export function nodeGeoms(trace: EnvTrace, ts: EnvTimeScale, ymap: YMap): NodeGeom[] {
-  return trace.nodes.map((n) => ({
-    x01: ts.x(n.timeSec),
-    y01: ymap.levelToY01(n.levelQ24),
-    stage: n.stage,
-    reached: n.reached,
-  }));
-}

@@ -60,11 +60,7 @@ export class SynthUnit {
   }
 
   setSampleRate(sampleRate: number): void {
-    Freqlut.init(sampleRate);
-    Lfo.init(sampleRate);
-    PitchEnv.init(sampleRate);
-    Env.initSr(sampleRate);
-    Porta.initSr(sampleRate);
+    initSynthTables(sampleRate);
     this.fx.init(sampleRate);
   }
 

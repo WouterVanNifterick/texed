@@ -3,7 +3,8 @@
 // status updates never re-render the whole panel.
 
 import { memo } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { useStatus } from '../audio/useSynth';
+import type { StatusSubscribe } from '../audio/synth-types';
 import {
   OP,
   G,
@@ -52,9 +53,7 @@ const HELP = {
   head: 'Drag this header onto another operator to copy this one there - drop on its envelope graph to copy only the EG, hold Alt to swap the two. Ctrl+C and Ctrl+V copy and paste the selected operator; Ctrl+Shift+V pastes the envelope alone.',
 };
 
-type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
-
-function OpMeter({ subscribe, opIdx }: { subscribe: Subscribe; opIdx: number }) {
+function OpMeter({ subscribe, opIdx }: { subscribe: StatusSubscribe; opIdx: number }) {
   const amp = useStatus(subscribe, (s) => s.amps[opIdx], 0);
   return (
     <div className="meter">
@@ -69,7 +68,7 @@ interface OperatorPanelProps {
   supplement: Uint8Array;
   setParam: (offset: number, value: number) => void;
   setSupplementParam: (offset: number, value: number) => void;
-  subscribeStatus: Subscribe;
+  subscribeStatus: StatusSubscribe;
   hovered: boolean;
   onHover: (opNum: number | null) => void;
   /** This operator is the currently selected one (edited in the combined view). */

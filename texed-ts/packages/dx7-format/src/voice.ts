@@ -65,13 +65,18 @@ export const CURVES = ['-LIN', '-EXP', '+EXP', '+LIN'];
 export const OSC_MODES = ['RATIO', 'FIXED'];
 export const LFO_WAVES = ['TRI', 'SW-', 'SW+', 'SQU', 'SIN', 'S/H'];
 
-export function getVoiceName(voice: Uint8Array): string {
+/** Read a DX7-style ASCII name (control chars become spaces). */
+export function readDx7AsciiName(bytes: ArrayLike<number>, offset: number, len = 10): string {
   let s = '';
-  for (let i = 0; i < 10; i++) {
-    const c = voice[G.name + i] & 0x7f;
+  for (let i = 0; i < len; i++) {
+    const c = bytes[offset + i]! & 0x7f;
     s += String.fromCharCode(c < 32 ? 32 : c);
   }
   return s;
+}
+
+export function getVoiceName(voice: Uint8Array): string {
+  return readDx7AsciiName(voice, G.name, 10);
 }
 
 /**
@@ -119,13 +124,17 @@ export function formatTranspose(value: number): string {
   return noteName(value + 24);
 }
 
-/** Signed semitone offset from middle C (stored 24 = 0). */
-export function formatTransposeSemitones(value: number): string {
-  const d = value - PARAM_CENTER.transpose;
+/** Signed offset from a stored center value (e.g. transpose 24 = 0). */
+export function formatSignedOffset(value: number, center: number): string {
+  const d = value - center;
   return d > 0 ? `+${d}` : `${d}`;
 }
 
+/** Signed semitone offset from middle C (stored 24 = 0). */
+export function formatTransposeSemitones(value: number): string {
+  return formatSignedOffset(value, PARAM_CENTER.transpose);
+}
+
 export function formatDetune(value: number): string {
-  const d = value - PARAM_CENTER.detune;
-  return d > 0 ? `+${d}` : `${d}`;
+  return formatSignedOffset(value, PARAM_CENTER.detune);
 }

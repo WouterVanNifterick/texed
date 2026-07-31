@@ -1,6 +1,8 @@
 // DX7 cartridge / voice (un)packing, ported from Source/PluginData.cpp.
 // Handles the 32-voice bulk SysEx dump (4104 bytes) and single-voice dumps.
 
+import { readDx7AsciiName } from './voice';
+
 export function sysexChecksum(data: Uint8Array, start: number, size: number): number {
   let sum = 0;
   for (let i = 0; i < size; i++) {
@@ -151,12 +153,7 @@ export class Cartridge {
   /** The 10-character program name for voice `idx`. */
   programName(idx: number): string {
     const bulk = 6 + idx * 128;
-    let name = '';
-    for (let n = 0; n < 10; n++) {
-      const c = this.voiceData[bulk + 118 + n] & 0x7f;
-      name += String.fromCharCode(c < 32 ? 32 : c);
-    }
-    return name.trimEnd();
+    return readDx7AsciiName(this.voiceData, bulk + 118, 10).trimEnd();
   }
 
   programNames(): string[] {

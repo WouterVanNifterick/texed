@@ -18,7 +18,14 @@ import { WorkletPort } from './worklet-port';
 import { createSynthActions } from './synth-actions';
 import type { BankInfo, Synth, SynthStatus } from './synth-types';
 
-export type { BankInfo, Synth, SynthActions, SynthData, SynthStatus } from './synth-types';
+export type {
+  BankInfo,
+  StatusSubscribe,
+  Synth,
+  SynthActions,
+  SynthData,
+  SynthStatus,
+} from './synth-types';
 
 /** Subscribe to one slice of the ~31 Hz status stream without re-rendering a parent. */
 export function useStatus<T>(

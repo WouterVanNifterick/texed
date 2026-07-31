@@ -2,7 +2,7 @@
 // the pitch envelope and the DX7II AMEM supplement.
 
 import { memo, useState } from 'react';
-import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { useStatus } from '../audio/useSynth';
 import { G, LFO_WAVES, formatTransposeSemitones, PARAM_CENTER } from '@texed/dx7-format/voice';
 import * as Sup from '@texed/dx7-format/supplement';
 import { helpProps, setHelp } from '../state/help';
@@ -14,18 +14,16 @@ import { Cycle } from '../ui/Cycle';
 import { Toggle } from '../ui/Toggle';
 import { AlgoDisplay } from './AlgoDisplay';
 import { LiveEnvEditor } from '../envelope/EnvEditor';
-import { type YMode } from '../envelope/env-draw';
+import { type YMode, type EnvSelection } from '../envelope/env-draw';
 import { PITCH_COLOR } from '../ui/op-colors';
-import { type EnvTimeScale } from '../envelope/env-time';
-import { type EnvSelection } from '../envelope/env-draw';
+import { pitchEgParams, type EnvTimeScale } from '../envelope/env-time';
 import { LfoGraph } from './LfoGraph';
-
-type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
+import type { StatusSubscribe } from '../audio/synth-types';
 
 const PITCH_HEAD_HELP =
   'Drag this header onto an operator to copy this envelope onto its EG, or drag an operator here to bring its EG over. Ctrl+C and Ctrl+V copy and paste the selected envelope.';
 
-function LfoMeter({ subscribe }: { subscribe: Subscribe }) {
+function LfoMeter({ subscribe }: { subscribe: StatusSubscribe }) {
   // Status is 0..1 with 0.5 = LFO zero-crossing. Draw the fill outward from the
   // centre so positive and negative excursions are read symmetrically.
   const lfo = useStatus(subscribe, (s) => s.lfo, 0.5);
@@ -45,7 +43,7 @@ interface GlobalPanelProps {
   supplement: Uint8Array;
   setParam: (offset: number, value: number) => void;
   setSupplementParam: (offset: number, value: number) => void;
-  subscribeStatus: Subscribe;
+  subscribeStatus: StatusSubscribe;
   hoverOp: number | null;
   onHoverOp: (opNum: number | null) => void;
   /** Currently selected envelope (op number 1..6 or the pitch EG). */
@@ -75,18 +73,7 @@ export const GlobalPanel = memo(function GlobalPanel({
   const drop = useOpDropTarget('pitch', clipboard, true);
   const set = (offset: number) => (value: number) => setParam(offset, value);
   const setSup = (edit: Sup.ByteEdit) => setSupplementParam(edit.offset, edit.value);
-  const pitchRates = [
-    voice[G.pitchEgRate(0)],
-    voice[G.pitchEgRate(1)],
-    voice[G.pitchEgRate(2)],
-    voice[G.pitchEgRate(3)],
-  ];
-  const pitchLevels = [
-    voice[G.pitchEgLevel(0)],
-    voice[G.pitchEgLevel(1)],
-    voice[G.pitchEgLevel(2)],
-    voice[G.pitchEgLevel(3)],
-  ];
+  const { rates: pitchRates, levels: pitchLevels } = pitchEgParams(voice);
 
   return (
     <div className="global-col">

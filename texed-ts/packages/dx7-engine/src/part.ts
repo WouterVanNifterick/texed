@@ -159,20 +159,20 @@ export class Part {
   }
 
   loadVoice(patch: Uint8Array): void {
-    this.clearActiveVoices();
-    this.data.set(patch.subarray(0, 156));
     // A bare voice (VCED) leaves the DX7II supplement untouched, matching
     // hardware behavior where a voice edit keeps the current ACED buffer.
-    this.monoMode = this.supplement.mono;
-    this.applySupplementToControllers();
-    this.refreshVoices();
+    this.loadVoiceData(patch);
   }
 
   /** Load VMEM + AMEM together (DX7II bank slot). */
   loadVoiceSlot(vmem: Uint8Array, amem: Uint8Array): void {
+    this.loadVoiceData(vmem, amem);
+  }
+
+  private loadVoiceData(vmem: Uint8Array, amem?: Uint8Array): void {
     this.clearActiveVoices();
     this.data.set(vmem.subarray(0, 156));
-    this.supplement = new VoiceSupplement(amem);
+    if (amem) this.supplement = new VoiceSupplement(amem);
     this.monoMode = this.supplement.mono;
     this.applySupplementToControllers();
     this.refreshVoices();
@@ -248,11 +248,9 @@ export class Part {
   }
 
   private refreshVoices(): void {
-    let sw = '';
-    for (let op = 0; op < 6; op++) {
-      sw += this.data[G.opEnable] & (1 << op) ? '1' : '0';
-    }
-    this.controllers.opSwitch = sw;
+    this.controllers.opSwitch = Array.from({ length: 6 }, (_, op) =>
+      this.data[G.opEnable] & (1 << op) ? '1' : '0',
+    ).join('');
     for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
       if (this.voices[i].live) {
         this.voices[i].dx7Note.setSupplement(this.supplement);
@@ -727,10 +725,7 @@ export class Part {
               let val = audiobuf[j];
               val = val >> 4;
               const clipVal = val < -(1 << 24) ? 0x8000 : val >= 1 << 24 ? 0x7fff : val >> 9;
-              let f = clipVal / 0x8000;
-              if (f > 1) f = 1;
-              if (f < -1) f = -1;
-              sumbuf[j] += f;
+              sumbuf[j] += clipVal / 0x8000;
               audiobuf[j] = 0;
             }
           }

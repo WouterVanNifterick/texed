@@ -27,16 +27,12 @@ function tptpc(st: Float64Array, i: number, inp: number, cutoff: number): number
 
 /** Same, with the cutoff given in Hz rather than prewarped. */
 function tptlpupw(st: Float64Array, i: number, inp: number, hz: number, srInv: number): number {
-  const cutoff = hz * srInv * Math.PI;
-  const v = ((inp - st[i]) * cutoff) / (1 + cutoff);
-  const res = v + st[i];
-  st[i] = res + v;
-  return res;
+  return tptpc(st, i, inp, hz * srInv * Math.PI);
 }
 
 /** Exponential taper with the OBXd rolloff of 19. */
 function logsc(param: number, min: number, max: number, rolloff = 19): number {
-  return ((Math.exp(param * Math.log(rolloff + 1)) - 1) / rolloff) * (max - min) + min;
+  return ((Math.pow(rolloff + 1, param) - 1) / rolloff) * (max - min) + min;
 }
 
 export class PluginFx {

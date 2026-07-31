@@ -3,7 +3,7 @@
 import { Cartridge, initVoice, sysexChecksum } from './cartridge';
 import { createDefaultAmem, AMEM_SLOT_SIZE, AMEM_BULK_SIZE } from './amem';
 import { cartridgeFromVoices } from './sysex';
-import { isFillerVoiceName } from './voice';
+import { getVoiceName, isFillerVoiceName } from './voice';
 import type { ProgramOption } from './part-config';
 import type { ParsedPerformance } from './performance';
 import type { SystemSetup } from './system-setup';
@@ -85,23 +85,12 @@ export function encodeDx7iiVoiceRef(ref: VoiceRef): number {
   return base;
 }
 
-/** Pack 32 editable voices into a 4104-byte VMEM bulk dump (header + checksum). */
-function packVmemBank(voices: Uint8Array[]): Uint8Array {
-  const cart = cartridgeFromVoices(voices);
-  return cart.voiceData;
-}
-
 function createEmptySlot(): VoiceSlot {
   return { vmem: initVoice(), amem: createDefaultAmem() };
 }
 
 function voiceNameFromVmem(vmem: Uint8Array): string {
-  let name = '';
-  for (let n = 0; n < 10; n++) {
-    const c = vmem[145 + n] & 0x7f;
-    name += String.fromCharCode(c < 32 ? 32 : c);
-  }
-  return name.trimEnd();
+  return getVoiceName(vmem).trimEnd();
 }
 
 export interface BankInfo {
@@ -251,7 +240,7 @@ export class VoiceLibrary {
     amem[6 + AMEM_BULK_SIZE + 1] = 0xf7;
 
     // VMEM bulk: pack the 32 unpacked voices back into a 4104-byte dump.
-    const vmem = packVmemBank(slots.map((s) => s.vmem));
+    const vmem = cartridgeFromVoices(slots.map((s) => s.vmem)).voiceData;
 
     const out = new Uint8Array(amem.length + vmem.length);
     out.set(amem, 0);

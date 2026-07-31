@@ -1,11 +1,12 @@
 // Modal to name a voice and pick a bank slot before storing the edit buffer.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Synth } from '../audio/useSynth';
 import { programIndexForVoice } from '../audio/useSynth';
 import { getVoiceName } from '@texed/dx7-format/voice';
 import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
 import { VOICE_BANK_LABELS } from '@texed/dx7-format/voice-library';
+import { useEscapeClose } from '../hooks';
 
 interface StoreVoiceDialogProps {
   synth: Synth;
@@ -36,13 +37,7 @@ export function StoreVoiceDialog({
   const populatedBanks = synth.banks.filter((b) => b.populated);
   const fallbackBanks = populatedBanks.length > 0 ? populatedBanks : synth.banks;
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   const handleConfirm = () => {
     const trimmed = name.trim().toUpperCase();

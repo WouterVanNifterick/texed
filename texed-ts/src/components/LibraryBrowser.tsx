@@ -30,6 +30,7 @@ import type {
 } from '@texed/dx7-format/library-manifest';
 import { getVoiceName, isFillerVoiceName, VOICES_PER_BANK } from '@texed/dx7-format/voice';
 import { helpProps } from '../state/help';
+import { useEscapeClose } from '../hooks';
 import { Segmented } from '../ui/Segmented';
 
 const LOADED_ID = '__loaded';
@@ -131,13 +132,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     });
   }, [showMsg, setColId]);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   /**
    * Record each pane's offset as it scrolls. Reading it back at unmount would
@@ -474,6 +469,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   const activeBank = colId === LOADED_ID ? null : banksOfCollection[bankIdx];
   const selectedRow = setRows[rowIdx];
   const selectedVoiceRow = selectedRow?.kind === 'voice' ? selectedRow : null;
+  const setExtras = activeSet ? extrasLabel(activeSet) : null;
   const selectedPerfParts =
     selectedRow?.kind === 'performance' && perfVoices ? (perfVoices[rowIdx] ?? null) : null;
   /** For the LOADED collection, the live parts stand in for the active perf. */
@@ -704,9 +700,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
                         referenced, nothing to fill it
                       </div>
                     ))}
-                    {extrasLabel(activeSet) && (
-                      <div className="libbrowser-detail-row dim">{extrasLabel(activeSet)}</div>
-                    )}
+                    {setExtras && <div className="libbrowser-detail-row dim">{setExtras}</div>}
                     {activeSet.unsupported?.map((f) => (
                       <div key={f} className="libbrowser-detail-row dim">
                         {f} · format not supported

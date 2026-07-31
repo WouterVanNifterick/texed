@@ -5,10 +5,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { lfoSource } from '@texed/dx7-engine/lfo';
-import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { useStatus } from '../audio/useSynth';
+import type { StatusSubscribe } from '../audio/synth-types';
 
-type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
-const NO_SUB: Subscribe = () => () => {};
+const NO_SUB: StatusSubscribe = () => () => {};
 
 const W = 120;
 const H = 40;
@@ -58,7 +58,7 @@ interface LfoGraphProps {
   waveform: number; // 0..5
   speed: number; // 0..99
   delay: number; // 0..99
-  subscribe?: Subscribe; // live status stream, for the playback dot
+  subscribe?: StatusSubscribe; // live status stream, for the playback dot
 }
 
 export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {

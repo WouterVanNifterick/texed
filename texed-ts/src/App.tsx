@@ -47,6 +47,23 @@ const ENGINES = ['MODERN', 'MARK I', 'OPL'];
 // SysEx instead of the local engine (pick the output in MIDI settings).
 const HW_MODE = new URLSearchParams(window.location.search).has('hw');
 
+function formatLoadReport(applied: string[], skipped: string[]): string {
+  const perf = applied.find((a) => a.startsWith('performances'));
+  const banks = applied.filter((a) => a.startsWith('VMEM →'));
+  const amem = applied.filter((a) => a.startsWith('AMEM →'));
+  const parts: string[] = [];
+  if (perf) parts.push(perf);
+  if (banks.length) parts.push(`${banks.length} VMEM bank${banks.length > 1 ? 's' : ''}`);
+  if (amem.length) parts.push(`${amem.length} AMEM pair${amem.length > 1 ? 's' : ''}`);
+  parts.push(
+    ...applied.filter(
+      (a) => !a.startsWith('performances') && !a.startsWith('VMEM →') && !a.startsWith('AMEM'),
+    ),
+  );
+  if (skipped.length) parts.push(`skipped: ${skipped.join(', ')}`);
+  return parts.join(' · ');
+}
+
 export default function App() {
   // Detect the JUCE bridge when the component mounts, not at module load time.
   // Document-created scripts run before module scripts, but checking here avoids
@@ -109,20 +126,7 @@ export default function App() {
 
   useEffect(() => {
     if (!synth.loadReport) return;
-    const { applied, skipped } = synth.loadReport;
-    const perf = applied.find((a) => a.startsWith('performances'));
-    const banks = applied.filter((a) => a.startsWith('VMEM →'));
-    const amem = applied.filter((a) => a.startsWith('AMEM →'));
-    const parts: string[] = [];
-    if (perf) parts.push(perf);
-    if (banks.length) parts.push(`${banks.length} VMEM bank${banks.length > 1 ? 's' : ''}`);
-    if (amem.length) parts.push(`${amem.length} AMEM pair${amem.length > 1 ? 's' : ''}`);
-    const rest = applied.filter(
-      (a) => !a.startsWith('performances') && !a.startsWith('VMEM →') && !a.startsWith('AMEM'),
-    );
-    parts.push(...rest);
-    if (skipped.length) parts.push(`skipped: ${skipped.join(', ')}`);
-    showLoadMsg(parts.join(' · '));
+    showLoadMsg(formatLoadReport(synth.loadReport.applied, synth.loadReport.skipped));
   }, [synth.loadReport, showLoadMsg]);
 
   const { noteOn: rackNoteOn, noteOff: rackNoteOff } = synth;
@@ -209,15 +213,13 @@ export default function App() {
   );
 
   const onDrop = useCallback(
-    (dropped: File[]) => {
+    async (dropped: File[]) => {
       if (!dropped.length) {
         showLoadMsg('No .syx, .ini, or .Dx7Voice files in drop');
         return;
       }
-      void (async () => {
-        if (!started) await handleStart();
-        await files.loadFiles(dropped);
-      })();
+      if (!started) await handleStart();
+      await files.loadFiles(dropped);
     },
     [started, handleStart, files, showLoadMsg],
   );

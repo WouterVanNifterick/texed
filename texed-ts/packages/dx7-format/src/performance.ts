@@ -3,12 +3,8 @@
 import type { PartConfig } from './part-config';
 import { NUM_PARTS } from './part-config';
 import { bulkPayloadFromFrame, SysexKind, type SysexFrame } from './sysex';
-import {
-  decodeDx7iiVoiceRef,
-  decodeTx802VoiceRef,
-  defaultVoiceRef,
-  type VoiceRef,
-} from './voice-library';
+import { decodeDx7iiVoiceRef, decodeTx802VoiceRef, defaultVoiceRef } from './voice-library';
+import { readDx7AsciiName } from './voice';
 
 export const TX802_PMEM_BLOCK = 84;
 export const DX7II_PERF_BLOCK = 51;
@@ -27,12 +23,7 @@ export interface ParsedPerformance {
 }
 
 function readAsciiName(bytes: Uint8Array, offset: number, len: number): string {
-  let s = '';
-  for (let i = 0; i < len; i++) {
-    const c = bytes[offset + i] & 0x7f;
-    s += String.fromCharCode(c < 32 ? 32 : c);
-  }
-  return s.trim();
+  return readDx7AsciiName(bytes, offset, len).trim();
 }
 
 function hexNibble(byte: number): number {
@@ -46,11 +37,6 @@ function hexNibble(byte: number): number {
 function mapRxChannel(raw: number): number {
   const ch = raw & 0x1f;
   return ch >= 16 ? 0 : ch + 1;
-}
-
-/** Map TX802 voice number (1–128, 1-based) to a bank-aware VoiceRef, or null for voice 0. */
-function mapTx802VoiceRef(vnum: number): VoiceRef | null {
-  return decodeTx802VoiceRef(vnum);
 }
 
 /** Map TX802 output assign (1 = output I, 2 = output II, 3 = both) to stereo pan. */
@@ -73,7 +59,7 @@ export function parseTx802PmemBlock(block: Uint8Array): ParsedPerformance {
   for (let i = 0; i < NUM_PARTS; i++) {
     const outAssign = block[32 + i] & 0x03;
     const rawVoice = block[8 + i] & 0x7f;
-    const voiceRef = mapTx802VoiceRef(rawVoice);
+    const voiceRef = decodeTx802VoiceRef(rawVoice);
     parts.push({
       enabled: outAssign !== 0 && rawVoice !== 0,
       rxChannel: mapRxChannel(block[i]),
@@ -109,12 +95,9 @@ export function parseDx7iiPerfBlock(block: Uint8Array): ParsedPerformance {
     noteShift: 0,
   });
 
-  if (mode === 0) {
-    parts[0] = part(voiceA, 0, 127);
-  } else if (mode === 1) {
-    parts[0] = part(voiceA, 0, 127);
-    parts[1] = part(voiceB, 0, 127);
-  } else if (mode === 2) {
+  if (mode <= 1) parts[0] = part(voiceA, 0, 127);
+  if (mode === 1) parts[1] = part(voiceB, 0, 127);
+  else if (mode === 2) {
     parts[0] = part(voiceA, 0, splitPoint);
     parts[1] = part(voiceB, splitPoint, 127);
   }
@@ -151,7 +134,7 @@ export function parseTx802SysexPerf(data: Uint8Array): ParsedPerformance | null 
     if (!name && timbreName) name = timbreName;
 
     const rawVoice = blk[9] & 0x7f;
-    const voiceRef = mapTx802VoiceRef(rawVoice);
+    const voiceRef = decodeTx802VoiceRef(rawVoice);
     parts[t] = {
       enabled: rawVoice !== 0,
       rxChannel: mapRxChannel(blk[0]),
@@ -168,7 +151,7 @@ export function parseTx802SysexPerf(data: Uint8Array): ParsedPerformance | null 
   if (!parts.some((p) => p.enabled)) {
     const blk = data.subarray(0, TG_SYSEX_BLOCK);
     const rawVoice = blk[9] & 0x7f;
-    const voiceRef = mapTx802VoiceRef(rawVoice);
+    const voiceRef = decodeTx802VoiceRef(rawVoice);
     parts[0] = {
       enabled: rawVoice !== 0,
       rxChannel: mapRxChannel(blk[0]),
@@ -221,10 +204,6 @@ function decodeTx802HexBank(data: Uint8Array): Uint8Array[] {
   return blocks;
 }
 
-function payloadFromFrame(frame: SysexFrame): Uint8Array | null {
-  return bulkPayloadFromFrame(frame);
-}
-
 function isTx802PmemBank(frame: SysexFrame): boolean {
   return frame.formatId?.includes('8952PM') ?? false;
 }
@@ -232,7 +211,7 @@ function isTx802PmemBank(frame: SysexFrame): boolean {
 /** Extract performances from a SysEx frame, or null if unsupported. */
 export function performancesFromFrame(frame: SysexFrame): ParsedPerformance[] | null {
   if (!TX802_PERF_KINDS.has(frame.kind)) return null;
-  const data = payloadFromFrame(frame);
+  const data = bulkPayloadFromFrame(frame);
   if (!data || data.length === 0) return null;
 
   if (frame.kind === SysexKind.Performance) {
@@ -264,4 +243,4 @@ export function mapVoiceNumber(vnum: number): number {
   return decodeDx7iiVoiceRef(vnum).program;
 }
 
-export { defaultVoiceRef, type VoiceRef };
+export { defaultVoiceRef, type VoiceRef } from './voice-library';

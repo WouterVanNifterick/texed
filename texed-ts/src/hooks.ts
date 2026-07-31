@@ -97,6 +97,37 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 
+/** Window keydown while `enabled`, skipping editable targets. */
+function useWindowKeydown(
+  enabled: boolean,
+  handler: (e: KeyboardEvent) => void,
+  deps: unknown[],
+): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const down = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+      handler(e);
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+    // Caller passes the handler's reactive deps explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ...deps]);
+}
+
+/** Close a modal/overlay when Escape is pressed (even while typing in a field). */
+export function useEscapeClose(onClose: () => void, enabled = true): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [enabled, onClose]);
+}
+
 /**
  * Plays notes from the QWERTY row (A–K etc.) while `enabled`; `[` and `]`
  * transpose the whole mapping down and up an octave.
@@ -153,11 +184,10 @@ export function useSelectKeys(
   selectPart: (index: number) => void,
   selectOp: (op: number) => void,
 ): void {
-  useEffect(() => {
-    if (!enabled) return;
-    const down = (e: KeyboardEvent) => {
+  useWindowKeydown(
+    enabled,
+    (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isEditableTarget(e.target)) return;
       const part = /^F([1-8])$/.exec(e.key);
       if (part) {
         e.preventDefault();
@@ -167,28 +197,25 @@ export function useSelectKeys(
       if (!/^[1-6]$/.test(e.key)) return;
       e.preventDefault();
       selectOp(Number(e.key));
-    };
-    window.addEventListener('keydown', down);
-    return () => window.removeEventListener('keydown', down);
-  }, [enabled, selectPart, selectOp]);
+    },
+    [selectPart, selectOp],
+  );
 }
 
 /** Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo. */
 export function useUndoKeys(enabled: boolean, undo: () => void, redo: () => void): void {
-  useEffect(() => {
-    if (!enabled) return;
-    const down = (e: KeyboardEvent) => {
+  useWindowKeydown(
+    enabled,
+    (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      if (isEditableTarget(e.target)) return;
       const key = e.key.toLowerCase();
       if (key !== 'z' && key !== 'y') return;
       e.preventDefault();
       if (key === 'y' || e.shiftKey) redo();
       else undo();
-    };
-    window.addEventListener('keydown', down);
-    return () => window.removeEventListener('keydown', down);
-  }, [enabled, undo, redo]);
+    },
+    [undo, redo],
+  );
 }
 
 /**
@@ -204,11 +231,10 @@ export function useClipboardKeys(
   copy: () => void,
   paste: (envOnly: boolean) => void,
 ): void {
-  useEffect(() => {
-    if (!enabled) return;
-    const down = (e: KeyboardEvent) => {
+  useWindowKeydown(
+    enabled,
+    (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      if (isEditableTarget(e.target)) return;
       const key = e.key.toLowerCase();
       if (key === 'v') {
         e.preventDefault();
@@ -220,10 +246,9 @@ export function useClipboardKeys(
       if (selection && !selection.isCollapsed) return;
       e.preventDefault();
       copy();
-    };
-    window.addEventListener('keydown', down);
-    return () => window.removeEventListener('keydown', down);
-  }, [enabled, copy, paste]);
+    },
+    [copy, paste],
+  );
 }
 
 export function patchFiles(files: FileList | File[]): File[] {

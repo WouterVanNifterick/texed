@@ -22,6 +22,7 @@
 //           "LM  MCRYM"   DX7II microtuning (memory)
 
 import { sysexChecksum, clampVoice, Cartridge, initVoice } from './cartridge';
+import { looksLikeAmemBulk } from './amem';
 
 export const SysexKind = {
   Voice: 'voice',
@@ -115,8 +116,6 @@ function compactFormatKey(formatId: string): string {
   }
   return trimmed;
 }
-
-import { looksLikeAmemBulk } from './amem';
 
 const TX802_PERF_BLOCK = 140;
 

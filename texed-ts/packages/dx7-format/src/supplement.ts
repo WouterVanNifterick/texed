@@ -3,6 +3,8 @@
 // VoiceSupplement; setters return the single byte edit to send over the
 // bridge as a SetSupplementParam message.
 
+import { formatSignedOffset } from './voice';
+
 export interface ByteEdit {
   offset: number;
   value: number;
@@ -132,10 +134,8 @@ export const setCtrlRange = (
 export const PITCH_BIAS_CENTER = 50;
 
 /** Format a 0–99 pitch bias (50 = center) as −50..+49. */
-export const formatPitchBias = (value: number): string => {
-  const d = value - PITCH_BIAS_CENTER;
-  return d > 0 ? `+${d}` : `${d}`;
-};
+export const formatPitchBias = (value: number): string =>
+  formatSignedOffset(value, PITCH_BIAS_CENTER);
 
 // Byte 24: pitch EG rate scaling 0–7.
 export const getPitchEgScaleRate = (a: Uint8Array): number => a[24] & 0x07;

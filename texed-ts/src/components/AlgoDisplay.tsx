@@ -2,15 +2,14 @@
 // Carriers are filled, modulators outlined, self-feedback shown as a loop.
 // Node brightness reflects static output level plus live envelope amplitude.
 
-import { useStatus, type SynthStatus } from '../audio/useSynth';
+import { useStatus } from '../audio/useSynth';
+import type { StatusSubscribe } from '../audio/synth-types';
 import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { algoGraph } from '../state/algo';
 import { opColor } from '../ui/op-colors';
 
 const CELL = 26;
 const BOX = 17;
-
-type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 
 interface AlgoDisplayProps {
   voice: Uint8Array;
@@ -19,7 +18,7 @@ interface AlgoDisplayProps {
   onHover: (opNum: number | null) => void;
   selectedOp: number | null; // display op number 1..6, or null when the pitch EG is selected
   onSelect: (opNum: number) => void;
-  subscribeStatus: Subscribe;
+  subscribeStatus: StatusSubscribe;
 }
 
 export function AlgoDisplay({
@@ -59,7 +58,7 @@ export function AlgoDisplay({
         const base = opBase(n.num);
         const enabled = (voice[G.opEnable] & (1 << n.op)) !== 0;
         const outLevel = voice[base + OP.outputLevel];
-        const staticBright = !enabled || outLevel === 0 ? 0.25 : 0.25 + (outLevel / 99) * 0.75;
+        const staticBright = 0.25 + (enabled && outLevel > 0 ? (outLevel / 99) * 0.75 : 0);
         const amp = amps[n.op] ?? 0;
         const opacity = Math.min(1, staticBright + amp * 0.45);
         const glow = amp > 0.02 ? 2 + amp * 8 : 0;

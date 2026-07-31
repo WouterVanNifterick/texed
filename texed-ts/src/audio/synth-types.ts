@@ -9,6 +9,9 @@ import type { GlobalSettings } from '@texed/dx7-format/global-settings';
 
 export type SynthStatus = Omit<StatusMsg, 'type'>;
 
+/** Subscribe to the ~31 Hz status stream. */
+export type StatusSubscribe = (cb: (s: SynthStatus) => void) => () => void;
+
 export interface BankInfo {
   id: VoiceBankId;
   label: string;

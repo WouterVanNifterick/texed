@@ -4,12 +4,12 @@
 // select it.
 
 import { useMemo } from 'react';
-import type { SynthStatus } from '../audio/useSynth';
 import { OP, G, opBase } from '@texed/dx7-format/voice';
 import { setHelp } from '../state/help';
 import { useOpDropTarget, type OpClipboard } from '../state/useOpClipboard';
 import { simulateAmpEnv, simulatePitchEnv, type EnvTrace } from '@texed/dx7-engine/env-sim';
 import { useStatus } from '../audio/useSynth';
+import type { StatusSubscribe, SynthStatus } from '../audio/synth-types';
 import { computeAmpParams, pitchEgParams, type EnvTimeScale } from './env-time';
 import {
   makeYMap,
@@ -27,8 +27,6 @@ import { LiveEnvEditor } from './EnvEditor';
 const W = 100;
 const H = 100;
 const PAD = 2;
-
-type Subscribe = (cb: (s: SynthStatus) => void) => () => void;
 
 /** One non-editable envelope on the plot: what to draw it with, and where. */
 interface BgTrace {
@@ -48,7 +46,7 @@ interface EnvOverlayProps {
   selected: EnvSelection;
   onSelect: (sel: EnvSelection) => void;
   setParam: (offset: number, value: number) => void;
-  subscribeStatus: Subscribe;
+  subscribeStatus: StatusSubscribe;
   hoverOp: number | null;
   onHoverOp: (opNum: number | null) => void;
   note: number;
@@ -293,7 +291,7 @@ export function EnvOverlay({
  * frame, so a dot per subscriber would only mean the same frame re-read seven
  * times. The selected envelope draws its own, brighter, dot in the editor.
  */
-function BgPlayheads({ traces, subscribe }: { traces: BgTrace[]; subscribe: Subscribe }) {
+function BgPlayheads({ traces, subscribe }: { traces: BgTrace[]; subscribe: StatusSubscribe }) {
   const status = useStatus<SynthStatus | null>(subscribe, (s) => s, null);
   if (!status) return null;
   return (

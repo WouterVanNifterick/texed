@@ -230,8 +230,7 @@ export class Dx7Note {
   }
 
   private amsTableValue(ams: number): number {
-    if (ams < extendedAmsTable.length) return extendedAmsTable[ams];
-    return extendedAmsTable[extendedAmsTable.length - 1];
+    return extendedAmsTable[Math.min(ams, extendedAmsTable.length - 1)];
   }
 
   private oscFreq(
@@ -304,20 +303,8 @@ export class Dx7Note {
     }
     this.notePitch = this.tuningState.midinoteToLogfreq(midinote) + this.randPitchOffset;
     this.portaCur = this.notePitch;
-    const pegRateAdj =
-      sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
-    for (let i = 0; i < 4; i++) {
-      rates[i] = Math.min(99, patch[126 + i] + pegRateAdj);
-      levels[i] = patch[130 + i];
-    }
-    this.pitchenv.set(rates, levels);
-    this.algorithm = patch[134];
-    const feedback = patch[135];
-    this.fbShift = feedback !== 0 ? FEEDBACK_BITDEPTH - feedback : 16;
-    this.pitchmoddepth = (patch[139] * 165) >> 6;
-    this.pitchmodsens = pitchmodsenstab[patch[143] & 7];
-    this.ampmoddepth = (patch[140] * 165) >> 6;
-
+    this.loadPitchEg(patch, midinote, rates, levels, 'set');
+    this.applyVoiceModParams(patch);
     this.mpePitchBend = 8192;
   }
 
@@ -353,11 +340,8 @@ export class Dx7Note {
     let pb = this.bendGate ? pitchbend - 0x2000 : 0;
     if (pb !== 0) {
       if (ctrls.values_[kControllerPitchStep] === 0) {
-        if (pb >= 0) {
-          pb = Math.trunc(((pb << 11) * ctrls.values_[kControllerPitchRangeUp]) / 12.0);
-        } else {
-          pb = Math.trunc(((pb << 11) * ctrls.values_[kControllerPitchRangeDn]) / 12.0);
-        }
+        const range = ctrls.values_[pb >= 0 ? kControllerPitchRangeUp : kControllerPitchRangeDn];
+        pb = Math.trunc(((pb << 11) * range) / 12.0);
       } else {
         const stp = Math.trunc(12 / ctrls.values_[kControllerPitchStep]);
         pb = Math.trunc((pb * stp) / 8191);
@@ -488,14 +472,29 @@ export class Dx7Note {
     }
     // Keep the glide anchored if the tuning moved under us.
     this.notePitch = this.tuningState.midinoteToLogfreq(midinote) + this.randPitchOffset;
-    const sup = this.supplement;
-    const pegRateAdj =
-      sup && sup.pitchEgScaleRate ? scaleRate(midinote, sup.pitchEgScaleRate & 7) : 0;
+    this.loadPitchEg(patch, midinote, rates, levels, 'update');
+    this.applyVoiceModParams(patch);
+  }
+
+  private loadPitchEg(
+    patch: Uint8Array,
+    midinote: number,
+    rates: Int32Array,
+    levels: Int32Array,
+    mode: 'set' | 'update',
+  ): void {
+    const pegRateAdj = this.supplement?.pitchEgScaleRate
+      ? scaleRate(midinote, this.supplement.pitchEgScaleRate & 7)
+      : 0;
     for (let i = 0; i < 4; i++) {
       rates[i] = Math.min(99, patch[126 + i] + pegRateAdj);
       levels[i] = patch[130 + i];
     }
-    this.pitchenv.update(rates, levels);
+    if (mode === 'set') this.pitchenv.set(rates, levels);
+    else this.pitchenv.update(rates, levels);
+  }
+
+  private applyVoiceModParams(patch: Uint8Array): void {
     this.algorithm = patch[134];
     const feedback = patch[135];
     this.fbShift = feedback !== 0 ? FEEDBACK_BITDEPTH - feedback : 16;

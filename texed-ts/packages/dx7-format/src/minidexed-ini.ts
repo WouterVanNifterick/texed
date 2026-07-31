@@ -97,26 +97,24 @@ function emptyExtras(): MiniDexedExtras {
   };
 }
 
-function defaultTgExtras(_tg: number): MiniDexedTgExtras {
-  return {
-    BankNumber: '0',
-    VoiceNumber: '1',
-    PitchBendRange: '2',
-    PitchBendStep: '0',
-    PortamentoMode: '0',
-    PortamentoGlissando: '0',
-    PortamentoTime: '0',
-    MonoMode: '0',
-    ModulationWheelRange: '99',
-    ModulationWheelTarget: '1',
-    FootControlRange: '99',
-    FootControlTarget: '0',
-    BreathControlRange: '99',
-    BreathControlTarget: '0',
-    AftertouchRange: '99',
-    AftertouchTarget: '0',
-  };
-}
+const DEFAULT_TG_EXTRAS: MiniDexedTgExtras = {
+  BankNumber: '0',
+  VoiceNumber: '1',
+  PitchBendRange: '2',
+  PitchBendStep: '0',
+  PortamentoMode: '0',
+  PortamentoGlissando: '0',
+  PortamentoTime: '0',
+  MonoMode: '0',
+  ModulationWheelRange: '99',
+  ModulationWheelTarget: '1',
+  FootControlRange: '99',
+  FootControlTarget: '0',
+  BreathControlRange: '99',
+  BreathControlTarget: '0',
+  AftertouchRange: '99',
+  AftertouchTarget: '0',
+};
 
 function parseIntValue(raw: string, fallback: number): number {
   const n = Number.parseInt(raw.trim(), 10);
@@ -173,7 +171,6 @@ export function decodeVoiceDataHex(text: string): Uint8Array | null {
     if (hi < 0 || lo < 0) return null;
     bytes[i] = (hi << 4) | lo;
   }
-  if (bytes.length !== 156) return voiceFromRawVced(bytes);
   return voiceFromRawVced(bytes);
 }
 
@@ -356,7 +353,7 @@ function mergeExtras(base: MiniDexedExtras | null | undefined): MiniDexedExtras 
     }
   }
   for (let i = 0; i < NUM_PARTS; i++) {
-    out.tg[i] = { ...defaultTgExtras(i), ...out.tg[i] };
+    out.tg[i] = { ...DEFAULT_TG_EXTRAS, ...out.tg[i] };
   }
   return out;
 }
@@ -401,7 +398,7 @@ export function serializeMiniDexedIni(input: SerializeMiniDexedIniInput): string
 
     for (const key of PRESERVED_TG_KEYS) {
       if (key === 'BankNumber' || key === 'VoiceNumber') continue;
-      lines.push(`${key}${tg}=${preserved[key] ?? defaultTgExtras(i)[key]}`);
+      lines.push(`${key}${tg}=${preserved[key] ?? DEFAULT_TG_EXTRAS[key]}`);
     }
 
     const voiceHex = voice && voice.length >= 155 ? encodeVoiceDataHex(voice) : '';

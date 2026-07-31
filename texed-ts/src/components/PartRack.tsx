@@ -8,7 +8,8 @@ import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
 import type { GlobalSettings, ReverbSettings } from '@texed/dx7-format/global-settings';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 import { programIndexForVoice } from '../audio/useSynth';
-import type { SynthStatus } from '../audio/useSynth';
+import type { StatusSubscribe } from '../audio/synth-types';
+import { useEscapeClose } from '../hooks';
 import { Knob } from '../ui/Knob';
 import { NoteRange } from '../ui/NoteRange';
 import { PartSlider } from '../ui/PartSlider';
@@ -25,7 +26,7 @@ interface PartRackProps {
   onGesture: (index: number, field: keyof PartConfig, begin: boolean) => void;
   onSetVoiceRef: (ref: VoiceRef, partIndex?: number) => void;
   onSetGlobal: (settings: Partial<GlobalSettings>) => void;
-  subscribeStatus: (cb: (s: SynthStatus) => void) => () => void;
+  subscribeStatus: StatusSubscribe;
   onClose: () => void;
 }
 
@@ -60,14 +61,7 @@ export function PartRack({
   const [activity, setActivity] = useState<number[]>([]);
 
   useEffect(() => subscribeStatus((s) => setActivity(s.partActivity ?? [])), [subscribeStatus]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   return (
     <div className="partrack-overlay partrack-overlay--region">

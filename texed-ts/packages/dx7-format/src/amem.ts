@@ -1,4 +1,6 @@
 // DX7II additional voice memory (AMEM): 35-byte supplement per voice, 1120-byte bulk.
+
+import { sysexChecksum } from './cartridge';
 //
 // Authoritative packed layout (Yamaha DX7II MIDI data format, AMEM table):
 //   0     |  0 | OP1| OP2| OP3| OP4| OP5| OP6|   scaling mode (0 norm / 1 fractional)
@@ -155,9 +157,7 @@ export function acedToSysex(amem: Uint8Array): Uint8Array {
   out.set([0xf0, 0x43, 0x00, 0x7e, (size >> 7) & 0x7f, size & 0x7f], 0);
   for (let i = 0; i < ACED_ID.length; i++) out[6 + i] = ACED_ID.charCodeAt(i);
   out.set(body, 6 + ACED_ID.length);
-  let sum = 0;
-  for (let i = 0; i < size; i++) sum -= out[6 + i];
-  out[6 + size] = sum & 0x7f;
+  out[6 + size] = sysexChecksum(out, 6, size);
   out[6 + size + 1] = 0xf7;
   return out;
 }

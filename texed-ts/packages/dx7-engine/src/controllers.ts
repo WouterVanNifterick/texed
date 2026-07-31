@@ -125,16 +125,9 @@ export class Controllers {
     this.applyMod(this.midiCsSeen ? this.midiCsCc : 0, this.midiCs);
 
     // No EG bias assigned anywhere: operators play at full level.
-    const egAssigned =
-      this.wheel.egRange ||
-      this.breath.egRange ||
-      (this.fc1AsCs1 ? 0 : this.foot.egRange) ||
-      this.at.egRange ||
-      this.foot2.egRange ||
-      this.midiCs.egRange;
-    if (!egAssigned) {
-      this.egMod = 127;
-    }
+    const egSources = [this.wheel, this.breath, this.at, this.foot2, this.midiCs];
+    if (!this.fc1AsCs1) egSources.push(this.foot);
+    if (!egSources.some((m) => m.egRange)) this.egMod = 127;
 
     // BC/AT pitch bias: full range shifts pitch by ±1 octave (Q24 per octave).
     const bias =

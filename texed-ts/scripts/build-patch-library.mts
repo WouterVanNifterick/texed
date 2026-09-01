@@ -87,11 +87,11 @@ function dirOf(relPath: string): string {
   return i < 0 ? '' : relPath.slice(0, i);
 }
 
-/** "Bank 0" → "Bank A"; the numeric id and blob path stay as they are. */
+/** "Bank 0" → "Bank C"; the numeric id and blob path stay as they are. */
 function fs1rBankLabel(n: string): string {
   const idx = Number(n);
-  return Number.isInteger(idx) && idx >= 0 && idx < 26
-    ? `Bank ${String.fromCharCode(65 + idx)}`
+  return Number.isInteger(idx) && idx >= 0 && idx < 24
+    ? `Bank ${String.fromCharCode(67 + idx)}`
     : `Bank ${n}`;
 }
 

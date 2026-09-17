@@ -13,7 +13,7 @@
     "@texed/dx7-format": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
-    "tsx": "^4.23.12"
+    "@types/node": "^26.5.1",
+    "tsx": "^4.23.13"
   }
 }

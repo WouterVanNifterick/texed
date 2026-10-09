@@ -49,7 +49,9 @@ export function useOpClipboard(synth: Synth, showMsg: (text: string) => void): O
   // The panels this is handed to are memoized, so the object has to keep its
   // identity; the live buffers reach the callbacks through a ref instead.
   const buffers = useRef({ voice, supplement });
-  buffers.current = { voice, supplement };
+  useEffect(() => {
+    buffers.current = { voice, supplement };
+  }, [voice, supplement]);
 
   return useMemo(() => {
     const run = (clip: OpClip, target: EnvSelection, requested: ActionKind) => {
@@ -137,13 +139,11 @@ export function useOpDropTarget(
   envOnly = false,
 ): DropTarget {
   const drag = useOpDrag();
-  const [hint, setHint] = useState<DropAction | null>(null);
-
   // A drag released over something else never delivers a leave here, so the
-  // hint is retired from the drag ending rather than from an event.
-  useEffect(() => {
-    if (!drag) setHint(null);
-  }, [drag]);
+  // hint is kept with the drag it was shown for and retires when that ends.
+  const [shown, setShown] = useState<{ drag: OpClip; action: DropAction } | null>(null);
+  const hint = drag && shown?.drag === drag ? shown.action : null;
+  const setHint = (action: DropAction | null) => setShown(drag && action && { drag, action });
 
   const actionFor = (e: DragEvent): DropAction | null => {
     const overEnv = envOnly || !!(e.target as Element | null)?.closest('.env-editor');
@@ -152,7 +152,7 @@ export function useOpDropTarget(
 
   return {
     armed: !!drag && drag.source !== target,
-    hint: drag ? hint : null,
+    hint,
     dropProps: {
       onDragOver: (e) => {
         const next = actionFor(e);
@@ -163,7 +163,7 @@ export function useOpDropTarget(
         e.dataTransfer.dropEffect = next.kind === 'swap' ? 'move' : 'copy';
         // dragover repeats for as long as the pointer is here; only re-render
         // when the verdict actually changes.
-        setHint((prev) => (prev && prev.label === next.label ? prev : next));
+        if (hint?.label !== next.label) setHint(next);
       },
       onDragLeave: (e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHint(null);

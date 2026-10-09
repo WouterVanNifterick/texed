@@ -13,7 +13,6 @@ const BOX = 17;
 
 interface AlgoDisplayProps {
   voice: Uint8Array;
-  algorithm: number; // 0..31
   hoverOp: number | null; // display op number 1..6
   onHover: (opNum: number | null) => void;
   selectedOp: number | null; // display op number 1..6, or null when the pitch EG is selected
@@ -23,7 +22,6 @@ interface AlgoDisplayProps {
 
 export function AlgoDisplay({
   voice,
-  algorithm,
   hoverOp,
   onHover,
   selectedOp,
@@ -31,7 +29,7 @@ export function AlgoDisplay({
   subscribeStatus,
 }: AlgoDisplayProps) {
   const amps = useStatus(subscribeStatus, (s) => s.amps, []);
-  const g = algoGraph(algorithm);
+  const g = algoGraph(voice[G.algorithm]);
   const width = g.cols * CELL + 10;
   const height = g.rows * CELL + 10;
   const cx = (x: number) => 5 + x * CELL + CELL / 2;

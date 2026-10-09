@@ -10,6 +10,7 @@ import {
   buildManifest,
   describeSyxFile,
   groupDirectory,
+  naturalCompare,
   packFs1rBank,
   slugifyPath,
   type DescribedFile,
@@ -66,7 +67,7 @@ async function walkFiles(root: string): Promise<string[]> {
   return entries
     .filter((e) => e.isFile())
     .map((e) => path.relative(root, path.join(e.parentPath, e.name)).replaceAll(path.sep, '/'))
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    .sort(naturalCompare);
 }
 
 async function writeOut(relPath: string, data: Uint8Array | string): Promise<void> {
@@ -102,7 +103,7 @@ async function buildFs1rCollection(spec: CollectionSpec): Promise<LibCollection>
   const bankDirs = (await readdir(root, { withFileTypes: true }))
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    .sort(naturalCompare);
 
   for (const dirName of bankDirs) {
     const bankRoot = path.join(root, dirName);
@@ -139,7 +140,6 @@ async function buildFs1rCollection(spec: CollectionSpec): Promise<LibCollection>
 async function buildSyxCollection(spec: CollectionSpec): Promise<LibCollection> {
   const root = path.join(PATCHES_DIR, spec.dir);
   const banks: LibBank[] = [];
-  const copiedPath = (rel: string): string => `${spec.id}/${slugifyPath(rel)}`;
 
   // Describe every file first, then group each directory on its own.
   const byDir = new Map<string, DescribedFile[]>();
@@ -154,7 +154,7 @@ async function buildSyxCollection(spec: CollectionSpec): Promise<LibCollection> 
       unsupportedByDir.set(dir, [...(unsupportedByDir.get(dir) ?? []), rel]);
       continue;
     }
-    const outFile = copiedPath(rel);
+    const outFile = `${spec.id}/${slugifyPath(rel)}`;
     await writeOut(outFile, bytes);
     const stem = fileStem(rel);
 
@@ -212,18 +212,12 @@ async function main(): Promise<void> {
   const manifest = buildManifest(collections);
   await writeOut('manifest.json', JSON.stringify(manifest));
 
-  const nBanks = collections.reduce((a, c) => a + c.banks.length, 0);
-  const nVoices = collections.reduce(
-    (a, c) => a + c.banks.reduce((x, b) => x + b.voices.length, 0),
-    0,
-  );
-  const nSets = collections.reduce((a, c) => a + c.sets.length, 0);
-  const performanceCount = collections.reduce(
-    (a, c) => a + c.sets.reduce((x, s) => x + (s.performances?.length ?? 0), 0),
-    0,
-  );
+  const banks = collections.flatMap((c) => c.banks);
+  const sets = collections.flatMap((c) => c.sets);
+  const nVoices = banks.reduce((n, b) => n + b.voices.length, 0);
+  const nPerformances = sets.reduce((n, s) => n + (s.performances?.length ?? 0), 0);
   console.log(
-    `library: ${collections.length} collections, ${nSets} sets, ${nBanks} banks, ${nVoices} voices, ${performanceCount} performances`,
+    `library: ${collections.length} collections, ${sets.length} sets, ${banks.length} banks, ${nVoices} voices, ${nPerformances} performances`,
   );
 }
 

@@ -43,12 +43,7 @@ export class Env {
     continueEnv = false,
   ): void {
     this.initialised = true;
-    for (let i = 0; i < 4; i++) {
-      this.rates[i] = r[i];
-      this.levels[i] = l[i];
-    }
-    this.outlevel = ol;
-    this.rateScaling = rateScaling;
+    this.setParams(r, l, ol, rateScaling);
     // Forced Damp OFF (continueEnv): keep the current level so the new note's
     // attack continues from where the stolen note left off (the part of the
     // attack below that level is not reproduced). ON: restart from zero.
@@ -133,42 +128,29 @@ export class Env {
     }
   }
 
+  /** Live edit: a held note simply re-enters the sustain stage with the new
+   * parameters, as in msfa; a released one is left to finish its release. */
   update(r: ArrayLike<number>, l: ArrayLike<number>, ol: number, rateScaling: number): void {
+    this.setParams(r, l, ol, rateScaling);
+    if (this.down) this.advance(2);
+  }
+
+  private setParams(
+    r: ArrayLike<number>,
+    l: ArrayLike<number>,
+    ol: number,
+    rateScaling: number,
+  ): void {
     for (let i = 0; i < 4; i++) {
       this.rates[i] = r[i];
       this.levels[i] = l[i];
     }
     this.outlevel = ol;
     this.rateScaling = rateScaling;
-    if (this.down) {
-      const newlevel = this.levels[2];
-      // Deliberately without `+ this.outlevel`, matching msfa's env.cc.
-      let actuallevel = ampLevelBase(newlevel) - 4256;
-      actuallevel = actuallevel < 16 ? 16 : actuallevel;
-      this.targetlevel = actuallevel << 16;
-      this.advance(2);
-    }
   }
 
   getPosition(): number {
     return this.ix;
-  }
-
-  transfer(src: Env): void {
-    for (let i = 0; i < 4; i++) {
-      this.rates[i] = src.rates[i];
-      this.levels[i] = src.levels[i];
-    }
-    this.outlevel = src.outlevel;
-    this.rateScaling = src.rateScaling;
-    this.level = src.level;
-    this.targetlevel = src.targetlevel;
-    this.rising = src.rising;
-    this.ix = src.ix;
-    this.down = src.down;
-    this.staticcount = src.staticcount;
-    this.inc = src.inc;
-    this.damping = src.damping;
   }
 
   isActive(): boolean {

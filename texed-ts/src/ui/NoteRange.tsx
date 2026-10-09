@@ -60,12 +60,15 @@ export function NoteRange({ low, high, onChange, label }: NoteRangeProps) {
     [low, high, setBound],
   );
 
-  const onThumbPointerDown = useCallback((bound: 'low' | 'high', e: React.PointerEvent) => {
-    e.stopPropagation();
-    drag.current = bound;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    (e.currentTarget as HTMLElement).focus();
-  }, []);
+  const onThumbPointerDown = useCallback(
+    (bound: 'low' | 'high', e: React.PointerEvent<HTMLElement>) => {
+      e.stopPropagation();
+      drag.current = bound;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.currentTarget.focus();
+    },
+    [],
+  );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -134,36 +137,27 @@ export function NoteRange({ low, high, onChange, label }: NoteRangeProps) {
         {fills.map((style, i) => (
           <div key={i} className="note-range-fill" aria-hidden style={style} />
         ))}
-        <button
-          type="button"
-          className="note-range-thumb"
-          style={{ left: `${notePct(low)}%` }}
-          role="slider"
-          aria-valuemin={0}
-          aria-valuemax={MIDI_MAX}
-          aria-valuenow={low}
-          aria-valuetext={noteName(low)}
-          aria-label="Low note"
-          onPointerDown={(e) => onThumbPointerDown('low', e)}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onKeyDown={(e) => onThumbKeyDown('low', e)}
-        />
-        <button
-          type="button"
-          className="note-range-thumb"
-          style={{ left: `${notePct(high)}%` }}
-          role="slider"
-          aria-valuemin={0}
-          aria-valuemax={MIDI_MAX}
-          aria-valuenow={high}
-          aria-valuetext={noteName(high)}
-          aria-label="High note"
-          onPointerDown={(e) => onThumbPointerDown('high', e)}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onKeyDown={(e) => onThumbKeyDown('high', e)}
-        />
+        {(['low', 'high'] as const).map((bound) => {
+          const value = bound === 'low' ? low : high;
+          return (
+            <button
+              key={bound}
+              type="button"
+              className="note-range-thumb"
+              style={{ left: `${notePct(value)}%` }}
+              role="slider"
+              aria-valuemin={0}
+              aria-valuemax={MIDI_MAX}
+              aria-valuenow={value}
+              aria-valuetext={noteName(value)}
+              aria-label={bound === 'low' ? 'Low note' : 'High note'}
+              onPointerDown={(e) => onThumbPointerDown(bound, e)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onKeyDown={(e) => onThumbKeyDown(bound, e)}
+            />
+          );
+        })}
       </div>
     </div>
   );

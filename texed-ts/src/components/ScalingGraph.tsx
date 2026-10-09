@@ -7,7 +7,7 @@
 // level = +LIN/+EXP, down = less level = -LIN/-EXP, horizontal = off);
 // click a corner label to toggle LIN/EXP for that side.
 
-import { useCallback, useRef } from 'react';
+import { useRef } from 'react';
 import { scaleLevel } from '@texed/dx7-engine/dx7note';
 import { CURVES, noteName } from '@texed/dx7-format/voice';
 
@@ -17,13 +17,15 @@ const H = 56;
 // largest offset that can ever take effect; raw curves beyond that peg.
 const MAX_SCALE = 128;
 const BP_HIT = 8; // half-width of the break point grab strip, viewBox units
+// Break point 0..99 to the MIDI note of the engine's knee (dx7note.ts scaleLevel).
+const KNEE_OFFSET = 17;
 
 /** DX7-style break point label: 0 = A-1 ... 99 = C8. */
 function bpLabel(bp: number): string {
   return noteName(bp + 9);
 }
 
-export type ScalingField = 'breakPoint' | 'leftDepth' | 'rightDepth' | 'leftCurve' | 'rightCurve';
+type ScalingField = 'breakPoint' | 'leftDepth' | 'rightDepth' | 'leftCurve' | 'rightCurve';
 
 interface ScalingGraphProps {
   breakPoint: number;
@@ -46,13 +48,14 @@ const isExp = (curve: number) => curve === 1 || curve === 2;
 const signedDepth = (depth: number, curve: number) => (isPositive(curve) ? depth : -depth);
 const curveFor = (sign: boolean, exp: boolean) => (sign ? (exp ? 2 : 3) : exp ? 1 : 0);
 
-interface DragState {
-  mode: 'bp' | 'depth';
-  side: 'left' | 'right';
-  startY: number;
-  startVal: number; // signed depth for 'depth' mode
-  rect: DOMRect;
-}
+/** Graph X (MIDI note) under a pointer. */
+const noteAtX = (rect: DOMRect, clientX: number) => ((clientX - rect.left) / rect.width) * W;
+
+type Side = 'left' | 'right';
+
+type DragState =
+  | { mode: 'bp'; rect: DOMRect }
+  | { mode: 'depth'; side: Side; startY: number; startDepth: number; rect: DOMRect };
 
 export function ScalingGraph({
   breakPoint,
@@ -67,82 +70,64 @@ export function ScalingGraph({
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<DragState | null>(null);
 
-  const bpNote = breakPoint + 17; // engine knee position (dx7note.ts scaleLevel)
+  const bpNote = breakPoint + KNEE_OFFSET;
+  const curves = { left: leftCurve, right: rightCurve };
+  const signed = {
+    left: signedDepth(leftDepth, leftCurve),
+    right: signedDepth(rightDepth, rightCurve),
+  };
 
-  const setSigned = useCallback(
-    (side: 'left' | 'right', signed: number) => {
-      const curve = side === 'left' ? leftCurve : rightCurve;
-      const next = curveFor(signed >= 0, isExp(curve));
-      onChange(side === 'left' ? 'leftDepth' : 'rightDepth', Math.abs(signed));
-      if (next !== curve && signed !== 0) {
-        onChange(side === 'left' ? 'leftCurve' : 'rightCurve', next);
-      }
-    },
-    [leftCurve, rightCurve, onChange],
-  );
+  const setSigned = (side: Side, value: number) => {
+    const next = curveFor(value >= 0, isExp(curves[side]));
+    onChange(`${side}Depth`, Math.abs(value));
+    if (next !== curves[side] && value !== 0) onChange(`${side}Curve`, next);
+  };
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (!root.current) return;
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {
-        // synthetic/stale pointer ids - dragging still works while inside
-      }
-      const rect = root.current.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * W;
-      if (Math.abs(x - bpNote) < BP_HIT) {
-        drag.current = { mode: 'bp', side: 'left', startY: e.clientY, startVal: 0, rect };
-        return;
-      }
-      const side = x < bpNote ? 'left' : 'right';
-      drag.current = {
-        mode: 'depth',
-        side,
-        startY: e.clientY,
-        startVal:
-          side === 'left' ? signedDepth(leftDepth, leftCurve) : signedDepth(rightDepth, rightCurve),
-        rect,
-      };
-    },
-    [bpNote, leftDepth, rightDepth, leftCurve, rightCurve],
-  );
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!root.current) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // synthetic/stale pointer ids - dragging still works while inside
+    }
+    const rect = root.current.getBoundingClientRect();
+    const x = noteAtX(rect, e.clientX);
+    if (Math.abs(x - bpNote) < BP_HIT) {
+      drag.current = { mode: 'bp', rect };
+      return;
+    }
+    const side = x < bpNote ? 'left' : 'right';
+    drag.current = { mode: 'depth', side, startY: e.clientY, startDepth: signed[side], rect };
+  };
 
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      if (d.mode === 'bp') {
-        const note = ((e.clientX - d.rect.left) / d.rect.width) * W;
-        onChange('breakPoint', clamp(Math.round(note - 17), 0, 99));
-        return;
-      }
-      const fine = e.shiftKey ? 0.2 : 1;
-      const dv = ((d.startY - e.clientY) / d.rect.height) * 200 * fine;
-      setSigned(d.side, clamp(Math.round(d.startVal + dv), -99, 99));
-    },
-    [onChange, setSigned],
-  );
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    if (d.mode === 'bp') {
+      const knee = noteAtX(d.rect, e.clientX);
+      onChange('breakPoint', clamp(Math.round(knee - KNEE_OFFSET), 0, 99));
+      return;
+    }
+    const fine = e.shiftKey ? 0.2 : 1;
+    const dv = ((d.startY - e.clientY) / d.rect.height) * 200 * fine;
+    setSigned(d.side, clamp(Math.round(d.startDepth + dv), -99, 99));
+  };
 
-  const onPointerUp = useCallback(() => {
+  const onPointerUp = () => {
     drag.current = null;
-  }, []);
+  };
 
-  const onWheel = useCallback(
-    (e: React.WheelEvent) => {
-      if (!root.current) return;
-      const rect = root.current.getBoundingClientRect();
-      const step = e.deltaY < 0 ? 1 : -1;
-      if (e.shiftKey) {
-        onChange('breakPoint', clamp(breakPoint + step, 0, 99));
-      } else if (((e.clientX - rect.left) / rect.width) * W < bpNote) {
-        setSigned('left', clamp(signedDepth(leftDepth, leftCurve) + step, -99, 99));
-      } else {
-        setSigned('right', clamp(signedDepth(rightDepth, rightCurve) + step, -99, 99));
-      }
-    },
-    [bpNote, breakPoint, leftDepth, rightDepth, leftCurve, rightCurve, onChange, setSigned],
-  );
+  const onWheel = (e: React.WheelEvent) => {
+    if (!root.current) return;
+    const step = e.deltaY < 0 ? 1 : -1;
+    if (e.shiftKey) {
+      onChange('breakPoint', clamp(breakPoint + step, 0, 99));
+      return;
+    }
+    const x = noteAtX(root.current.getBoundingClientRect(), e.clientX);
+    const side = x < bpNote ? 'left' : 'right';
+    setSigned(side, clamp(signed[side] + step, -99, 99));
+  };
 
   // Sample every note: the engine steps the scaling in 3-semitone groups, so
   // coarser sampling would alias the staircase.
@@ -157,9 +142,9 @@ export function ScalingGraph({
   const markNote = clamp(note, 0, W);
   const markY = y(scaleLevel(markNote, breakPoint, leftDepth, rightDepth, leftCurve, rightCurve));
 
-  const toggleExp = (side: 'left' | 'right') => {
-    const cur = side === 'left' ? leftCurve : rightCurve;
-    onChange(side === 'left' ? 'leftCurve' : 'rightCurve', curveFor(isPositive(cur), !isExp(cur)));
+  const toggleExp = (side: Side) => {
+    const curve = curves[side];
+    onChange(`${side}Curve`, curveFor(isPositive(curve), !isExp(curve)));
   };
 
   return (

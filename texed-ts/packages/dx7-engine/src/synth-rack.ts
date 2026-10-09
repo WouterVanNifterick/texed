@@ -15,8 +15,7 @@ import { initSynthTables, setEngineAccuracy } from './synth-unit';
 import { getEngineAccuracy, type EngineAccuracy } from './engine-accuracy';
 import type { ParsedPerformance } from '@texed/dx7-format/performance';
 import type { LoadReport } from '@texed/dx7-format/sysex-loader';
-import type { RackState } from '@texed/dx7-format/rack-state';
-import { RACK_STATE_SCHEMA } from '@texed/dx7-format/rack-state';
+import { RACK_STATE_SCHEMA, type RackState } from '@texed/dx7-format/rack-state';
 import {
   volumeToGain,
   DEFAULT_REVERB_SETTINGS,
@@ -43,10 +42,9 @@ import {
   type ProgramOption,
 } from '@texed/dx7-format/part-config';
 
-export type { VoiceRef, VoiceBankId, PartConfig, ProgramOption };
-export { NUM_PARTS, inNoteRange };
+export { NUM_PARTS };
 
-export const DEFAULT_POLYPHONY = 32;
+const DEFAULT_POLYPHONY = 32;
 
 /** Deep-copy parsed performances so snapshots never alias live library state. */
 function copyPerformances(perfs: ParsedPerformance[]): ParsedPerformance[] {
@@ -170,10 +168,6 @@ export class SynthRack {
     for (const c of this.compressors) c.reset();
   }
 
-  get compressorOn(): boolean {
-    return this.compressorEnabled;
-  }
-
   get voiceLibrary(): VoiceLibrary {
     return this.library;
   }
@@ -269,11 +263,7 @@ export class SynthRack {
   }
 
   getPartConfigs(): PartConfig[] {
-    return this.configs.map((c) => ({
-      ...c,
-      voice: { ...c.voice },
-      voiceLabel: this.library.voiceLabel(c.voice),
-    }));
+    return this.configs.map((_, i) => this.getPartConfig(i));
   }
 
   setPartConfig(index: number, patch: Partial<PartConfig>): void {
@@ -306,9 +296,7 @@ export class SynthRack {
     for (let i = 0; i < NUM_PARTS; i++) {
       this.applyVoiceToPart(i);
     }
-    for (let i = 0; i < NUM_PARTS; i++) {
-      if (!this.isSlave(i)) this.syncLinkedSlaves(i);
-    }
+    this.syncAllLinkGroups();
     if (this.library.performances.length > 0) {
       this.selectPerformance(this.library.performanceIndex);
     }
@@ -381,9 +369,7 @@ export class SynthRack {
     for (let i = 0; i < NUM_PARTS; i++) {
       if (this.configs[i].voice.bank === bank) this.applyVoiceToPart(i);
     }
-    for (let i = 0; i < NUM_PARTS; i++) {
-      if (!this.isSlave(i)) this.syncLinkedSlaves(i);
-    }
+    this.syncAllLinkGroups();
   }
 
   /** Snapshot the whole rack for persistence (banks as SysEx dumps). */
@@ -475,9 +461,7 @@ export class SynthRack {
     }
     // setPartConfig already syncs per index, but a later master edit can precede
     // its slaves being marked linked; re-sync every group once all parts are set.
-    for (let i = 0; i < NUM_PARTS; i++) {
-      if (!this.isSlave(i)) this.syncLinkedSlaves(i);
-    }
+    this.syncAllLinkGroups();
   }
 
   getPerformanceState(): { names: string[]; index: number; name: string } {
@@ -565,6 +549,11 @@ export class SynthRack {
       this.parts[i].forcedDamp = m.forcedDamp;
       if (wasEnabled && !s.enabled) this.parts[i].panic();
     }
+  }
+
+  /** Re-sync every link group from its master (a no-op for slave indices). */
+  private syncAllLinkGroups(): void {
+    for (let i = 0; i < NUM_PARTS; i++) this.syncLinkedSlaves(i);
   }
 
   private matches(index: number, channel: number): boolean {
@@ -862,5 +851,3 @@ export class SynthRack {
     }
   }
 }
-
-export { voiceRefEquals };

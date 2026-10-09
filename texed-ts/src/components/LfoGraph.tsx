@@ -69,10 +69,10 @@ export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {
   // the engine LFO — `lfoRestart` increments there. Using that signal (rather
   // than "something sounding") means a new note restarts the sweep even while
   // an earlier note is still ringing out on a long release.
-  const epochRef = useRef(0);
-  const [, setTick] = useState(0);
+  const epoch = useRef(0);
+  const [elapsed, setElapsed] = useState(0); // seconds since that note-on
   useEffect(() => {
-    epochRef.current = performance.now();
+    epoch.current = performance.now();
   }, [restart]);
 
   // Animate smoothly while a note is audible (including the release tail).
@@ -80,12 +80,13 @@ export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {
     if (!playing) return;
     let raf = 0;
     const loop = () => {
-      setTick((t) => t + 1);
+      setElapsed((performance.now() - epoch.current) / 1000);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [playing]);
+
   // Delay hold + ramp durations in seconds (see Lfo.reset: state advances by
   // unit*a per block, unit*samplerate/N ≈ 25190424, target 2^31).
   const a = 99 - Math.min(99, Math.max(0, delay));
@@ -127,7 +128,6 @@ export function LfoGraph({ waveform, speed, delay, subscribe }: LfoGraphProps) {
   // axis so it starts at the left (note-on), sweeps through the delay ramp and
   // into the oscillation, sitting exactly on the drawn (delay-gated) waveform.
   // Past the window it loops one steady cycle so it stays in view.
-  const elapsed = (performance.now() - epochRef.current) / 1000;
   const delayEnd = hold + ramp;
   let dotT = elapsed;
   if (dotT > total) dotT = delayEnd + ((elapsed - delayEnd) % drawPeriod);

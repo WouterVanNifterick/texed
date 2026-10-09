@@ -85,7 +85,6 @@ export const GlobalPanel = memo(function GlobalPanel({
           <div className="algo-vis-block">
             <AlgoDisplay
               voice={voice}
-              algorithm={voice[G.algorithm]}
               hoverOp={hoverOp}
               onHover={onHoverOp}
               selectedOp={typeof selected === 'number' ? selected : null}

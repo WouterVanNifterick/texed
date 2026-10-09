@@ -3,11 +3,11 @@
 // reverb send, over a global reverb and compressor. Clicking a part selects it
 // as the target for the voice editor.
 
-import { useEffect, useState } from 'react';
+import type { ReactNode, SyntheticEvent } from 'react';
 import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
 import type { GlobalSettings, ReverbSettings } from '@texed/dx7-format/global-settings';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
-import { programIndexForVoice } from '../audio/useSynth';
+import { programIndexForVoice, useStatus } from '../audio/useSynth';
 import type { StatusSubscribe } from '../audio/synth-types';
 import { useEscapeClose } from '../hooks';
 import { Knob } from '../ui/Knob';
@@ -44,6 +44,25 @@ const REVERB_KNOBS: { key: keyof Omit<ReverbSettings, 'enabled'>; label: string;
     { key: 'level', label: 'Level', help: 'Wet return level' },
   ];
 
+const formatSigned = (v: number) => (v > 0 ? `+${v}` : `${v}`);
+
+/** Keeps a click on a row's control from also selecting the row. */
+const stopPropagation = (e: SyntheticEvent) => e.stopPropagation();
+
+/**
+ * Table cell for a knob. The wrapper stops the row's select-on-click from
+ * firing while dragging the knob; the knob itself is the focusable control.
+ */
+function KnobCell({ children }: { children: ReactNode }) {
+  return (
+    <td>
+      <div role="presentation" onClick={stopPropagation} onPointerDown={stopPropagation}>
+        {children}
+      </div>
+    </td>
+  );
+}
+
 export function PartRack({
   configs,
   voiceNames,
@@ -58,9 +77,7 @@ export function PartRack({
   subscribeStatus,
   onClose,
 }: PartRackProps) {
-  const [activity, setActivity] = useState<number[]>([]);
-
-  useEffect(() => subscribeStatus((s) => setActivity(s.partActivity ?? [])), [subscribeStatus]);
+  const activity = useStatus(subscribeStatus, (s) => s.partActivity, []);
   useEscapeClose(onClose);
 
   return (
@@ -137,7 +154,7 @@ export function PartRack({
                         checked={cfg.link}
                         title="Link to the instrument above (combine polyphony)"
                         onChange={(e) => onSetPart(i, { link: e.target.checked })}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={stopPropagation}
                       />
                     )}
                   </td>
@@ -163,7 +180,7 @@ export function PartRack({
                           checked={cfg.enabled}
                           aria-label={`Part ${i + 1} on`}
                           onChange={(e) => onSetPart(i, { enabled: e.target.checked })}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={stopPropagation}
                         />
                       </td>
                       <td>
@@ -171,7 +188,7 @@ export function PartRack({
                           value={cfg.rxChannel}
                           aria-label={`Part ${i + 1} MIDI receive channel`}
                           onChange={(e) => onSetPart(i, { rxChannel: Number(e.target.value) })}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={stopPropagation}
                         >
                           <option value={0}>OMNI</option>
                           {Array.from({ length: 16 }, (_, ch) => (
@@ -198,7 +215,7 @@ export function PartRack({
                             const opt = programOptions[Number(val)];
                             if (opt) onSetVoiceRef(opt.ref, i);
                           }}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={stopPropagation}
                           disabled={programOptions.length === 0}
                         >
                           <option value="current">{editName}</option>
@@ -217,7 +234,7 @@ export function PartRack({
                           value={Math.round(cfg.volume * 100)}
                           onChange={(volume) => onSetPart(i, { volume: volume / 100 })}
                           onGesture={(begin) => onGesture(i, 'volume', begin)}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={stopPropagation}
                         />
                       </td>
                       <td className="td-slider">
@@ -229,7 +246,7 @@ export function PartRack({
                           value={Math.round(cfg.pan * 100)}
                           onChange={(pan) => onSetPart(i, { pan: pan / 100 })}
                           onGesture={(begin) => onGesture(i, 'pan', begin)}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={stopPropagation}
                         />
                       </td>
                       <td className="td-range">
@@ -240,51 +257,37 @@ export function PartRack({
                           onChange={(noteLow, noteHigh) => onSetPart(i, { noteLow, noteHigh })}
                         />
                       </td>
-                      <td>
-                        {/* Wrapper stops the row's select-on-click from firing while
-                            dragging the knob; the knob itself is the focusable control. */}
-                        <div
-                          role="presentation"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          <Knob
-                            label=""
-                            helpLabel={`Part ${i + 1} transpose`}
-                            value={cfg.noteShift}
-                            min={-24}
-                            max={24}
-                            center={0}
-                            size={28}
-                            layout="inline"
-                            help={`Part ${i + 1} transpose`}
-                            format={(s) => (s > 0 ? `+${s}` : `${s}`)}
-                            onChange={(noteShift) => onSetPart(i, { noteShift })}
-                          />
-                        </div>
-                      </td>
-                      <td>
-                        <div
-                          role="presentation"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          <Knob
-                            label=""
-                            helpLabel={`Part ${i + 1} detune`}
-                            value={cfg.detune}
-                            min={-7}
-                            max={7}
-                            center={0}
-                            size={28}
-                            layout="inline"
-                            help={`Part ${i + 1} detune`}
-                            format={(d) => (d > 0 ? `+${d}` : `${d}`)}
-                            onChange={(detune) => onSetPart(i, { detune })}
-                            onGesture={(begin) => onGesture(i, 'detune', begin)}
-                          />
-                        </div>
-                      </td>
+                      <KnobCell>
+                        <Knob
+                          label=""
+                          helpLabel={`Part ${i + 1} transpose`}
+                          value={cfg.noteShift}
+                          min={-24}
+                          max={24}
+                          center={0}
+                          size={28}
+                          layout="inline"
+                          help={`Part ${i + 1} transpose`}
+                          format={formatSigned}
+                          onChange={(noteShift) => onSetPart(i, { noteShift })}
+                        />
+                      </KnobCell>
+                      <KnobCell>
+                        <Knob
+                          label=""
+                          helpLabel={`Part ${i + 1} detune`}
+                          value={cfg.detune}
+                          min={-7}
+                          max={7}
+                          center={0}
+                          size={28}
+                          layout="inline"
+                          help={`Part ${i + 1} detune`}
+                          format={formatSigned}
+                          onChange={(detune) => onSetPart(i, { detune })}
+                          onGesture={(begin) => onGesture(i, 'detune', begin)}
+                        />
+                      </KnobCell>
                       {(
                         [
                           ['cutoff', 'filter cutoff'],
@@ -292,25 +295,19 @@ export function PartRack({
                           ['reverbSend', 'reverb send'],
                         ] as const
                       ).map(([field, what]) => (
-                        <td key={field}>
-                          <div
-                            role="presentation"
-                            onClick={(e) => e.stopPropagation()}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            <Knob
-                              label=""
-                              helpLabel={`Part ${i + 1} ${what}`}
-                              value={toKnob(cfg[field])}
-                              max={99}
-                              size={28}
-                              layout="inline"
-                              help={`Part ${i + 1} ${what}`}
-                              onChange={(v) => onSetPart(i, { [field]: fromKnob(v) })}
-                              onGesture={(begin) => onGesture(i, field, begin)}
-                            />
-                          </div>
-                        </td>
+                        <KnobCell key={field}>
+                          <Knob
+                            label=""
+                            helpLabel={`Part ${i + 1} ${what}`}
+                            value={toKnob(cfg[field])}
+                            max={99}
+                            size={28}
+                            layout="inline"
+                            help={`Part ${i + 1} ${what}`}
+                            onChange={(v) => onSetPart(i, { [field]: fromKnob(v) })}
+                            onGesture={(begin) => onGesture(i, field, begin)}
+                          />
+                        </KnobCell>
                       ))}
                       <td>
                         <input
@@ -319,7 +316,7 @@ export function PartRack({
                           title="EG Forced Damp"
                           aria-label={`Part ${i + 1} EG forced damp`}
                           onChange={(e) => onSetPart(i, { forcedDamp: e.target.checked })}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={stopPropagation}
                         />
                       </td>
                     </>

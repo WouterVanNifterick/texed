@@ -99,7 +99,7 @@ function EnvChip({
       {...clipboard.dragProps(sel)}
       {...drop.dropProps}
     >
-      {sel === 'pitch' ? 'PITCH' : `OP${sel}`}
+      {sel === 'pitch' ? 'PITCH' : name}
     </button>
   );
 }
@@ -196,6 +196,8 @@ export function EnvOverlay({
           );
         })();
 
+  const others = bg.filter((b) => b.sel !== selected);
+
   return (
     <section className="panel env-overlay-panel">
       <div className="panel-head">
@@ -250,23 +252,21 @@ export function EnvOverlay({
             y2={H}
             className="env-gate"
           />
-          {bg
-            .filter((b) => b.sel !== selected)
-            .flatMap((b) =>
-              b.segments.map((s, i) => (
-                <polyline
-                  key={`${b.key}-${i}`}
-                  className={`env-bg-trace${b.kind === 'pitch' ? ' pitch' : ''}${s.held ? ' held' : ''}`}
-                  points={s.points}
-                  style={{ stroke: b.color }}
-                  onPointerDown={() => onSelect(b.sel)}
-                  onPointerEnter={() => typeof b.sel === 'number' && onHoverOp(b.sel)}
-                  onPointerLeave={() => onHoverOp(null)}
-                />
-              )),
-            )}
+          {others.flatMap((b) =>
+            b.segments.map((s, i) => (
+              <polyline
+                key={`${b.key}-${i}`}
+                className={`env-bg-trace${b.kind === 'pitch' ? ' pitch' : ''}${s.held ? ' held' : ''}`}
+                points={s.points}
+                style={{ stroke: b.color }}
+                onPointerDown={() => onSelect(b.sel)}
+                onPointerEnter={() => typeof b.sel === 'number' && onHoverOp(b.sel)}
+                onPointerLeave={() => onHoverOp(null)}
+              />
+            )),
+          )}
         </svg>
-        <BgPlayheads traces={bg.filter((b) => b.sel !== selected)} subscribe={subscribeStatus} />
+        <BgPlayheads traces={others} subscribe={subscribeStatus} />
         {editor}
         <div className="env-overlay-axis" aria-hidden>
           <span>{yMode === 'db' ? '0 dB' : '1.0'}</span>

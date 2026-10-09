@@ -8,21 +8,6 @@ import { voiceFromRawVced } from './sysex';
 
 const TG_SUFFIX = /^(.+?)(\d+)$/;
 
-/** Keys written from Texed part state (not taken from extras on save). */
-const MAPPED_TG_KEYS = new Set([
-  'MIDIChannel',
-  'Volume',
-  'Pan',
-  'Detune',
-  'NoteLimitLow',
-  'NoteLimitHigh',
-  'NoteShift',
-  'Cutoff',
-  'Resonance',
-  'ReverbSend',
-  'VoiceData',
-]);
-
 /** Per-TG keys preserved when not mapped from UI. */
 const PRESERVED_TG_KEYS = [
   'BankNumber',
@@ -158,39 +143,36 @@ function unmapPan(pan: number): number {
   return Math.round(Math.max(-1, Math.min(1, pan)) * 64 + 64);
 }
 
+/**
+ * Numeric per-TG keys mapped onto PartConfig (and so written from Texed part
+ * state on save, not from extras): the value an unparsable number falls back
+ * to, and where it lands.
+ */
+const TG_KEY_READERS = new Map<string, [number, (raw: number) => Partial<PartConfig>]>([
+  ['MIDIChannel', [0, mapMidiChannel]],
+  ['Volume', [100, (raw) => ({ volume: raw / 127 })]],
+  ['Pan', [64, (raw) => ({ pan: mapPan(raw) })]],
+  ['Detune', [0, (raw) => ({ detune: raw })]],
+  ['NoteLimitLow', [0, (raw) => ({ noteLow: raw })]],
+  ['NoteLimitHigh', [127, (raw) => ({ noteHigh: raw })]],
+  ['NoteShift', [0, (raw) => ({ noteShift: raw })]],
+  ['Cutoff', [99, (raw) => ({ cutoff: fromCc99(raw) })]],
+  ['Resonance', [0, (raw) => ({ resonance: fromCc99(raw) })]],
+  ['ReverbSend', [50, (raw) => ({ reverbSend: fromCc99(raw) })]],
+]);
+
 export function decodeVoiceDataHex(text: string): Uint8Array | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   const tokens = trimmed.split(/\s+/);
-  const bytes = new Uint8Array(tokens.length);
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i]!;
-    if (t.length !== 2) return null;
-    const hi = parseHexNibble(t.charCodeAt(0));
-    const lo = parseHexNibble(t.charCodeAt(1));
-    if (hi < 0 || lo < 0) return null;
-    bytes[i] = (hi << 4) | lo;
-  }
-  return voiceFromRawVced(bytes);
-}
-
-function parseHexNibble(code: number): number {
-  if (code >= 0x30 && code <= 0x39) return code - 0x30;
-  if (code >= 0x41 && code <= 0x46) return code - 0x37;
-  if (code >= 0x61 && code <= 0x66) return code - 0x57;
-  return -1;
+  if (!tokens.every((t) => /^[0-9a-f]{2}$/i.test(t))) return null;
+  return voiceFromRawVced(Uint8Array.from(tokens, (t) => Number.parseInt(t, 16)));
 }
 
 export function encodeVoiceDataHex(voice: Uint8Array): string {
-  const n = Math.min(156, voice.length);
-  const hex = '0123456789ABCDEF';
-  let out = '';
-  for (let i = 0; i < n; i++) {
-    const b = voice[i]! & 0xff;
-    if (i > 0) out += ' ';
-    out += hex[(b >> 4) & 0x0f]! + hex[b & 0x0f]!;
-  }
-  return out;
+  return Array.from(voice.subarray(0, 156), (b) =>
+    b.toString(16).toUpperCase().padStart(2, '0'),
+  ).join(' ');
 }
 
 function isPreservedTgKey(base: string): base is (typeof PRESERVED_TG_KEYS)[number] {
@@ -208,35 +190,12 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
   const globalRaw: Partial<Record<GlobalKey, number>> = {};
   let name: string | null = null;
 
-  const tgRaw: {
-    midi?: number;
-    volume?: number;
-    pan?: number;
-    detune?: number;
-    noteLow?: number;
-    noteHigh?: number;
-    noteShift?: number;
-    cutoff?: number;
-    resonance?: number;
-    reverbSend?: number;
-    voiceData?: string;
-  }[] = Array.from({ length: NUM_PARTS }, () => ({}));
-
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trimEnd();
-    if (!trimmed.trim()) {
-      extras.preamble.push(trimmed);
-      continue;
-    }
     const commentIdx = trimmed.indexOf('#');
-    const body = commentIdx >= 0 ? trimmed.slice(0, commentIdx).trim() : trimmed.trim();
-    if (commentIdx >= 0 && !body) {
-      extras.preamble.push(trimmed);
-      continue;
-    }
-    if (!body) continue;
-
+    const body = (commentIdx >= 0 ? trimmed.slice(0, commentIdx) : trimmed).trim();
     const eq = body.indexOf('=');
+    // Blank lines, comments and anything else that is not Key=Value.
     if (eq < 0) {
       extras.preamble.push(trimmed);
       continue;
@@ -252,43 +211,12 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
         extras.unknown.push({ key, value });
         continue;
       }
-      if (MAPPED_TG_KEYS.has(base)) {
-        const slot = tgRaw[tg]!;
-        switch (base) {
-          case 'MIDIChannel':
-            slot.midi = parseIntValue(value, 0);
-            break;
-          case 'Volume':
-            slot.volume = parseIntValue(value, 100);
-            break;
-          case 'Pan':
-            slot.pan = parseIntValue(value, 64);
-            break;
-          case 'Detune':
-            slot.detune = parseIntValue(value, 0);
-            break;
-          case 'NoteLimitLow':
-            slot.noteLow = parseIntValue(value, 0);
-            break;
-          case 'NoteLimitHigh':
-            slot.noteHigh = parseIntValue(value, 127);
-            break;
-          case 'NoteShift':
-            slot.noteShift = parseIntValue(value, 0);
-            break;
-          case 'Cutoff':
-            slot.cutoff = parseIntValue(value, 99);
-            break;
-          case 'Resonance':
-            slot.resonance = parseIntValue(value, 0);
-            break;
-          case 'ReverbSend':
-            slot.reverbSend = parseIntValue(value, 50);
-            break;
-          case 'VoiceData':
-            slot.voiceData = value;
-            break;
-        }
+      const reader = TG_KEY_READERS.get(base);
+      if (reader) {
+        const [fallback, read] = reader;
+        Object.assign(parts[tg]!, read(parseIntValue(value, fallback)));
+      } else if (base === 'VoiceData') {
+        voices[tg] = decodeVoiceDataHex(value);
       } else if (isPreservedTgKey(base)) {
         extras.tg[tg]![base] = value;
       } else {
@@ -303,25 +231,6 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
       globalRaw[key] = parseIntValue(value, GLOBAL_KEY_DEFAULTS[key]);
     } else {
       extras.unknown.push({ key, value });
-    }
-  }
-
-  for (let i = 0; i < NUM_PARTS; i++) {
-    const raw = tgRaw[i]!;
-    const patch: Partial<PartConfig> = {};
-    if (raw.midi !== undefined) Object.assign(patch, mapMidiChannel(raw.midi));
-    if (raw.volume !== undefined) patch.volume = raw.volume / 127;
-    if (raw.pan !== undefined) patch.pan = mapPan(raw.pan);
-    if (raw.detune !== undefined) patch.detune = raw.detune;
-    if (raw.noteLow !== undefined) patch.noteLow = raw.noteLow;
-    if (raw.noteHigh !== undefined) patch.noteHigh = raw.noteHigh;
-    if (raw.noteShift !== undefined) patch.noteShift = raw.noteShift;
-    if (raw.cutoff !== undefined) patch.cutoff = fromCc99(raw.cutoff);
-    if (raw.resonance !== undefined) patch.resonance = fromCc99(raw.resonance);
-    if (raw.reverbSend !== undefined) patch.reverbSend = fromCc99(raw.reverbSend);
-    parts[i] = patch;
-    if (raw.voiceData !== undefined) {
-      voices[i] = decodeVoiceDataHex(raw.voiceData);
     }
   }
 
@@ -343,19 +252,13 @@ export function parseMiniDexedIni(text: string): ParsedMiniDexedIni {
   return { name, parts, voices, global, extras };
 }
 
+/** A private copy of `base` with every per-TG key present. */
 function mergeExtras(base: MiniDexedExtras | null | undefined): MiniDexedExtras {
-  const out = emptyExtras();
-  if (base) {
-    out.preamble = [...base.preamble];
-    out.unknown = [...base.unknown];
-    for (let i = 0; i < NUM_PARTS; i++) {
-      out.tg[i] = { ...base.tg[i] };
-    }
-  }
-  for (let i = 0; i < NUM_PARTS; i++) {
-    out.tg[i] = { ...DEFAULT_TG_EXTRAS, ...out.tg[i] };
-  }
-  return out;
+  return {
+    preamble: [...(base?.preamble ?? [])],
+    tg: Array.from({ length: NUM_PARTS }, (_, i) => ({ ...DEFAULT_TG_EXTRAS, ...base?.tg[i] })),
+    unknown: [...(base?.unknown ?? [])],
+  };
 }
 
 export function serializeMiniDexedIni(input: SerializeMiniDexedIniInput): string {

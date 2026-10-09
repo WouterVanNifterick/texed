@@ -20,7 +20,7 @@ const LEVEL_LP_SEC = Math.max(0.002, Math.min(ATTACK_SEC, RELEASE_SEC) / 5);
 /** Floor on the smoothed power estimate, i.e. never below -130 dBFS. */
 const MIN_LEVEL_POW = 1e-13;
 
-/** Biquad state and coefficients for the 20 Hz DC-removal prefilter. */
+/** Cutoff of the DC-removal highpass that runs ahead of the level detector. */
 const HP_CUTOFF_HZ = 20;
 
 export class Compressor {

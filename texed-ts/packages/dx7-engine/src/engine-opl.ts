@@ -2,7 +2,8 @@
 // Extends FmCore, overriding render and the operator kernels.
 
 import { LG_N, N } from './synth';
-import { FmCore, algorithms } from './fm-core';
+import { FmCore } from './fm-core';
+import { algorithms } from '@texed/dx7-format/algorithms';
 import type { FmOpParams } from './fm-op-kernel';
 
 const SignBit = 0x8000;

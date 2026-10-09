@@ -35,6 +35,6 @@ const POW2: number[] = (() => {
 })();
 
 /** 2^n for integer n in [0, 62], avoiding repeated Math.pow calls. */
-export function pow2(n: number): number {
+function pow2(n: number): number {
   return POW2[n];
 }

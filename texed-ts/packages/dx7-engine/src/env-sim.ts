@@ -24,6 +24,7 @@ import {
 
 const SR = 44100;
 const SR_MUL = 1 << 24; // (44100 / 44100) * 2^24 - identity at the reference rate.
+const BLOCK_SEC = N / SR;
 
 // One "doubling" of internal level is 2^24, i.e. +6.0206 dB.
 const DB_PER_DOUBLING = 6.020599913279624; // 20*log10(2)
@@ -214,29 +215,27 @@ function sampleSegment(
   tStart: number,
   out: { timeSec: number; levelQ24: number }[],
 ): void {
-  const tPerBlock = N / SR;
   if (kin.staticSamples > 0 || blocks <= 1) {
     out.push({
-      timeSec: tStart + blocks * tPerBlock,
+      timeSec: tStart + blocks * BLOCK_SEC,
       levelQ24: ampLevelAtBlock(startLevel, blocks, kin),
     });
     return;
   }
   for (let i = 1; i <= CURVE_PTS; i++) {
     const b = Math.round((i / CURVE_PTS) * blocks);
-    out.push({ timeSec: tStart + b * tPerBlock, levelQ24: ampLevelAtBlock(startLevel, b, kin) });
+    out.push({ timeSec: tStart + b * BLOCK_SEC, levelQ24: ampLevelAtBlock(startLevel, b, kin) });
   }
 }
 
 /** Cumulative end times (sec) of the three key-on stages, before gate is known. */
 export function ampStageTimes(p: AmpEnvParams): [number, number, number] {
-  const tPerBlock = N / SR;
   let level = 0;
   let t = 0;
   const out: number[] = [];
   for (let ix = 0; ix < 3; ix++) {
     const s = ampStage(level, ix, p);
-    t += s.blocks * tPerBlock;
+    t += s.blocks * BLOCK_SEC;
     level = s.endLevel;
     out.push(t);
   }
@@ -255,7 +254,6 @@ function ampStartLevelForStage(p: AmpEnvParams, ix: number): number {
  * `gateSec`, then release (stage 3) to L4. Times/levels mirror the engine.
  */
 export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
-  const tPerBlock = N / SR;
   const curve: { timeSec: number; levelQ24: number }[] = [];
   const nodes: EnvPoint[] = [];
 
@@ -268,14 +266,12 @@ export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
   const stageEndLevel: number[] = [];
   const stageStartLevel: number[] = [];
   const stageKin: StageKin[] = [];
-  const stageBlocks: number[] = [];
   for (let ix = 0; ix < 3; ix++) {
     const s = ampStage(level, ix, p);
     stageStartLevel.push(level);
     stageKin.push(s.kin);
-    stageBlocks.push(s.blocks);
     sampleSegment(level, s.kin, s.blocks, t, curve);
-    t += s.blocks * tPerBlock;
+    t += s.blocks * BLOCK_SEC;
     level = s.endLevel;
     stageEndT.push(t);
     stageEndLevel.push(level);
@@ -292,7 +288,7 @@ export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
     for (let ix = 0; ix < 3; ix++) {
       const t0 = ix === 0 ? 0 : stageEndT[ix - 1];
       if (gateSec <= stageEndT[ix]) {
-        const b = Math.round((gateSec - t0) / tPerBlock);
+        const b = Math.round((gateSec - t0) / BLOCK_SEC);
         gateLevel = ampLevelAtBlock(stageStartLevel[ix], b, stageKin[ix]);
         break;
       }
@@ -309,18 +305,13 @@ export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
     });
   }
 
-  // Hold at the gate level from sustain to gate (flat), then release.
-  const gateT = Math.max(gateSec, sustainSec);
-  if (!gateBeforeSustain) {
-    curve.push({ timeSec: gateT, levelQ24: gateLevel });
-  } else {
-    curve.push({ timeSec: gateSec, levelQ24: gateLevel });
-  }
+  // Hold at the gate level from sustain to gate (flat), then release. Unlike
+  // the pitch EG below, a gate that falls before sustain releases right there.
+  curve.push({ timeSec: gateSec, levelQ24: gateLevel });
 
   const rel = ampStage(gateLevel, 3, p);
-  const relStartT = gateBeforeSustain ? gateSec : gateT;
-  sampleSegment(gateLevel, rel.kin, rel.blocks, relStartT, curve);
-  const releaseEndSec = relStartT + rel.blocks * tPerBlock;
+  sampleSegment(gateLevel, rel.kin, rel.blocks, gateSec, curve);
+  const releaseEndSec = gateSec + rel.blocks * BLOCK_SEC;
   const releaseEndLevel = rel.endLevel;
 
   nodes.push({ timeSec: releaseEndSec, levelQ24: releaseEndLevel, stage: 3, reached: true });
@@ -331,7 +322,7 @@ export function simulateAmpEnv(p: AmpEnvParams, gateSec: number): EnvTrace {
     startLevelQ24: startLevel,
     sustainSec,
     sustainLevelQ24: sustainLevel,
-    gateSec: relStartT,
+    gateSec,
     releaseEndSec,
     releaseEndLevelQ24: releaseEndLevel,
   };
@@ -358,13 +349,12 @@ export function pitchStageTimes(
   rates: ArrayLike<number>,
   levels: ArrayLike<number>,
 ): [number, number, number] {
-  const tPerBlock = N / SR;
   let level = pitchTargetLevel(levels[3]);
   let t = 0;
   const out: number[] = [];
   for (let ix = 0; ix < 3; ix++) {
     const target = pitchTargetLevel(levels[ix]);
-    t += pitchStageBlocks(level, target, rates[ix]) * tPerBlock;
+    t += pitchStageBlocks(level, target, rates[ix]) * BLOCK_SEC;
     level = target;
     out.push(t);
   }
@@ -376,7 +366,6 @@ export function simulatePitchEnv(
   levels: ArrayLike<number>,
   gateSec: number,
 ): EnvTrace {
-  const tPerBlock = N / SR;
   const curve: { timeSec: number; levelQ24: number }[] = [];
   const nodes: EnvPoint[] = [];
 
@@ -390,7 +379,7 @@ export function simulatePitchEnv(
   for (let ix = 0; ix < 3; ix++) {
     const target = pitchTargetLevel(levels[ix]);
     const blocks = pitchStageBlocks(level, target, rates[ix]);
-    t += blocks * tPerBlock;
+    t += blocks * BLOCK_SEC;
     level = target;
     curve.push({ timeSec: t, levelQ24: level });
     stageEndT.push(t);
@@ -404,7 +393,7 @@ export function simulatePitchEnv(
       timeSec: stageEndT[ix],
       levelQ24: stageEndLevel[ix],
       stage: ix,
-      reached: gateSec >= stageEndT[ix] || gateSec >= sustainSec,
+      reached: gateSec >= stageEndT[ix],
     });
   }
 
@@ -413,7 +402,7 @@ export function simulatePitchEnv(
 
   const relTarget = pitchTargetLevel(levels[3]);
   const relBlocks = pitchStageBlocks(sustainLevel, relTarget, rates[3]);
-  const releaseEndSec = gateT + relBlocks * tPerBlock;
+  const releaseEndSec = gateT + relBlocks * BLOCK_SEC;
   curve.push({ timeSec: releaseEndSec, levelQ24: relTarget });
   nodes.push({ timeSec: releaseEndSec, levelQ24: relTarget, stage: 3, reached: true });
 
@@ -551,11 +540,17 @@ function ampStageDurSec(p: AmpEnvParams, ix: number): number {
   return (ampStage(ampStartLevelForStage(p, ix), ix, p).blocks * N) / SR;
 }
 
+/**
+ * Level pitch stage `ix` departs from: L4 (the pitch EG's resting level) for
+ * stage 0, and wherever its predecessor landed for every later stage.
+ */
+function pitchStageStartLevel(levels: ArrayLike<number>, ix: number): number {
+  return pitchTargetLevel(ix === 0 ? levels[3] : levels[ix - 1]);
+}
+
 /** Duration (sec) pitch stage `ix` actually takes with the given params. */
 function pitchStageDurSec(rates: ArrayLike<number>, levels: ArrayLike<number>, ix: number): number {
-  // Stage 0 starts from L4 (the pitch EG's resting level); every later stage
-  // starts where its predecessor landed.
-  const start = pitchTargetLevel(ix === 0 ? levels[3] : levels[ix - 1]);
+  const start = pitchStageStartLevel(levels, ix);
   return (pitchStageBlocks(start, pitchTargetLevel(levels[ix]), rates[ix]) * N) / SR;
 }
 
@@ -565,9 +560,7 @@ export function pitchRateForStageDuration(
   targetSec: number,
   currentRate: number,
 ): number {
-  // Start level for stage ix (independent of the stage's own rate).
-  let startLevel = pitchTargetLevel(levels[3]);
-  for (let i = 0; i < ix; i++) startLevel = pitchTargetLevel(levels[i]);
+  const startLevel = pitchStageStartLevel(levels, ix);
   const target = pitchTargetLevel(levels[ix]);
   return rateForDuration(
     (r) => (pitchStageBlocks(startLevel, target, r) * N) / SR,

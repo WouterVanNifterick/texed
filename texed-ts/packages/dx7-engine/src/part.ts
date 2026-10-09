@@ -202,11 +202,9 @@ export class Part {
     }
   }
 
+  /** Retunes in place: the voices already share this part's tuning table. */
   setMasterTuneCents(cents: number): void {
     this.tuningState.setMasterTuneCents(cents);
-    for (const v of this.voices) {
-      v.dx7Note.setTuningState(this.tuningState);
-    }
   }
 
   /** Swap the whole tuning table (standard or a micro-tuning). */
@@ -251,16 +249,8 @@ export class Part {
     this.controllers.opSwitch = Array.from({ length: 6 }, (_, op) =>
       this.data[G.opEnable] & (1 << op) ? '1' : '0',
     ).join('');
-    for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
-      if (this.voices[i].live) {
-        this.voices[i].dx7Note.setSupplement(this.supplement);
-        this.voices[i].dx7Note.update(
-          this.data,
-          this.enginePitch(this.voices[i].midiNote),
-          this.voices[i].velocity,
-          this.voices[i].channel,
-        );
-      }
+    for (const v of this.voices) {
+      if (v.live) v.dx7Note.update(this.data, this.enginePitch(v.midiNote), v.velocity);
     }
     this.lfo.reset(this.data.subarray(G.lfoSpeed));
   }
@@ -323,17 +313,7 @@ export class Part {
 
     // LFO key trigger: "single" restarts only on the first key down; "multi"
     // (AMEM LTRG) retriggers on every note-on.
-    let triggerLfo = this.supplement.lfoKeyTrigger;
-    if (!triggerLfo) {
-      triggerLfo = true;
-      for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
-        if (this.voices[i].keydown) {
-          triggerLfo = false;
-          break;
-        }
-      }
-    }
-    if (triggerLfo) {
+    if (this.supplement.lfoKeyTrigger || !this.anyKeyDown()) {
       this.lfo.keydown();
       this.lfoRestartSeq++;
     }
@@ -374,13 +354,7 @@ export class Part {
     // the new note. ON (or a free slot): restart the envelope from the beginning.
     const continueEnv = voiceSteal && !this.forcedDamp;
     v.dx7Note.setSupplement(this.supplement);
-    v.dx7Note.init(
-      this.data,
-      this.enginePitch(pitch) + detuneCents / 100,
-      velocity,
-      channel,
-      continueEnv,
-    );
+    v.dx7Note.init(this.data, this.enginePitch(pitch) + detuneCents / 100, velocity, continueEnv);
     if (this.data[G.oscKeySync] && !voiceSteal) {
       v.dx7Note.oscSync();
     }
@@ -406,7 +380,7 @@ export class Part {
   }
 
   noteOff(pitch: number, channel = 1): void {
-    // Release every matching voice: unison stacks two voices per note.
+    // Release every matching voice: unison stacks four voices per note.
     let released = false;
     for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
       const v = this.voices[note];
@@ -558,54 +532,39 @@ export class Part {
     return n;
   }
 
-  /** Whether any voice is still producing sound. */
-  hasActiveVoices(): boolean {
-    for (const v of this.voices) if (v.live && v.dx7Note.isPlaying()) return true;
-    return false;
-  }
-
-  /**
-   * Find this part's best steal candidate: prefer a released (key-up) voice,
-   * else the oldest key-down voice. Returns {seq, released} or null.
-   */
-  stealCandidate(): { seq: number; released: boolean } | null {
-    let best: { seq: number; released: boolean; idx: number } | null = null;
-    for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
-      const v = this.voices[i];
+  /** This part's best steal victim: a released (key-up) voice if there is one,
+   * else a held one, and the oldest within either class. */
+  private stealVoice(): Voice | null {
+    let best: Voice | null = null;
+    for (const v of this.voices) {
       if (!v.live || v.damping || !v.dx7Note.isPlaying()) continue;
-      const released = !v.keydown;
       if (
         !best ||
-        (released && !best.released) ||
-        (released === best.released && v.keydownSeq < best.seq)
+        (!v.keydown && best.keydown) ||
+        (v.keydown === best.keydown && v.keydownSeq < best.keydownSeq)
       ) {
-        best = { seq: v.keydownSeq, released, idx: i };
+        best = v;
       }
     }
-    return best ? { seq: best.seq, released: best.released } : null;
+    return best;
   }
 
-  /** Free the oldest matching voice for cross-part steal. Starts a short
+  /** Describes this part's steal candidate so SynthRack can rank the parts
+   * against each other. Returns {seq, released} or null. */
+  stealCandidate(): { seq: number; released: boolean } | null {
+    const v = this.stealVoice();
+    return v ? { seq: v.keydownSeq, released: !v.keydown } : null;
+  }
+
+  /** Free the steal candidate for a cross-part steal. Starts a short
    * forced-damp fade (click-free) rather than an instant cut; the slot is
    * reclaimed by the render-loop reaper once the fade completes. */
   killOldest(): void {
-    const cand = this.stealCandidate();
-    if (!cand) return;
-    for (let i = 0; i < MAX_ACTIVE_NOTES; i++) {
-      const v = this.voices[i];
-      if (
-        v.live &&
-        !v.damping &&
-        v.dx7Note.isPlaying() &&
-        v.keydownSeq === cand.seq &&
-        !v.keydown === cand.released
-      ) {
-        v.keydown = false;
-        v.damping = true;
-        v.dx7Note.forceDamp();
-        return;
-      }
-    }
+    const v = this.stealVoice();
+    if (!v) return;
+    v.keydown = false;
+    v.damping = true;
+    v.dx7Note.forceDamp();
   }
 
   // ==== Status ====
@@ -711,19 +670,18 @@ export class Part {
         this.lastLfoDelay = lfodelay;
 
         for (let note = 0; note < MAX_ACTIVE_NOTES; note++) {
-          if (this.voices[note].live) {
-            const vv = this.voices[note];
+          const v = this.voices[note];
+          if (v.live) {
             // Reap voices whose forced-damp fade has reached silence.
-            if (vv.damping && !vv.dx7Note.isPlaying()) {
-              vv.live = false;
-              vv.damping = false;
-              vv.midiNote = -1;
+            if (v.damping && !v.dx7Note.isPlaying()) {
+              v.live = false;
+              v.damping = false;
+              v.midiNote = -1;
               continue;
             }
-            this.voices[note].dx7Note.compute(audiobuf, lfovalue, lfodelay, this.controllers);
+            v.dx7Note.compute(audiobuf, lfovalue, lfodelay, this.controllers);
             for (let j = 0; j < N; j++) {
-              let val = audiobuf[j];
-              val = val >> 4;
+              const val = audiobuf[j] >> 4;
               const clipVal = val < -(1 << 24) ? 0x8000 : val >= 1 << 24 ? 0x7fff : val >> 9;
               sumbuf[j] += clipVal / 0x8000;
               audiobuf[j] = 0;

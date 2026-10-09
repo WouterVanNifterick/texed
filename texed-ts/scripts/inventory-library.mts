@@ -22,6 +22,7 @@ import {
   parseSystemSetup,
   systemSetupPayloadFromFrame,
 } from '@texed/dx7-format/system-setup';
+import { naturalCompare } from './patch-library-core.mts';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const LIBRARY_DIR = path.resolve(scriptDir, '..', 'public', 'library');
@@ -71,7 +72,16 @@ async function walkDataFiles(root: string): Promise<string[]> {
   return entries
     .filter((e) => e.isFile() && DATA_EXTS.has(path.extname(e.name).toLowerCase()))
     .map((e) => path.join(e.parentPath, e.name))
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    .sort(naturalCompare);
+}
+
+function bump(map: Record<string, number>, key: string, n = 1): void {
+  map[key] = (map[key] ?? 0) + n;
+}
+
+/** Kind counts, most frequent first, ties by name. */
+function byCountDesc(counts: Record<string, number>): [string, number][] {
+  return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
 function formatHex(n: number | undefined): string {
@@ -125,6 +135,7 @@ function describeParamChange(frame: SysexFrame): string {
 
 function describeFrame(frame: SysexFrame, index: number): MessageInfo {
   const formatId = frame.formatId ? cleanName(frame.formatId) : undefined;
+  const idSuffix = formatId ? ` (${formatId.trim()})` : '';
   const base: MessageInfo = {
     index,
     kind: frame.kind,
@@ -160,10 +171,10 @@ function describeFrame(frame: SysexFrame, index: number): MessageInfo {
       base.summary = 'AMEM 32-voice supplement (format 0x06)';
       return base;
     case SysexKind.AcedBank:
-      base.summary = `AMEM/ACED bank${formatId ? ` (${formatId.trim()})` : ''}`;
+      base.summary = `AMEM/ACED bank${idSuffix}`;
       return base;
     case SysexKind.Aced:
-      base.summary = `ACED single voice edit${formatId ? ` (${formatId.trim()})` : ''}`;
+      base.summary = `ACED single voice edit${idSuffix}`;
       return base;
     case SysexKind.Dx7iiPerformance:
     case SysexKind.Dx7iiPerformanceEdit:
@@ -202,10 +213,10 @@ function describeFrame(frame: SysexFrame, index: number): MessageInfo {
       return base;
     }
     case SysexKind.Microtune:
-      base.summary = `microtuning${formatId ? ` (${formatId.trim()})` : ''}`;
+      base.summary = `microtuning${idSuffix}`;
       return base;
     case SysexKind.FractionalScale:
-      base.summary = `fractional key scaling${formatId ? ` (${formatId.trim()})` : ''}`;
+      base.summary = `fractional key scaling${idSuffix}`;
       return base;
     case SysexKind.ParamChange:
       base.summary = describeParamChange(frame);
@@ -259,76 +270,42 @@ function describeRawVced(bytes: Uint8Array): MessageInfo[] {
 }
 
 function inventFile(relPath: string, bytes: Uint8Array): FileInfo {
-  const collection = relPath.split('/')[0] ?? relPath;
   const frames = identifySysex(bytes);
-  const kindCounts: Record<string, number> = {};
   const notes: string[] = [];
+  let container: FileInfo['container'];
+  let messages: MessageInfo[] = [];
 
   if (frames.length > 0) {
-    const messages = frames.map((f, i) => describeFrame(f, i + 1));
-    for (const m of messages) kindCounts[m.kind] = (kindCounts[m.kind] ?? 0) + 1;
-
-    let covered = 0;
-    for (const f of frames) covered += f.raw.length;
+    container = 'sysex';
+    messages = frames.map((f, i) => describeFrame(f, i + 1));
+    const covered = frames.reduce((n, f) => n + f.raw.length, 0);
     if (covered < bytes.length) {
       notes.push(`${bytes.length - covered} non-SysEx byte(s) outside F0..F7 frames`);
     }
-
-    return {
-      path: relPath,
-      collection,
-      size: bytes.length,
-      container: 'sysex',
-      messageCount: messages.length,
-      kindCounts,
-      messages,
-      notes,
-    };
+  } else if (isRawVcedBuffer(bytes)) {
+    container = 'rawVced';
+    messages = describeRawVced(bytes);
+  } else if (bytes.length === 0) {
+    container = 'empty';
+    notes.push('empty file');
+  } else {
+    container = 'unknown';
+    notes.push('no SysEx frames and not raw VCED');
   }
 
-  if (isRawVcedBuffer(bytes)) {
-    const messages = describeRawVced(bytes);
-    for (const m of messages) kindCounts[m.kind] = (kindCounts[m.kind] ?? 0) + 1;
-    return {
-      path: relPath,
-      collection,
-      size: bytes.length,
-      container: 'rawVced',
-      messageCount: messages.length,
-      kindCounts,
-      messages,
-      notes,
-    };
-  }
+  const kindCounts: Record<string, number> = {};
+  for (const m of messages) bump(kindCounts, m.kind);
 
-  if (bytes.length === 0) {
-    return {
-      path: relPath,
-      collection,
-      size: 0,
-      container: 'empty',
-      messageCount: 0,
-      kindCounts,
-      messages: [],
-      notes: ['empty file'],
-    };
-  }
-
-  notes.push('no SysEx frames and not raw VCED');
   return {
     path: relPath,
-    collection,
+    collection: relPath.split('/')[0] ?? relPath,
     size: bytes.length,
-    container: 'unknown',
-    messageCount: 0,
+    container,
+    messageCount: messages.length,
     kindCounts,
-    messages: [],
+    messages,
     notes,
   };
-}
-
-function bump(map: Record<string, number>, key: string, n = 1): void {
-  map[key] = (map[key] ?? 0) + n;
 }
 
 function renderMarkdown(inv: Inventory): string {
@@ -342,9 +319,7 @@ function renderMarkdown(inv: Inventory): string {
   lines.push(`- Files: **${inv.fileCount}**`);
   lines.push(`- SysEx / raw messages: **${inv.messageCount}**`);
   lines.push('- Message kinds:');
-  for (const [kind, n] of Object.entries(inv.kindTotals).sort(
-    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-  )) {
+  for (const [kind, n] of byCountDesc(inv.kindTotals)) {
     lines.push(`  - \`${kind}\`: ${n}`);
   }
   lines.push('');
@@ -374,8 +349,7 @@ function renderMarkdown(inv: Inventory): string {
     lines.push(`### ${collection}`);
     lines.push('');
     for (const f of files) {
-      const kindList = Object.entries(f.kindCounts)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      const kindList = byCountDesc(f.kindCounts)
         .map(([k, n]) => `${n}× ${k}`)
         .join(', ');
       lines.push(`#### \`${f.path}\``);
@@ -383,9 +357,7 @@ function renderMarkdown(inv: Inventory): string {
       lines.push(
         `- Size: ${f.size} bytes | container: \`${f.container}\` | messages: **${f.messageCount}**${kindList ? ` (${kindList})` : ''}`,
       );
-      if (f.notes.length) {
-        for (const n of f.notes) lines.push(`- Note: ${n}`);
-      }
+      for (const n of f.notes) lines.push(`- Note: ${n}`);
       lines.push('');
       if (f.messages.length === 0) {
         lines.push('_No messages detected._');
@@ -437,9 +409,7 @@ async function main(): Promise<void> {
 
   console.log(`Inventoried ${inv.fileCount} files / ${inv.messageCount} messages`);
   console.log('Kind totals:');
-  for (const [kind, n] of Object.entries(kindTotals).sort(
-    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-  )) {
+  for (const [kind, n] of byCountDesc(kindTotals)) {
     console.log(`  ${kind.padEnd(24)} ${n}`);
   }
   console.log('');

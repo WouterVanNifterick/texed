@@ -2,7 +2,7 @@
 // Reuses the engine's sysex parsers so the manifest always agrees with what
 // the app will load at runtime.
 
-import { loadSysexFile } from '@texed/dx7-format/sysex-loader';
+import { loadSysexFile, referencedBanks } from '@texed/dx7-format/sysex-loader';
 import { identifySysex, SysexKind } from '@texed/dx7-format/sysex';
 import { createDefaultAmem } from '@texed/dx7-format/amem';
 import {
@@ -18,6 +18,11 @@ import {
   type LibSet,
   type LibSlot,
 } from '@texed/dx7-format/library-manifest';
+
+/** Sort order for file names: numbers compare by value, so "Bank 2" precedes "Bank 10". */
+export function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, 'en', { numeric: true });
+}
 
 export interface SourceFile {
   /** Path relative to the collection root, forward slashes. */
@@ -45,7 +50,7 @@ export interface PackedFs1rBank {
 
 /** Pack a folder of FS1R .Dx7Voice exports (155/156-byte raw VCED) into one blob. */
 export function packFs1rBank(files: SourceFile[]): PackedFs1rBank {
-  const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path, 'en', { numeric: true }));
+  const sorted = [...files].sort((a, b) => naturalCompare(a.path, b.path));
   const names: string[] = [];
   const blob = new Uint8Array(sorted.length * VCED_SIZE);
   sorted.forEach((f, i) => {
@@ -112,21 +117,13 @@ export function describeSyxFile(bytes: Uint8Array): SyxDescription {
     };
   });
 
-  const used = new Set<VoiceBankId>();
-  for (const perf of library.performances) {
-    for (const part of perf.parts) {
-      if (part.enabled === false || !part.voice) continue;
-      used.add(part.voice.bank);
-    }
-  }
-  const refs = VOICE_BANK_ORDER.filter((b) => used.has(b));
+  const refs = referencedBanks(library.performances);
   const performanceNames = library.performances.map((p) => p.name);
 
   const extras: LibExtras = {};
-  let fractionalScale = 0;
-  for (const frame of identifySysex(bytes)) {
-    if (frame.kind === SysexKind.FractionalScale) fractionalScale++;
-  }
+  const fractionalScale = identifySysex(bytes).filter(
+    (frame) => frame.kind === SysexKind.FractionalScale,
+  ).length;
   if (library.microtunings.length > 0) extras.microtunings = library.microtunings.length;
   if (library.systemSetup) extras.systemSetup = true;
   if (fractionalScale > 0) extras.fractionalScale = fractionalScale;
@@ -348,12 +345,13 @@ export function groupDirectory(
 
   for (const file of bankOnly) {
     if (consumed.has(file)) continue;
+    const extras = mergeExtras([file]);
     sets.push({
       id: `${file.outFile}#set`,
       name: file.stem,
       kind: 'voices',
       slots: assignSlots([file], []),
-      ...(mergeExtras([file]) ? { extras: mergeExtras([file]) } : {}),
+      ...(extras ? { extras } : {}),
     });
   }
 

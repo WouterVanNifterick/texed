@@ -108,7 +108,10 @@ const NAMED_KINDS: Record<string, SysexKind> = {
   MCRYM: SysexKind.Microtune,
 };
 
-/** Compact a 10-char LM format id for NAMED_KINDS lookup (handles MCRYMx slot byte). */
+/**
+ * Compact a 10-char LM format id for NAMED_KINDS lookup: drop the "LM  " prefix
+ * and spaces/dashes, and cut anything after a known key (the MCRYMx slot byte).
+ */
 function compactFormatKey(formatId: string): string {
   const trimmed = formatId.replace(/^LM/, '').replace(/[\s-]/g, '');
   for (const key of Object.keys(NAMED_KINDS)) {
@@ -136,14 +139,12 @@ export function bulkPayloadFromFrame(frame: SysexFrame): Uint8Array | null {
 function isTx802PerformancePayload(data: Uint8Array): boolean {
   if (data.length !== TX802_PERF_BLOCK * 8) return false;
   if (looksLikeAmemBulk(data)) return false;
-  let enabledParts = 0;
+  // One timbre with an output assignment or a volume is enough.
   for (let t = 0; t < 8; t++) {
     const blk = data.subarray(t * TX802_PERF_BLOCK, (t + 1) * TX802_PERF_BLOCK);
-    const outAssign = blk[5] & 0x03;
-    const outVol = blk[22] & 0x7f;
-    if (outAssign !== 0 || outVol > 0) enabledParts++;
+    if ((blk[5] & 0x03) !== 0 || (blk[22] & 0x7f) > 0) return true;
   }
-  return enabledParts >= 1;
+  return false;
 }
 
 /** Classify a single F0..F7 frame. */
@@ -152,8 +153,7 @@ export function identifyFrame(frame: Uint8Array): SysexFrame {
   if (frame.length < 4 || frame[0] !== 0xf0 || frame[1] !== 0x43) return base;
 
   const sub = frame[2];
-  const channel = sub & 0x0f;
-  base.channel = channel;
+  base.channel = sub & 0x0f;
 
   // Parameter change: F0 43 1n ...
   if ((sub & 0xf0) === 0x10) {
@@ -189,9 +189,7 @@ export function identifyFrame(frame: Uint8Array): SysexFrame {
     case 0x7e: {
       const size = (frame[4] << 7) | frame[5];
       const formatId = readFormatId(frame);
-      // Compact the id (drop the "LM  " prefix and spaces/dashes) for lookup.
-      const key = compactFormatKey(formatId);
-      const kind = NAMED_KINDS[key] ?? SysexKind.Unknown;
+      const kind = NAMED_KINDS[compactFormatKey(formatId)] ?? SysexKind.Unknown;
       // Named dumps carry the id in the first 10 payload bytes; the checksum
       // covers size bytes starting at byte[6] (the id is part of the payload).
       return { ...base, kind, formatId, checksumOk: verifyChecksum(frame, 6, size) };

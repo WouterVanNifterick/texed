@@ -1,11 +1,13 @@
 // Modal to name a voice and pick a bank slot before storing the edit buffer.
 
-import { useMemo, useState } from 'react';
-import type { Synth } from '../audio/useSynth';
-import { programIndexForVoice } from '../audio/useSynth';
+import { useState } from 'react';
+import { programIndexForVoice, type Synth } from '../audio/useSynth';
 import { getVoiceName } from '@texed/dx7-format/voice';
-import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
-import { VOICE_BANK_LABELS } from '@texed/dx7-format/voice-library';
+import {
+  VOICE_BANK_LABELS,
+  type VoiceRef,
+  type VoiceBankId,
+} from '@texed/dx7-format/voice-library';
 import { useEscapeClose } from '../hooks';
 
 interface StoreVoiceDialogProps {
@@ -23,14 +25,10 @@ export function StoreVoiceDialog({
 }: StoreVoiceDialogProps) {
   const [name, setName] = useState(() => getVoiceName(synth.voice));
 
-  const useProgramList = synth.programOptions.length > 0;
-  const defaultProgramIdx = useMemo(() => {
-    if (!defaultVoice || !useProgramList) return 0;
-    const idx = programIndexForVoice(synth.programOptions, defaultVoice);
-    return idx >= 0 ? idx : 0;
-  }, [defaultVoice, synth.programOptions, useProgramList]);
-
-  const [programIdx, setProgramIdx] = useState(defaultProgramIdx);
+  const hasProgramList = synth.programOptions.length > 0;
+  const [programIdx, setProgramIdx] = useState(() =>
+    defaultVoice ? Math.max(0, programIndexForVoice(synth.programOptions, defaultVoice)) : 0,
+  );
   const [bank, setBank] = useState<VoiceBankId>(defaultVoice?.bank ?? 'internalA');
   const [program, setProgram] = useState(defaultVoice?.program ?? 0);
 
@@ -43,7 +41,7 @@ export function StoreVoiceDialog({
     const trimmed = name.trim().toUpperCase();
     if (!trimmed) return;
 
-    if (useProgramList) {
+    if (hasProgramList) {
       const opt = synth.programOptions[programIdx];
       if (!opt) return;
       onConfirm(trimmed, opt.ref, opt.label);
@@ -89,7 +87,7 @@ export function StoreVoiceDialog({
             />
           </label>
 
-          {useProgramList ? (
+          {hasProgramList ? (
             <label className="store-field">
               Location
               <select value={programIdx} onChange={(e) => setProgramIdx(Number(e.target.value))}>

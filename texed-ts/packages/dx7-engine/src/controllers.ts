@@ -68,11 +68,6 @@ export class Controllers {
 
   masterTune = 0;
 
-  transpose12AsScale = true;
-
-  mpeEnabled = false;
-  mpePitchBendRange = 24;
-
   wheel = new FmMod();
   foot = new FmMod();
   breath = new FmMod();
@@ -125,9 +120,14 @@ export class Controllers {
     this.applyMod(this.midiCsSeen ? this.midiCsCc : 0, this.midiCs);
 
     // No EG bias assigned anywhere: operators play at full level.
-    const egSources = [this.wheel, this.breath, this.at, this.foot2, this.midiCs];
-    if (!this.fc1AsCs1) egSources.push(this.foot);
-    if (!egSources.some((m) => m.egRange)) this.egMod = 127;
+    const egAssigned =
+      this.wheel.egRange ||
+      this.breath.egRange ||
+      this.at.egRange ||
+      this.foot2.egRange ||
+      this.midiCs.egRange ||
+      (!this.fc1AsCs1 && this.foot.egRange);
+    if (!egAssigned) this.egMod = 127;
 
     // BC/AT pitch bias: full range shifts pitch by ±1 octave (Q24 per octave).
     const bias =
@@ -170,12 +170,12 @@ export function applySupplementToControllers(supp: VoiceSupplement, ctrls: Contr
     ctrls.portamentoEnableCc = false;
   }
 
-  // Pitch bend range / step / mode from AMEM
+  // Pitch bend range / step from AMEM
   if (supp.pitchBendRange > 0) {
-    ctrls.values_[128] = 0x2000;
-    ctrls.values_[129] = supp.pitchBendRange;
-    ctrls.values_[131] = supp.pitchBendRange;
+    ctrls.values_[kControllerPitch] = 0x2000;
+    ctrls.values_[kControllerPitchRangeUp] = supp.pitchBendRange;
+    ctrls.values_[kControllerPitchRangeDn] = supp.pitchBendRange;
   }
-  ctrls.values_[130] = Math.min(12, supp.pitchBendStep);
+  ctrls.values_[kControllerPitchStep] = Math.min(12, supp.pitchBendStep);
   ctrls.refresh();
 }

@@ -14,7 +14,13 @@ import {
   OSC_MODES,
   PARAM_CENTER,
 } from '@texed/dx7-format/voice';
-import { getAms, setAms, getScalingMode, setScalingMode } from '@texed/dx7-format/supplement';
+import {
+  getAms,
+  setAms,
+  getScalingMode,
+  setScalingMode,
+  type ByteEdit,
+} from '@texed/dx7-format/supplement';
 import { algoGraph } from '../state/algo';
 import { helpProps, setHelp } from '../state/help';
 import { useOpDropTarget, type OpClipboard } from '../state/useOpClipboard';
@@ -26,7 +32,7 @@ import { LiveEnvEditor } from '../envelope/EnvEditor';
 import { computeAmpParams, type EnvTimeScale } from '../envelope/env-time';
 import { type YMode } from '../envelope/env-draw';
 import { opColor } from '../ui/op-colors';
-import { ScalingGraph, type ScalingField } from './ScalingGraph';
+import { ScalingGraph } from './ScalingGraph';
 
 // Help-bar descriptions, paraphrased from the DX7 / DX7II operating manuals.
 const HELP = {
@@ -111,6 +117,7 @@ export const OperatorPanel = memo(function OperatorPanel({
   const opIdx = 6 - opNum; // sysex order, used by the engine status
   const v = (rel: number) => voice[base + rel];
   const set = (rel: number) => (value: number) => setParam(base + rel, value);
+  const setSup = (edit: ByteEdit) => setSupplementParam(edit.offset, edit.value);
 
   // AMS spans two stores: 0–3 lives in the voice, the DX7II extension 4–7 in
   // the AMEM supplement. The engine uses the supplement value when it is > 3.
@@ -118,8 +125,7 @@ export const OperatorPanel = memo(function OperatorPanel({
   const ams = amsExt > 3 ? amsExt : v(OP.ampModSens);
   const onAms = (value: number) => {
     setParam(base + OP.ampModSens, Math.min(3, value));
-    const edit = setAms(supplement, opIdx, value);
-    setSupplementParam(edit.offset, edit.value);
+    setSup(setAms(supplement, opIdx, value));
   };
 
   const enabled = (voice[G.opEnable] & (1 << opIdx)) !== 0;
@@ -272,7 +278,7 @@ export const OperatorPanel = memo(function OperatorPanel({
             rightCurve={v(OP.rightCurve)}
             color={opColor(opNum)}
             note={note}
-            onChange={(field: ScalingField, value) => setParam(base + OP[field], value)}
+            onChange={(field, value) => setParam(base + OP[field], value)}
           />
         </div>
         <Knob
@@ -287,10 +293,7 @@ export const OperatorPanel = memo(function OperatorPanel({
           label="FRACT"
           on={getScalingMode(supplement, opIdx)}
           help={HELP.fract}
-          onChange={(on) => {
-            const edit = setScalingMode(supplement, opIdx, on);
-            setSupplementParam(edit.offset, edit.value);
-          }}
+          onChange={(on) => setSup(setScalingMode(supplement, opIdx, on))}
         />
       </div>
     </section>

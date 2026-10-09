@@ -9,18 +9,15 @@ import { PitchEnv } from './pitchenv';
 import { Env } from './env';
 import { Porta } from './porta';
 import { Sin } from './sin';
-import { Exp2, Tanh } from './exp2';
+import { Exp2 } from './exp2';
 import { PluginFx } from './plugin-fx';
-import { Part, MAX_ACTIVE_NOTES, EngineType, type PartStatus } from './part';
+import { Part, type EngineType, type PartStatus } from './part';
 import { setEngineAccuracyMode, type EngineAccuracy } from './engine-accuracy';
-
-export { MAX_ACTIVE_NOTES, EngineType };
 
 let tablesInited = false;
 function initTablesOnce(): void {
   if (tablesInited) return;
   Exp2.init();
-  Tanh.init();
   Sin.init();
   tablesInited = true;
 }
@@ -48,14 +45,13 @@ export function setEngineAccuracy(mode: EngineAccuracy): void {
   if (setEngineAccuracyMode(mode)) initSynthTables(lastSampleRate);
 }
 
-export { getEngineAccuracy, type EngineAccuracy } from './engine-accuracy';
+export type { EngineAccuracy };
 
 export class SynthUnit {
   private part = new Part();
   private fx = new PluginFx();
 
   constructor(sampleRate: number) {
-    initTablesOnce();
     this.setSampleRate(sampleRate);
   }
 

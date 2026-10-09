@@ -8,10 +8,8 @@ import { readDx7AsciiName } from './voice';
 
 export const TX802_PMEM_BLOCK = 84;
 export const DX7II_PERF_BLOCK = 51;
-/** @deprecated Use TX802_PMEM_BLOCK */
-export const PMEM_BLOCK = TX802_PMEM_BLOCK;
 
-const TX802_PERF_KINDS = new Set<SysexFrame['kind']>([
+const PERF_KINDS = new Set<SysexFrame['kind']>([
   SysexKind.Performance,
   SysexKind.Dx7iiPerformance,
   SysexKind.Dx7iiPerformanceEdit,
@@ -107,8 +105,23 @@ export function parseDx7iiPerfBlock(block: Uint8Array): ParsedPerformance {
 
 const TG_SYSEX_BLOCK = 140;
 
-function readTimbreName(blk: Uint8Array): string {
-  return readAsciiName(blk, 64, 20);
+/** Part settings from one 140-byte timbre block of a format-0x06 dump. */
+function parseTimbreBlock(blk: Uint8Array): Partial<PartConfig> {
+  const outVol = blk[22] & 0x7f;
+  const rawVoice = blk[9] & 0x7f;
+  const nl = blk[44] & 0x7f;
+  const nh = blk[45] & 0x7f;
+  return {
+    enabled: rawVoice !== 0,
+    rxChannel: mapRxChannel(blk[0]),
+    voice: decodeTx802VoiceRef(rawVoice) ?? defaultVoiceRef(),
+    volume: outVol > 0 ? outVol / 99 : 1,
+    pan: mapOutAssignPan(blk[5] & 0x03),
+    detune: ((blk[32] >> 3) & 0x0f) - 7,
+    noteLow: nh > nl ? nl : 0,
+    noteHigh: nh > nl ? nh : 127,
+    noteShift: (blk[56] & 0x3f) - 24,
+  };
 }
 
 /** Parse a TX802 format-0x06 (1120-byte) single performance dump. */
@@ -120,73 +133,43 @@ export function parseTx802SysexPerf(data: Uint8Array): ParsedPerformance | null 
   for (let t = 0; t < NUM_PARTS; t++) {
     const blk = data.subarray(t * TG_SYSEX_BLOCK, (t + 1) * TG_SYSEX_BLOCK);
     if (blk.length < TG_SYSEX_BLOCK) break;
+    // A timbre with no output assigned and no volume is switched off.
+    if ((blk[5] & 0x03) === 0 && (blk[22] & 0x7f) === 0) continue;
 
-    const outAssign = blk[5] & 0x03;
-    const outVol = blk[22] & 0x7f;
-    const enabled = outAssign !== 0 || outVol > 0;
-    if (!enabled) continue;
-
-    const nl = blk[44] & 0x7f;
-    const nh = blk[45] & 0x7f;
-    const noteLow = nh > nl ? nl : 0;
-    const noteHigh = nh > nl ? nh : 127;
-    const timbreName = readTimbreName(blk);
-    if (!name && timbreName) name = timbreName;
-
-    const rawVoice = blk[9] & 0x7f;
-    const voiceRef = decodeTx802VoiceRef(rawVoice);
-    parts[t] = {
-      enabled: rawVoice !== 0,
-      rxChannel: mapRxChannel(blk[0]),
-      voice: voiceRef ?? defaultVoiceRef(),
-      volume: outVol > 0 ? outVol / 99 : 1,
-      pan: mapOutAssignPan(outAssign),
-      detune: ((blk[32] >> 3) & 0x0f) - 7,
-      noteLow,
-      noteHigh,
-      noteShift: (blk[56] & 0x3f) - 24,
-    };
+    name ||= readAsciiName(blk, 64, 20);
+    parts[t] = parseTimbreBlock(blk);
   }
 
   if (!parts.some((p) => p.enabled)) {
     const blk = data.subarray(0, TG_SYSEX_BLOCK);
-    const rawVoice = blk[9] & 0x7f;
-    const voiceRef = decodeTx802VoiceRef(rawVoice);
-    parts[0] = {
-      enabled: rawVoice !== 0,
-      rxChannel: mapRxChannel(blk[0]),
-      voice: voiceRef ?? defaultVoiceRef(),
-      volume: 1,
-      pan: mapOutAssignPan(blk[5] & 0x03),
-      detune: ((blk[32] >> 3) & 0x0f) - 7,
-      noteLow: 0,
-      noteHigh: 127,
-      noteShift: (blk[56] & 0x3f) - 24,
-    };
-    name = readTimbreName(blk);
+    parts[0] = { ...parseTimbreBlock(blk), volume: 1, noteLow: 0, noteHigh: 127 };
+    name = readAsciiName(blk, 64, 20);
   }
 
   return { name, parts };
+}
+
+/** Decode one 84-byte TPMEM block from 168 ASCII-hex characters, or null on a non-hex byte. */
+function decodeHexBlock(data: Uint8Array, pos: number): Uint8Array | null {
+  const block = new Uint8Array(TX802_PMEM_BLOCK);
+  for (let i = 0; i < TX802_PMEM_BLOCK; i++) {
+    const hi = hexNibble(data[pos + 2 * i]);
+    const lo = hexNibble(data[pos + 2 * i + 1]);
+    if (hi < 0 || lo < 0) return null;
+    block[i] = (hi << 4) | lo;
+  }
+  return block;
 }
 
 /** Decode TX802 8952PM ASCII-hex bank payload into 84-byte TPMEM blocks. */
 function decodeTx802HexBank(data: Uint8Array): Uint8Array[] {
   const blocks: Uint8Array[] = [];
   let pos = 0;
-  while (pos + 168 <= data.length) {
-    const block = new Uint8Array(TX802_PMEM_BLOCK);
-    let ok = true;
-    for (let i = 0; i < TX802_PMEM_BLOCK; i++) {
-      const hi = hexNibble(data[pos++]);
-      const lo = hexNibble(data[pos++]);
-      if (hi < 0 || lo < 0) {
-        ok = false;
-        break;
-      }
-      block[i] = (hi << 4) | lo;
-    }
-    if (!ok) break;
+  while (pos + 2 * TX802_PMEM_BLOCK <= data.length) {
+    const block = decodeHexBlock(data, pos);
+    if (!block) break;
     blocks.push(block);
+    pos += 2 * TX802_PMEM_BLOCK;
     if (
       pos + 13 <= data.length &&
       data[pos + 1] === 0x01 &&
@@ -210,7 +193,7 @@ function isTx802PmemBank(frame: SysexFrame): boolean {
 
 /** Extract performances from a SysEx frame, or null if unsupported. */
 export function performancesFromFrame(frame: SysexFrame): ParsedPerformance[] | null {
-  if (!TX802_PERF_KINDS.has(frame.kind)) return null;
+  if (!PERF_KINDS.has(frame.kind)) return null;
   const data = bulkPayloadFromFrame(frame);
   if (!data || data.length === 0) return null;
 
@@ -237,10 +220,3 @@ export function performancesFromFrame(frame: SysexFrame): ParsedPerformance[] | 
   }
   return out;
 }
-
-/** @deprecated Use decodeDx7iiVoiceRef */
-export function mapVoiceNumber(vnum: number): number {
-  return decodeDx7iiVoiceRef(vnum).program;
-}
-
-export { defaultVoiceRef, type VoiceRef } from './voice-library';

@@ -66,7 +66,7 @@ export function zoomEnvView(factor: number, anchor01: number): void {
 }
 
 /** Shift the window right by a fraction of the visible width. */
-export function panEnvView(dx01: number): void {
+function panEnvView(dx01: number): void {
   setView(view.zoom, view.pan + dx01 / view.zoom);
 }
 

@@ -41,8 +41,6 @@ import { helpProps } from './state/help';
 import { useEnvAxisFrozen, useEnvView } from './state/env-axis';
 import type { VoiceRef } from '@texed/dx7-format/voice-library';
 
-const ENGINES = ['MODERN', 'MARK I', 'OPL'];
-
 // ?hw - hardware editor mode: the UI drives a real DX7/DX7II/TX802 over MIDI
 // SysEx instead of the local engine (pick the output in MIDI settings).
 const HW_MODE = new URLSearchParams(window.location.search).has('hw');
@@ -78,8 +76,6 @@ export default function App() {
   const [started, setStarted] = useState(false);
   /** Startup finished, including any session restore. */
   const [loaded, setLoaded] = useState(false);
-  // Global system-setup settings live in the engine's edit buffer; mirror them.
-  const { engine, volume, polyphony } = synth.settings;
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
   const [hoverOp, setHoverOp] = useState<number | null>(null);
   const [selectedOp, setSelectedOp] = useState<EnvSelection>(1);
@@ -251,17 +247,8 @@ export default function App() {
           onSaveVoice={files.saveVoice}
           onSaveBank={files.saveBank}
           onSavePerformance={files.savePerformance}
-          engine={engine}
-          engineNames={ENGINES}
-          onEngine={synth.setEngine}
           onShowParts={() => setShowParts(true)}
           onShowLibrary={() => setShowLibrary(true)}
-          polyphony={polyphony}
-          onPolyphony={synth.setPolyphonyCap}
-          volume={volume}
-          onVolume={synth.setVolume}
-          masterTuneCents={synth.settings.masterTuneCents}
-          onMasterTune={synth.setMasterTune}
           midiInputs={midi.inputs}
           midiOutputs={midi.outputs}
           midiOutId={midi.outId}

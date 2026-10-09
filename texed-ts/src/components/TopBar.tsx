@@ -17,17 +17,8 @@ interface TopBarProps {
   onSaveVoice: () => void;
   onSaveBank: () => void;
   onSavePerformance: () => void;
-  engine: number;
-  engineNames: string[];
-  onEngine: (n: number) => void;
   onShowParts: () => void;
   onShowLibrary: () => void;
-  polyphony: number;
-  onPolyphony: (n: number) => void;
-  volume: number;
-  onVolume: (v: number) => void;
-  masterTuneCents: number;
-  onMasterTune: (cents: number) => void;
   midiInputs: string[];
   midiOutputs: { id: string; name: string }[];
   midiOutId: string;
@@ -38,6 +29,9 @@ interface TopBarProps {
   onAutoSend: (on: boolean) => void;
   onSendVoice: () => void;
 }
+
+const ENGINES = ['MODERN', 'MARK I', 'OPL'];
+const POLYPHONY_CAPS = [8, 16, 24, 32, 48, 64, 96, 128, 192, 256];
 
 // Close a popover on outside click or Escape while it is open.
 function useDismiss(open: boolean, close: () => void, ref: RefObject<HTMLElement | null>) {
@@ -65,17 +59,8 @@ export function TopBar({
   onSaveVoice,
   onSaveBank,
   onSavePerformance,
-  engine,
-  engineNames,
-  onEngine,
   onShowParts,
   onShowLibrary,
-  polyphony,
-  onPolyphony,
-  volume,
-  onVolume,
-  masterTuneCents,
-  onMasterTune,
   midiInputs,
   midiOutputs,
   midiOutId,
@@ -92,9 +77,20 @@ export function TopBar({
   const [dlOpen, setDlOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const partActivity = useStatus(synth.subscribeStatus, (s) => s.partActivity, []);
+  const { settings } = synth;
 
   useDismiss(dlOpen, () => setDlOpen(false), dlRef);
   useDismiss(settingsOpen, () => setSettingsOpen(false), settingsRef);
+
+  const saveItems = [
+    { label: 'Save voice', sub: 'single voice · ACED + VCED', save: onSaveVoice },
+    { label: 'Save bank', sub: '32 voices · VMEM + AMEM', save: onSaveBank },
+    {
+      label: 'Save performance',
+      sub: 'MiniDexed · 8 TG performance.ini',
+      save: onSavePerformance,
+    },
+  ];
 
   return (
     <header className="topbar">
@@ -112,16 +108,16 @@ export function TopBar({
           )}
         >
           {Array.from({ length: 8 }, (_, i) => {
-            const cfg = synth.partConfigs[i];
             const selected = i === synth.selectedPart;
+            const off = synth.partConfigs[i]?.enabled === false;
             const active = (partActivity[i] ?? 0) > 0;
             return (
               <button
                 key={i}
                 type="button"
-                className={`part-btn${selected ? ' selected' : ''}${cfg && !cfg.enabled ? ' off' : ''}${active ? ' active' : ''}`}
+                className={`part-btn${selected ? ' selected' : ''}${off ? ' off' : ''}${active ? ' active' : ''}`}
                 onClick={() => synth.selectPart(i)}
-                title={`Part ${i + 1}${cfg && !cfg.enabled ? ' (disabled)' : ''}${active ? ' - sounding' : ''}`}
+                title={`Part ${i + 1}${off ? ' (disabled)' : ''}${active ? ' - sounding' : ''}`}
               >
                 {i + 1}
               </button>
@@ -224,39 +220,20 @@ export function TopBar({
           </button>
           {dlOpen && (
             <div className="dl-menu" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setDlOpen(false);
-                  onSaveVoice();
-                }}
-              >
-                Save voice
-                <span className="dl-menu-sub">single voice · ACED + VCED</span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setDlOpen(false);
-                  onSaveBank();
-                }}
-              >
-                Save bank
-                <span className="dl-menu-sub">32 voices · VMEM + AMEM</span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setDlOpen(false);
-                  onSavePerformance();
-                }}
-              >
-                Save performance
-                <span className="dl-menu-sub">MiniDexed · 8 TG performance.ini</span>
-              </button>
+              {saveItems.map(({ label, sub, save }) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setDlOpen(false);
+                    save();
+                  }}
+                >
+                  {label}
+                  <span className="dl-menu-sub">{sub}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -272,21 +249,21 @@ export function TopBar({
         <div className="bar-knobs">
           <Knob
             label="VOLUME"
-            value={volume}
+            value={settings.volume}
             max={99}
             size={28}
-            onChange={onVolume}
+            onChange={synth.setVolume}
             help="Master output volume (0–99), with a perceptual taper."
           />
           <Knob
             label="TUNE"
-            value={Math.round(masterTuneCents)}
+            value={Math.round(settings.masterTuneCents)}
             min={-50}
             max={50}
             center={0}
             size={28}
             format={(t) => (t > 0 ? `+${t}¢` : `${t}¢`)}
-            onChange={onMasterTune}
+            onChange={synth.setMasterTune}
             help="Master tune (−50…+50 cents) - global pitch offset from 8973S system setup."
           />
         </div>
@@ -352,8 +329,11 @@ export function TopBar({
                 )}
               >
                 <span className="settings-row-label">Engine</span>
-                <select value={engine} onChange={(e) => onEngine(Number(e.target.value))}>
-                  {engineNames.map((name, i) => (
+                <select
+                  value={settings.engine}
+                  onChange={(e) => synth.setEngine(Number(e.target.value))}
+                >
+                  {ENGINES.map((name, i) => (
                     <option key={i} value={i}>
                       {name}
                     </option>
@@ -370,10 +350,8 @@ export function TopBar({
               >
                 <span className="settings-row-label">Accuracy</span>
                 <select
-                  value={synth.settings.accuracy}
-                  onChange={(e) =>
-                    synth.setAccuracy(e.target.value as typeof synth.settings.accuracy)
-                  }
+                  value={settings.accuracy}
+                  onChange={(e) => synth.setAccuracy(e.target.value as typeof settings.accuracy)}
                 >
                   <option value="hardware">Hardware</option>
                   <option value="dexed">Dexed</option>
@@ -388,8 +366,11 @@ export function TopBar({
                 )}
               >
                 <span className="settings-row-label">Polyphony</span>
-                <select value={polyphony} onChange={(e) => onPolyphony(Number(e.target.value))}>
-                  {[8, 16, 24, 32, 48, 64, 96, 128, 192, 256].map((n) => (
+                <select
+                  value={settings.polyphony}
+                  onChange={(e) => synth.setPolyphonyCap(Number(e.target.value))}
+                >
+                  {POLYPHONY_CAPS.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -407,7 +388,7 @@ export function TopBar({
                 >
                   <span className="settings-row-label">Micro tune</span>
                   <select
-                    value={synth.settings.microtuning}
+                    value={settings.microtuning}
                     onChange={(e) => synth.setMicrotuning(Number(e.target.value))}
                   >
                     <option value={-1}>Standard</option>

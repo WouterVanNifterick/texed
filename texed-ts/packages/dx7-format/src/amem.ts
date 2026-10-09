@@ -1,6 +1,4 @@
 // DX7II additional voice memory (AMEM): 35-byte supplement per voice, 1120-byte bulk.
-
-import { sysexChecksum } from './cartridge';
 //
 // Authoritative packed layout (Yamaha DX7II MIDI data format, AMEM table):
 //   0     |  0 | OP1| OP2| OP3| OP4| OP5| OP6|   scaling mode (0 norm / 1 fractional)
@@ -22,6 +20,8 @@ import { sysexChecksum } from './cartridge';
 //   30-33 MIDI in ctrl: pitch / amp / EG bias / volume ranges
 //   34    |  0 |  0 |  0 |FCCS|   UDTN(0-7)  |   FC1-as-CS1, unison detune
 
+import { sysexChecksum } from './cartridge';
+
 export const AMEM_BULK_SIZE = 1120;
 export const AMEM_SLOT_SIZE = 35;
 
@@ -37,20 +37,6 @@ const DEFAULT_AMEM_BYTES = [
 
 export function createDefaultAmem(): Uint8Array {
   return new Uint8Array(DEFAULT_AMEM_BYTES);
-}
-
-/** Unpack a 1120-byte AMEM bulk into 32 supplement slots. */
-export function unpackAmemBulk(packed: Uint8Array): Uint8Array[] {
-  const slots: Uint8Array[] = [];
-  for (let i = 0; i < 32; i++) {
-    const off = i * AMEM_SLOT_SIZE;
-    const slot = createDefaultAmem();
-    if (off + AMEM_SLOT_SIZE <= packed.length) {
-      slot.set(packed.subarray(off, off + AMEM_SLOT_SIZE));
-    }
-    slots.push(slot);
-  }
-  return slots;
 }
 
 /**
@@ -162,10 +148,6 @@ export function acedToSysex(amem: Uint8Array): Uint8Array {
   return out;
 }
 
-/** Pitch bend mode values (byte 6 bits 4-5). */
-export const PitchBendMode = { Normal: 0, Low: 1, High: 2, KeyOn: 3 } as const;
-export type PitchBendMode = (typeof PitchBendMode)[keyof typeof PitchBendMode];
-
 /** DX7II modulation ranges for one physical controller (all 0-99). */
 export interface CtrlRanges {
   pitch: number;
@@ -206,6 +188,7 @@ export class VoiceSupplement {
   unison: boolean;
   pitchBendRange: number;
   pitchBendStep: number;
+  /** 0 normal, 1 low, 2 high, 3 key-on. */
   pitchBendMode: number;
   portamentoMode: number;
   /** Portamento step 0-12: 0 = smooth, n = glissando quantized to n semitones. */

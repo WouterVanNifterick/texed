@@ -1,6 +1,6 @@
 // State layer: accessors for the 35-byte DX7II AMEM voice supplement.
-// Pure data - no audio, no React. Bit layout mirrors engine/amem.ts
-// VoiceSupplement; setters return the single byte edit to send over the
+// Pure data - no audio, no React. Bit layout mirrors VoiceSupplement in
+// ./amem.ts; setters return the single byte edit to send over the
 // bridge as a SetSupplementParam message.
 
 import { formatSignedOffset } from './voice';

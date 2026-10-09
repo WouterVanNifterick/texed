@@ -1,6 +1,7 @@
-// App-level UI hooks: transient status message, QWERTY note input,
-// part and operator select keys, window-wide file drag-and-drop, and the
-// fixed-stage scale factor.
+// App-level UI hooks: transient status message, localStorage-backed view
+// preferences, keyboard shortcuts (QWERTY notes, part/operator select, undo,
+// clipboard, Escape), window-wide file drag-and-drop, and the fixed-stage
+// scale factor.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -117,15 +118,14 @@ function useWindowKeydown(
 }
 
 /** Close a modal/overlay when Escape is pressed (even while typing in a field). */
-export function useEscapeClose(onClose: () => void, enabled = true): void {
+export function useEscapeClose(onClose: () => void): void {
   useEffect(() => {
-    if (!enabled) return;
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, [enabled, onClose]);
+  }, [onClose]);
 }
 
 /**
@@ -251,7 +251,7 @@ export function useClipboardKeys(
   );
 }
 
-export function patchFiles(files: FileList | File[]): File[] {
+function patchFiles(files: FileList | File[]): File[] {
   return Array.from(files).filter((f) => /\.(syx|mx|dx7voice|ini)$/i.test(f.name));
 }
 
@@ -342,10 +342,11 @@ export function useStageScale(stageWidth: number, stageHeight: number, minScale 
     const update = () => {
       const fit = Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight);
       const scale = Math.max(fit, minScale);
+      const floored = scale > fit;
       document.documentElement.style.setProperty('--stage-scale', String(scale));
       // Drives the scrollable layout in App.css.
-      document.documentElement.classList.toggle('stage-clamped', scale > fit);
-      setClamped(scale > fit);
+      document.documentElement.classList.toggle('stage-clamped', floored);
+      setClamped(floored);
     };
     update();
     window.addEventListener('resize', update);

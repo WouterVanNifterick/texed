@@ -177,7 +177,7 @@ function pair(clip: OpClip, target: EnvSelection, kind: ActionKind): string {
 }
 
 /** Imperative summary, for the hint drawn on a drop target. */
-export function dropLabel(clip: OpClip, target: EnvSelection, kind: ActionKind): string {
+function dropLabel(clip: OpClip, target: EnvSelection, kind: ActionKind): string {
   return `${kind === 'swap' ? 'Swap' : 'Copy'} ${pair(clip, target, kind)}`;
 }
 

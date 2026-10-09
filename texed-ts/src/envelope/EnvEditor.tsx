@@ -22,9 +22,10 @@ import {
   curveSegments,
   fillPoints,
   playheadPoint,
+  polylinePoints,
   px,
   py,
-  stageWindow,
+  stageCurve,
   type YMode,
   type EnvKind,
   type DrawGeom,
@@ -132,14 +133,7 @@ export function EnvEditor(props: EnvEditorProps) {
   const fill = fillPoints(trace, g);
 
   // Active-stage highlight: the portion of the curve inside the playing stage.
-  const [hlFrom, hlTo] = stageWindow(trace, stage);
-  const activePts =
-    stage >= 0 && stage <= 3
-      ? trace.curve
-          .filter((p) => p.timeSec >= hlFrom - 1e-6 && p.timeSec <= hlTo + 1e-6)
-          .map((p) => `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`)
-          .join(' ')
-      : '';
+  const activePts = stage >= 0 && stage <= 3 ? polylinePoints(stageCurve(trace, stage), g) : '';
 
   // Playback dot: sits on the curve at the live envelope level within the
   // active stage. Hidden when idle/finished (stage 4) or no live level.
@@ -309,9 +303,9 @@ export function EnvEditor(props: EnvEditorProps) {
         {kind === 'pitch' && <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="env-midline" />}
         {/* key-off marker */}
         <line
-          x1={PAD + timeScale.x(trace.gateSec) * (W - 2 * PAD)}
+          x1={px(g, trace.gateSec)}
           y1={0}
-          x2={PAD + timeScale.x(trace.gateSec) * (W - 2 * PAD)}
+          x2={px(g, trace.gateSec)}
           y2={H}
           className="env-gate"
         />

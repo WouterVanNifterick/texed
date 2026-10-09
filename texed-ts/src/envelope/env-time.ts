@@ -5,7 +5,7 @@
 // envelope has reached its sustain before release, and the axis spans from the
 // fastest attack to the slowest release.
 
-import { useRef } from 'react';
+import { useState } from 'react';
 import { scaleoutlevel } from '@texed/dx7-engine/env';
 import { operatorOutLevel, scaleRate } from '@texed/dx7-engine/dx7note';
 import { OP, G, opBase } from '@texed/dx7-format/voice';
@@ -21,8 +21,8 @@ import {
 // Default reference note/velocity: rate scaling and level scaling are
 // note/velocity dependent, so the drawn curve is pinned to one playing context.
 // These are the fallbacks; the actual values are user-editable (see App state).
-export const REF_NOTE = 60;
-export const REF_VELOCITY = 99;
+const REF_NOTE = 60;
+const REF_VELOCITY = 99;
 
 export type TimeMode = 'log' | 'linear';
 
@@ -229,7 +229,7 @@ function computeEnvSpan(voice: ArrayLike<number>, note: number, velocity: number
  * `voice` would recompute on each keystroke anywhere in the editor. Caching on
  * the value of the params the curves actually depend on limits the work to edits
  * that can change the result. The span - the part that replays all seven
- * envelopes - is cached separately from the scale so a zoom or pan, which only
+ * envelopes - is keyed separately from the scale so a zoom or pan, which only
  * moves the window over it, does not re-simulate anything.
  *
  * `frozen` holds the last computed scale regardless of the params - see
@@ -243,20 +243,23 @@ export function useEnvTimeScale(
   frozen = false,
   view: EnvView = FULL_VIEW,
 ): EnvTimeScale {
-  const span = useRef<{ key: string; value: EnvSpan } | null>(null);
-  const scale = useRef<{ key: string; value: EnvTimeScale } | null>(null);
+  const [cache, setCache] = useState<{
+    spanKey: string;
+    span: EnvSpan;
+    scaleKey: string;
+    scale: EnvTimeScale;
+  } | null>(null);
   // Before the key, which is itself not free to build on every pointer event.
-  if (frozen && scale.current) return scale.current.value;
+  if (frozen && cache) return cache.scale;
 
   const spanKey = `${envDepKey(voice)}|${note}|${velocity}`;
-  if (span.current?.key !== spanKey) {
-    span.current = { key: spanKey, value: computeEnvSpan(voice, note, velocity) };
-  }
   const scaleKey = `${spanKey}|${mode}|${view.zoom}|${view.pan}`;
-  if (scale.current?.key !== scaleKey) {
-    scale.current = { key: scaleKey, value: makeScale(mode, span.current.value, view) };
-  }
-  return scale.current.value;
+  if (cache?.scaleKey === scaleKey) return cache.scale;
+
+  const span = cache?.spanKey === spanKey ? cache.span : computeEnvSpan(voice, note, velocity);
+  const scale = makeScale(mode, span, view);
+  setCache({ spanKey, span, scaleKey, scale });
+  return scale;
 }
 
 /** Hash of every param the seven envelope curves depend on. */

@@ -70,12 +70,6 @@ export class Cartridge {
   // 6-byte header + 32 * 128 packed voices + checksum + 0xF7 = 4104.
   voiceData = new Uint8Array(4104);
 
-  constructor(packed?: Uint8Array) {
-    if (packed) {
-      this.voiceData.set(packed.subarray(0, Math.min(packed.length, 4104)));
-    }
-  }
-
   /**
    * Parse raw SysEx bytes into a Cartridge. Accepts a 32-voice bulk dump
    * (>= 4104 bytes starting with 0xF0) or a raw 4096-byte packed block.
@@ -157,8 +151,6 @@ export class Cartridge {
   }
 
   programNames(): string[] {
-    const names: string[] = [];
-    for (let i = 0; i < 32; i++) names.push(this.programName(i));
-    return names;
+    return Array.from({ length: 32 }, (_, i) => this.programName(i));
   }
 }

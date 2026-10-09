@@ -6,8 +6,6 @@ import { Exp2 } from './exp2';
 import { FmOpKernel, FmOpParams } from './fm-op-kernel';
 import { FmOperatorFlags, algorithms } from '@texed/dx7-format/algorithms';
 
-export { FmOperatorFlags, algorithms, isCarrier } from '@texed/dx7-format/algorithms';
-
 export class FmCore {
   protected buf0 = new Int32Array(N);
   protected buf1 = new Int32Array(N);

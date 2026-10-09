@@ -5,7 +5,15 @@
 // scripts/build-patch-library.mts); the LOADED LIBRARY pseudo-collection
 // mirrors whatever is in the rack's voice memory.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type UIEvent,
+} from 'react';
 import type { Synth } from '../audio/useSynth';
 import { VOICE_BANK_LABELS, type VoiceBankId } from '@texed/dx7-format/voice-library';
 import { NUM_PARTS, defaultPartConfig } from '@texed/dx7-format/part-config';
@@ -50,6 +58,12 @@ interface LibraryBrowserProps {
 type SetRow =
   | { kind: 'performance'; name: string }
   | { kind: 'voice'; name: string; bank: LibBank; index: number; filler: boolean };
+
+interface VoiceRow {
+  name: string;
+  filler: boolean;
+  amem: boolean;
+}
 
 function columnsFor(count: number): number {
   return Math.max(1, Math.min(MAX_COLUMNS, Math.ceil(count / ROWS_PER_COLUMN)));
@@ -101,6 +115,14 @@ function useRemembered<K extends keyof LibraryUiState>(key: K) {
   return [value, set] as const;
 }
 
+/**
+ * Record a pane's offset as it scrolls. Reading it back at unmount would be
+ * tidier, but React has already detached the refs by then.
+ */
+const onPaneScroll = (key: keyof LibraryUiState['scroll']) => (e: UIEvent<HTMLDivElement>) => {
+  libraryUi.scroll[key] = e.currentTarget.scrollTop;
+};
+
 export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps) {
   const [manifest, setManifest] = useState<LibraryManifest | null>(null);
   const [manifestPending, setManifestPending] = useState(true);
@@ -113,7 +135,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   const [voiceIdx, setVoiceIdx] = useRemembered('voiceIdx');
   const [audition, setAudition] = useRemembered('audition');
   const [target, setTarget] = useRemembered('target');
-  const [perfVoices, setPerfVoices] = useState<PerfPartVoice[][] | null>(null);
+  const [resolved, setResolved] = useState<{ set: LibSet; voices: PerfPartVoice[][] } | null>(null);
   const walkTimer = useRef<number | null>(null);
   const voiceListRef = useRef<HTMLDivElement>(null);
   const banksPaneRef = useRef<HTMLDivElement>(null);
@@ -134,17 +156,6 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
 
   useEscapeClose(onClose);
 
-  /**
-   * Record each pane's offset as it scrolls. Reading it back at unmount would
-   * be tidier, but React has already detached the refs by then.
-   */
-  const onPaneScroll = useCallback(
-    (key: keyof LibraryUiState['scroll']) => (e: React.UIEvent<HTMLDivElement>) => {
-      libraryUi.scroll[key] = e.currentTarget.scrollTop;
-    },
-    [],
-  );
-
   // ==== data shaping ====
 
   const collections = useMemo(() => {
@@ -159,33 +170,25 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
   const activeSet = colId === LOADED_ID ? null : (sets[setIdx] ?? null);
 
   /** Middle-column rows of the performances view. */
-  const setRows: SetRow[] = useMemo(() => {
-    if (colId === LOADED_ID) {
-      return synth.performanceNames.map((name) => ({
-        kind: 'performance' as const,
-        name: name || 'INIT',
-      }));
-    }
+  const setRows = ((): SetRow[] => {
+    const performances = (names: string[]): SetRow[] =>
+      names.map((name) => ({ kind: 'performance', name: name || 'INIT' }));
+    if (colId === LOADED_ID) return performances(synth.performanceNames);
     if (!activeSet || !activeCollection) return [];
-    if (activeSet.kind === 'performance') {
-      return (activeSet.performances ?? []).map((name) => ({
-        kind: 'performance' as const,
-        name: name || 'INIT',
-      }));
-    }
+    if (activeSet.kind === 'performance') return performances(activeSet.performances ?? []);
     return setBanks(activeCollection, activeSet).flatMap((bank) =>
-      bank.voices.map((name, index) => ({
-        kind: 'voice' as const,
+      bank.voices.map((name, index): SetRow => ({
+        kind: 'voice',
         name,
         bank,
         index,
         filler: isFillerVoiceName(name),
       })),
     );
-  }, [colId, activeCollection, activeSet, synth.performanceNames]);
+  })();
 
   /** Voices-view rows of the selected bank (or the whole loaded library). */
-  const voiceRows: { name: string; filler: boolean; amem: boolean }[] = useMemo(() => {
+  const voiceRows = ((): VoiceRow[] => {
     if (colId === LOADED_ID) {
       return synth.programOptions.map((o) => ({
         name: o.label,
@@ -204,7 +207,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
       filler: isFillerVoiceName(name),
       amem: mixed && amem.has(i),
     }));
-  }, [colId, activeCollection, bankIdx, synth.programOptions]);
+  })();
 
   const searchIndex = useMemo(() => (manifest ? buildSearchIndex(manifest) : []), [manifest]);
 
@@ -225,78 +228,70 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     return { builtIn, loaded };
   }, [query, searchIndex, synth.programOptions]);
 
-  // Part voice names for the selected performance set, resolved on demand.
+  // Part voice names for the selected performance set, resolved on demand and
+  // kept with the set they belong to, so a stale answer is never shown.
   useEffect(() => {
-    setPerfVoices(null);
     if (!activeCollection || !activeSet || activeSet.kind !== 'performance') return;
     let live = true;
     getSetPerfVoices(activeCollection, activeSet)
-      .then((v) => live && setPerfVoices(v))
-      .catch(() => live && setPerfVoices([]));
+      .catch((): PerfPartVoice[][] => [])
+      .then((voices) => live && setResolved({ set: activeSet, voices }));
     return () => {
       live = false;
     };
   }, [activeCollection, activeSet]);
+  const perfVoices = resolved?.set === activeSet ? resolved.voices : null;
 
   // ==== actions ====
 
-  const auditionVoice = useCallback(() => {
+  const auditionVoice = () => {
     if (!audition) return;
     const cfg = synth.partConfigs[synth.selectedPart];
     const ch = cfg && cfg.rxChannel > 0 ? cfg.rxChannel : 1;
     synth.noteOn(AUDITION_NOTE, 100, ch);
     window.setTimeout(() => synth.noteOff(AUDITION_NOTE, ch), 400);
-  }, [audition, synth]);
+  };
 
-  const loadBuiltInVoice = useCallback(
-    (bank: LibBank, index: number) => {
-      getVoiceBytes(bank, index)
-        .then(({ voice, supplement }) => {
-          synth.setVoice(voice, { supplement });
-          auditionVoice();
-        })
-        .catch(() => showMsg(`Could not load ${bank.voices[index] ?? 'voice'}`));
-    },
-    [synth, auditionVoice, showMsg],
-  );
+  const loadBuiltInVoice = (bank: LibBank, index: number) => {
+    getVoiceBytes(bank, index)
+      .then(({ voice, supplement }) => {
+        synth.setVoice(voice, { supplement });
+        auditionVoice();
+      })
+      .catch(() => showMsg(`Could not load ${bank.voices[index] ?? 'voice'}`));
+  };
 
   /** Replace the whole rack with a one-part performance holding this voice. */
-  const soloVoice = useCallback(
-    (bank: LibBank, index: number) => {
-      getVoiceBytes(bank, index)
-        .then(({ voice, supplement }) => {
-          const parts = Array.from({ length: NUM_PARTS }, (_, i) => defaultPartConfig(i === 0));
-          const voices = Array.from({ length: NUM_PARTS }, (_, i) => (i === 0 ? voice : null));
-          const name = getVoiceName(voice).trim() || bank.voices[index] || 'VOICE';
-          synth.loadPerformance(name, parts, voices);
-          showMsg(
-            supplement
-              ? `${name} → part 1 only, parts 2-8 off (DX7II supplement not carried)`
-              : `${name} → part 1 only, parts 2-8 off`,
-          );
-          auditionVoice();
-        })
-        .catch(() => showMsg(`Could not load ${bank.voices[index] ?? 'voice'}`));
-    },
-    [synth, auditionVoice, showMsg],
-  );
+  const soloVoice = (bank: LibBank, index: number) => {
+    getVoiceBytes(bank, index)
+      .then(({ voice, supplement }) => {
+        const parts = Array.from({ length: NUM_PARTS }, (_, i) => defaultPartConfig(i === 0));
+        const voices = Array.from({ length: NUM_PARTS }, (_, i) => (i === 0 ? voice : null));
+        const name = getVoiceName(voice).trim() || bank.voices[index] || 'VOICE';
+        synth.loadPerformance(name, parts, voices);
+        showMsg(
+          supplement
+            ? `${name} → part 1 only, parts 2-8 off (DX7II supplement not carried)`
+            : `${name} → part 1 only, parts 2-8 off`,
+        );
+        auditionVoice();
+      })
+      .catch(() => showMsg(`Could not load ${bank.voices[index] ?? 'voice'}`));
+  };
 
-  const activateVoiceRow = useCallback(
-    (index: number) => {
-      setVoiceIdx(index);
-      if (colId === LOADED_ID) {
-        const opt = synth.programOptions[index];
-        if (opt) {
-          synth.setVoiceRef(opt.ref);
-          auditionVoice();
-        }
-        return;
+  const activateVoiceRow = (index: number) => {
+    setVoiceIdx(index);
+    if (colId === LOADED_ID) {
+      const opt = synth.programOptions[index];
+      if (opt) {
+        synth.setVoiceRef(opt.ref);
+        auditionVoice();
       }
-      const bank = activeCollection?.banks[bankIdx];
-      if (bank) loadBuiltInVoice(bank, index);
-    },
-    [colId, activeCollection, bankIdx, synth, auditionVoice, loadBuiltInVoice, setVoiceIdx],
-  );
+      return;
+    }
+    const bank = activeCollection?.banks[bankIdx];
+    if (bank) loadBuiltInVoice(bank, index);
+  };
 
   /**
    * Arrow-walk: move selection now, load + audition shortly after settling.
@@ -304,39 +299,27 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
    * rolls into the next one so one key walks the whole collection. The LOADED
    * column is already a flat list across every populated half-bank.
    */
-  const walk = useCallback(
-    (delta: number) => {
-      let next = voiceIdx + delta;
-      while (next >= 0 && next < voiceRows.length && voiceRows[next].filler) {
-        next += delta;
-      }
-      const banks = activeCollection?.banks ?? [];
-      let rollBank: LibBank | null = null;
-      if (next < 0 || next >= voiceRows.length) {
-        if (banks.length < 2) return;
-        const nb = (bankIdx + (delta > 0 ? 1 : banks.length - 1)) % banks.length;
-        rollBank = banks[nb];
-        next = delta > 0 ? 0 : rollBank.voices.length - 1;
-        setBankIdx(nb);
-      }
-      setVoiceIdx(next);
-      if (walkTimer.current !== null) window.clearTimeout(walkTimer.current);
-      walkTimer.current = window.setTimeout(
-        () => (rollBank ? loadBuiltInVoice(rollBank, next) : activateVoiceRow(next)),
-        80,
-      );
-    },
-    [
-      voiceIdx,
-      voiceRows,
-      activeCollection,
-      bankIdx,
-      activateVoiceRow,
-      loadBuiltInVoice,
-      setBankIdx,
-      setVoiceIdx,
-    ],
-  );
+  const walk = (delta: number) => {
+    let next = voiceIdx + delta;
+    while (next >= 0 && next < voiceRows.length && voiceRows[next].filler) {
+      next += delta;
+    }
+    const banks = activeCollection?.banks ?? [];
+    let rollBank: LibBank | null = null;
+    if (next < 0 || next >= voiceRows.length) {
+      if (banks.length < 2) return;
+      const nb = (bankIdx + (delta > 0 ? 1 : banks.length - 1)) % banks.length;
+      rollBank = banks[nb];
+      next = delta > 0 ? 0 : rollBank.voices.length - 1;
+      setBankIdx(nb);
+    }
+    setVoiceIdx(next);
+    if (walkTimer.current !== null) window.clearTimeout(walkTimer.current);
+    walkTimer.current = window.setTimeout(
+      () => (rollBank ? loadBuiltInVoice(rollBank, next) : activateVoiceRow(next)),
+      80,
+    );
+  };
 
   /**
    * Put the panes back where they were, once. The manifest arrives a render or
@@ -365,103 +348,77 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
     el?.scrollIntoView({ block: 'nearest' });
   }, [voiceIdx, bankIdx, colId]);
 
-  const onListKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        walk(1);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        walk(-1);
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        e.preventDefault();
-        const banks = activeCollection?.banks ?? [];
-        if (banks.length > 0) {
-          const next = (bankIdx + (e.key === 'ArrowRight' ? 1 : banks.length - 1)) % banks.length;
-          setBankIdx(next);
-          setVoiceIdx(-1);
-        }
-      } else if (e.key === 'Enter' && voiceIdx >= 0) {
-        e.preventDefault();
-        activateVoiceRow(voiceIdx);
+  const onListKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      walk(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      walk(-1);
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const banks = activeCollection?.banks ?? [];
+      if (banks.length > 0) {
+        const next = (bankIdx + (e.key === 'ArrowRight' ? 1 : banks.length - 1)) % banks.length;
+        setBankIdx(next);
+        setVoiceIdx(-1);
       }
-    },
-    [walk, voiceIdx, activeCollection, bankIdx, activateVoiceRow, setBankIdx, setVoiceIdx],
-  );
+    } else if (e.key === 'Enter' && voiceIdx >= 0) {
+      e.preventDefault();
+      activateVoiceRow(voiceIdx);
+    }
+  };
 
-  const resolveTarget = useCallback((): VoiceBankId => {
+  const resolveTarget = (): VoiceBankId => {
     if (target !== 'auto') return target;
     const free = synth.banks.find((b) => !b.populated);
     return free?.id ?? 'cartridgeA';
-  }, [target, synth.banks]);
+  };
 
-  const loadBankRange = useCallback(
-    (bank: LibBank, start: number, dest: VoiceBankId) => {
-      getBankVoices(bank, start)
-        .then(({ voices, supplements }) => {
-          synth.loadBankInto(dest, voices, supplements);
-          const label = synth.banks.find((b) => b.id === dest)?.label ?? dest;
-          showMsg(
-            `Loaded ${bank.name}${bank.voices.length > 32 ? ` ${start + 1}–${start + 32}` : ''} → ${label}`,
-          );
-        })
-        .catch(() => showMsg(`Could not load bank ${bank.name}`));
-    },
-    [synth, showMsg],
-  );
+  const loadBankRange = (bank: LibBank, start: number, dest: VoiceBankId) => {
+    getBankVoices(bank, start)
+      .then(({ voices, supplements }) => {
+        synth.loadBankInto(dest, voices, supplements);
+        const label = synth.banks.find((b) => b.id === dest)?.label ?? dest;
+        showMsg(
+          `Loaded ${bank.name}${bank.voices.length > 32 ? ` ${start + 1}–${start + 32}` : ''} → ${label}`,
+        );
+      })
+      .catch(() => showMsg(`Could not load bank ${bank.name}`));
+  };
 
   /** Load the whole set: its voice banks into their slots, then its file. */
-  const onLoadSet = useCallback(
-    (collection: LibCollection, set: LibSet) => {
-      const banks = setBanks(collection, set).length;
-      showMsg(
-        set.kind === 'performance'
-          ? `Loading ${set.name} · ${set.performances?.length ?? 0} performances + ${banks} banks…`
-          : `Loading ${set.name} · ${banks} banks…`,
-      );
-      loadSet(synth, collection, set).catch(() => showMsg(`Could not load ${set.name}`));
-    },
-    [synth, showMsg],
-  );
+  const onLoadSet = (collection: LibCollection, set: LibSet) => {
+    const banks = setBanks(collection, set).length;
+    showMsg(
+      set.kind === 'performance'
+        ? `Loading ${set.name} · ${set.performances?.length ?? 0} performances + ${banks} banks…`
+        : `Loading ${set.name} · ${banks} banks…`,
+    );
+    loadSet(synth, collection, set).catch(() => showMsg(`Could not load ${set.name}`));
+  };
 
-  const onSelectPerformance = useCallback(
-    (collection: LibCollection, set: LibSet, index: number) => {
-      showMsg(
-        `Loading "${set.performances?.[index] ?? 'performance'}" · 8 parts + its voice banks…`,
-      );
-      loadPerformanceFromSet(synth, collection, set, index).catch(() =>
-        showMsg('Performance load failed'),
-      );
-    },
-    [synth, showMsg],
-  );
+  const onSelectPerformance = (collection: LibCollection, set: LibSet, index: number) => {
+    showMsg(`Loading "${set.performances?.[index] ?? 'performance'}" · 8 parts + its voice banks…`);
+    loadPerformanceFromSet(synth, collection, set, index).catch(() =>
+      showMsg('Performance load failed'),
+    );
+  };
 
-  const activateSetRow = useCallback(
-    (index: number) => {
-      setRowIdx(index);
-      const row = setRows[index];
-      if (!row) return;
-      if (row.kind === 'voice') {
-        loadBuiltInVoice(row.bank, row.index);
-        return;
-      }
-      if (colId === LOADED_ID) {
-        synth.selectPerformance(index);
-        return;
-      }
-      if (activeCollection && activeSet) onSelectPerformance(activeCollection, activeSet, index);
-    },
-    [
-      setRows,
-      colId,
-      synth,
-      activeCollection,
-      activeSet,
-      onSelectPerformance,
-      loadBuiltInVoice,
-      setRowIdx,
-    ],
-  );
+  const activateSetRow = (index: number) => {
+    setRowIdx(index);
+    const row = setRows[index];
+    if (!row) return;
+    if (row.kind === 'voice') {
+      loadBuiltInVoice(row.bank, row.index);
+      return;
+    }
+    if (colId === LOADED_ID) {
+      synth.selectPerformance(index);
+      return;
+    }
+    if (activeCollection && activeSet) onSelectPerformance(activeCollection, activeSet, index);
+  };
 
   // ==== render ====
 
@@ -483,7 +440,7 @@ export function LibraryBrowser({ synth, showMsg, onClose }: LibraryBrowserProps)
       : null;
   const detailParts = selectedPerfParts ?? loadedPerfParts;
 
-  const renderVoiceRows = (rows: { name: string; filler: boolean; amem: boolean }[]) => (
+  const renderVoiceRows = (rows: VoiceRow[]) => (
     <div className="libbrowser-multicol" style={{ columnCount: columnsFor(rows.length) }}>
       {rows.map((row, i) => (
         <button

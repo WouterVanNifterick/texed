@@ -4,7 +4,7 @@
 // The authoritative patch state lives in the worklet, not here. See
 // docs/architecture.md for why, and for the edit round trip.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import type { RackState } from '@texed/synth-protocol/protocol';
 import type { SynthPort } from '@texed/synth-protocol/port';
 import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
@@ -34,18 +34,15 @@ export function useStatus<T>(
   initial: T,
 ): T {
   const [value, setValue] = useState<T>(initial);
-  const sel = useRef(selector);
-  sel.current = selector;
-  useEffect(() => subscribe((s) => setValue(sel.current(s))), [subscribe]);
+  const onStatus = useEffectEvent((s: SynthStatus) => setValue(selector(s)));
+  useEffect(() => subscribe(onStatus), [subscribe]);
   return value;
 }
 
 export function useSynth(externalPort?: SynthPort): Synth {
   // The transport is swappable: the default WorkletPort runs the TS engine
   // locally; a hardware-MIDI or native-bridge port can be passed in instead.
-  const portRef = useRef<SynthPort | null>(externalPort ?? null);
-  if (portRef.current === null) portRef.current = new WorkletPort();
-  const port = portRef.current;
+  const [port] = useState<SynthPort>(() => externalPort ?? new WorkletPort());
 
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
   const [banks, setBanks] = useState<BankInfo[]>([]);
@@ -62,9 +59,11 @@ export function useSynth(externalPort?: SynthPort): Synth {
   const [performanceName, setPerformanceName] = useState('');
 
   const supplementRef = useRef(supplement);
-  supplementRef.current = supplement;
   const programOptionsRef = useRef(programOptions);
-  programOptionsRef.current = programOptions;
+  useEffect(() => {
+    supplementRef.current = supplement;
+    programOptionsRef.current = programOptions;
+  }, [supplement, programOptions]);
   const bankDumpCbs = useRef<((data: Uint8Array | null) => void)[]>([]);
   const fullStateCbs = useRef<((state: RackState) => void)[]>([]);
   const statusSubs = useRef<Set<(s: SynthStatus) => void>>(new Set());
@@ -75,19 +74,19 @@ export function useSynth(externalPort?: SynthPort): Synth {
   const pendingStatus = useRef<SynthStatus | null>(null);
   const statusFrame = useRef(0);
 
-  const actions = useMemo(
-    () =>
-      createSynthActions(port, {
-        setVoice,
-        setSupplement,
-        setSettings,
-        supplement: supplementRef,
-        programOptions: programOptionsRef,
-        bankDumpCbs,
-        fullStateCbs,
-        statusSubs,
-      }),
-    [port],
+  // The refs are only handed over here; the actions read them when called.
+  // oxlint-disable-next-line react/refs
+  const [actions] = useState(() =>
+    createSynthActions(port, {
+      setVoice,
+      setSupplement,
+      setSettings,
+      supplement: supplementRef,
+      programOptions: programOptionsRef,
+      bankDumpCbs,
+      fullStateCbs,
+      statusSubs,
+    }),
   );
 
   useEffect(() => {

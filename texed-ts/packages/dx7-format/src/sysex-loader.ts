@@ -22,13 +22,6 @@ export interface LoadReport {
   skipped: string[];
 }
 
-/** Frame kinds `performancesFromFrame` can decode. */
-const PERF_KINDS = new Set<SysexFrame['kind']>([
-  SysexKind.Performance,
-  SysexKind.Dx7iiPerformance,
-  SysexKind.Dx7iiPerformanceEdit,
-]);
-
 function nextFreeBank(
   lib: VoiceLibrary,
   sequence: VoiceBankId[],
@@ -49,8 +42,7 @@ function nextFreeBank(
  */
 function paramChangeHalf(frame: SysexFrame): 0 | 1 | null {
   const raw = frame.raw;
-  if (raw.length < 6) return null;
-  if (raw[4] !== 0x4d) return null;
+  if (raw.length < 6 || raw[4] !== 0x4d) return null;
   return (raw[5] & 0x7f) === 1 ? 1 : 0;
 }
 
@@ -80,7 +72,7 @@ function memorySideOf(perfs: ParsedPerformance[]): 'internal' | 'cartridge' {
 }
 
 /** Every half-bank the performances point at, in VOICE_BANK_ORDER. */
-function referencedBanks(perfs: ParsedPerformance[]): VoiceBankId[] {
+export function referencedBanks(perfs: ParsedPerformance[]): VoiceBankId[] {
   const used = new Set<VoiceBankId>();
   for (const perf of perfs) {
     for (const part of perf.parts) {
@@ -112,7 +104,6 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
   // reused by the main pass below.
   const perfByFrame = new Map<number, ParsedPerformance[]>();
   frames.forEach((frame, i) => {
-    if (!PERF_KINDS.has(frame.kind)) return;
     const perfs = performancesFromFrame(frame);
     if (perfs && perfs.length > 0) perfByFrame.set(i, perfs);
   });
@@ -131,22 +122,18 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
 
   let bankAssignIdx = 0;
   let pendingBankTag: VoiceBankId | null = null;
-  let pendingAmem: Uint8Array | null = null;
-  let pendingAmemBank: VoiceBankId | null = null;
+  // An AMEM dump waits for the VMEM dump it supplements before it is applied.
+  let pendingAmem: { bank: VoiceBankId; data: Uint8Array } | null = null;
   let singleVoice: Uint8Array | null = null;
 
-  const flushAmemPair = (vmemBank: VoiceBankId): void => {
-    if (pendingAmem && pendingAmemBank === vmemBank) {
-      lib.loadAmemBank(vmemBank, pendingAmem);
-      report.applied.push(`AMEM → ${vmemBank}`);
-      pendingAmem = null;
-      pendingAmemBank = null;
-    } else if (pendingAmem && pendingAmemBank) {
-      lib.loadAmemBank(pendingAmemBank, pendingAmem);
-      report.applied.push(`AMEM → ${pendingAmemBank}`);
-      pendingAmem = null;
-      pendingAmemBank = null;
-    }
+  const nextBank = (): VoiceBankId =>
+    soleBank ?? pendingBankTag ?? nextFreeBank(lib, bankSequence, bankAssignIdx) ?? halves[0];
+
+  const flushAmem = (note = ''): void => {
+    if (!pendingAmem) return;
+    lib.loadAmemBank(pendingAmem.bank, pendingAmem.data);
+    report.applied.push(`AMEM → ${pendingAmem.bank}${note}`);
+    pendingAmem = null;
   };
 
   for (const [frameIdx, frame] of frames.entries()) {
@@ -165,13 +152,8 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
       case SysexKind.AcedBank: {
         const packed = amemPayloadFromFrame(frame.raw);
         if (packed) {
-          pendingAmem = packed;
-          pendingAmemBank =
-            soleBank ??
-            pendingBankTag ??
-            nextFreeBank(lib, bankSequence, bankAssignIdx) ??
-            halves[0];
-          report.applied.push(`AMEM pending → ${pendingAmemBank}`);
+          pendingAmem = { bank: nextBank(), data: packed };
+          report.applied.push(`AMEM pending → ${pendingAmem.bank}`);
         }
         break;
       }
@@ -181,9 +163,8 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
           report.skipped.push('VMEM (parse failed)');
           break;
         }
-        const bank =
-          soleBank ?? pendingBankTag ?? nextFreeBank(lib, bankSequence, bankAssignIdx) ?? halves[0];
-        flushAmemPair(bank);
+        const bank = nextBank();
+        flushAmem();
         lib.loadVmemBank(bank, cart);
         report.applied.push(`VMEM → ${bank}`);
         bankAssignIdx = bankSequence.indexOf(bank) + 1;
@@ -244,10 +225,7 @@ export function loadSysexFile(bytes: Uint8Array): LoadResult {
     }
   }
 
-  if (pendingAmem && pendingAmemBank) {
-    lib.loadAmemBank(pendingAmemBank, pendingAmem);
-    report.applied.push(`AMEM → ${pendingAmemBank} (final)`);
-  }
+  flushAmem(' (final)');
 
   const loaded =
     lib.populatedBanks().length > 0 || lib.performances.length > 0 || singleVoice !== null;
@@ -258,16 +236,14 @@ function loadRawVced(bytes: Uint8Array): LoadResult {
   const lib = new VoiceLibrary();
   const report: LoadReport = { frames: 0, applied: [], skipped: [] };
 
+  const parseFailed = (): LoadResult => {
+    report.skipped.push('raw VCED (parse failed)');
+    return { library: lib, report, loaded: false, singleVoice: null };
+  };
+
   if (bytes.length === 155 || bytes.length === 156) {
     const voice = voiceFromRawVced(bytes);
-    if (!voice) {
-      return {
-        library: lib,
-        report: { ...report, skipped: ['raw VCED (parse failed)'] },
-        loaded: false,
-        singleVoice: null,
-      };
-    }
+    if (!voice) return parseFailed();
     report.applied.push('raw VCED voice');
     return { library: lib, report, loaded: true, singleVoice: voice };
   }
@@ -277,14 +253,7 @@ function loadRawVced(bytes: Uint8Array): LoadResult {
     const voice = voiceFromRawVced(bytes.subarray(i, i + 155));
     if (voice) voices.push(voice);
   }
-  if (voices.length === 0) {
-    return {
-      library: lib,
-      report: { ...report, skipped: ['raw VCED (parse failed)'] },
-      loaded: false,
-      singleVoice: null,
-    };
-  }
+  if (voices.length === 0) return parseFailed();
 
   const cart = cartridgeFromVoices(voices);
   lib.loadVmemBank('internalA', cart);

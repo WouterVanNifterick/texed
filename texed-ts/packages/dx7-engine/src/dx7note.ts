@@ -1,13 +1,13 @@
 // DX7 voice, ported from msfa/dx7note.cc.
-// Microtuning (MTS-ESP) is out of scope; only StandardTuning is supported, so
-// the MTS_HasMaster path is never taken.
+// MTS-ESP is out of scope, so the MTS_HasMaster path is never taken; pitch
+// always comes from the TuningState table (standard or DX7II micro-tuning).
 
 import { Env, scaleoutlevel } from './env';
 import { kbdScaleCurve, velocityAttenuation } from './env-tables';
 import { isHardwareAccurate } from './engine-accuracy';
 import { PitchEnv } from './pitchenv';
 import { FmOpParams } from './fm-op-kernel';
-import { isCarrier } from './fm-core';
+import { isCarrier } from '@texed/dx7-format/algorithms';
 import { Freqlut } from './freqlut';
 import { Exp2 } from './exp2';
 import { Porta, portaStep } from './porta';
@@ -70,8 +70,7 @@ export function scaleVelocity(velocity: number, sensitivity: number): number {
   if (isHardwareAccurate()) {
     return (15 - velocityAttenuation(velocity, sensitivity)) << 4;
   }
-  const clampedVel = Math.max(0, Math.min(127, velocity));
-  const velValue = velocityData[clampedVel >> 1] - 239;
+  const velValue = velocityData[clamp(velocity, 0, 127) >> 1] - 239;
   return ((sensitivity * velValue + 7) >> 3) << 4;
 }
 
@@ -195,7 +194,6 @@ export class Dx7Note {
   private randPitchOffset = 0;
 
   private initialised = false;
-  private mpePitchBend = 8192;
 
   /** Pitch-bend gate for DX7II bend modes (LOW/HIGH/K.ON); set by the Part. */
   bendGate = true;
@@ -203,10 +201,7 @@ export class Dx7Note {
   constructor(tuningState: TuningState) {
     this.tuningState = tuningState;
     for (let op = 0; op < 6; op++) {
-      const p = new FmOpParams();
-      p.phase = 0;
-      p.gainOut = 0;
-      this.params.push(p);
+      this.params.push(new FmOpParams());
       this.env.push(new Env());
     }
   }
@@ -219,18 +214,15 @@ export class Dx7Note {
     this.supplement = sup;
   }
 
-  private amsForOp(op: number, patch: Uint8Array): number {
-    const off = op * 21;
-    let ams = patch[off + 14] & 3;
+  /** Amp-mod sensitivity depth for one operator: the voice's own 0-3 setting,
+   * or the supplement's when that holds a DX7II-only value above 3. */
+  private ampModSens(op: number, patch: Uint8Array): number {
+    let ams = patch[op * 21 + 14] & 3;
     if (this.supplement) {
       const ext = this.supplement.amsIndex(op);
       if (ext > 3) ams = ext;
     }
-    return Math.min(7, ams);
-  }
-
-  private amsTableValue(ams: number): number {
-    return extendedAmsTable[Math.min(ams, extendedAmsTable.length - 1)];
+    return extendedAmsTable[ams];
   }
 
   private oscFreq(
@@ -259,13 +251,17 @@ export class Dx7Note {
     return logfreq | 0;
   }
 
-  init(
-    patch: Uint8Array,
-    midinote: number,
-    velocity: number,
-    _channel: number,
-    continueEnv = false,
-  ): void {
+  /** Latch one operator's oscillator mode, pitch and amp-mod sensitivity. */
+  private loadOscillator(op: number, patch: Uint8Array, midinote: number): void {
+    const off = op * 21;
+    const mode = patch[off + 17];
+    const freq = this.oscFreq(midinote, mode, patch[off + 18], patch[off + 19], patch[off + 20]);
+    this.opMode[op] = mode;
+    this.basepitch[op] = freq + (mode === 0 ? this.randPitchOffset : 0);
+    this.ampmodsens[op] = this.ampModSens(op, patch);
+  }
+
+  init(patch: Uint8Array, midinote: number, velocity: number, continueEnv = false): void {
     this.initialised = true;
     this.bendGate = true;
     const rates = new Int32Array(4);
@@ -289,23 +285,12 @@ export class Dx7Note {
       const outlevel = operatorOutLevel(patch, off, midinote, velocity);
       const rateScaling = scaleRate(midinote, patch[off + 13]);
       this.env[op].init(rates, levels, outlevel, rateScaling, continueEnv);
-
-      const mode = patch[off + 17];
-      const coarse = patch[off + 18];
-      const fine = patch[off + 19];
-      const detune = patch[off + 20];
-      const freq =
-        this.oscFreq(midinote, mode, coarse, fine, detune) +
-        (mode === 0 ? this.randPitchOffset : 0);
-      this.opMode[op] = mode;
-      this.basepitch[op] = freq;
-      this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
+      this.loadOscillator(op, patch, midinote);
     }
     this.notePitch = this.tuningState.midinoteToLogfreq(midinote) + this.randPitchOffset;
     this.portaCur = this.notePitch;
     this.loadPitchEg(patch, midinote, rates, levels, 'set');
     this.applyVoiceModParams(patch);
-    this.mpePitchBend = 8192;
   }
 
   /** Seed the glide from where the previous note currently is (portamento RETAIN). */
@@ -347,11 +332,6 @@ export class Dx7Note {
         pb = Math.trunc((pb * stp) / 8191);
         pb = (pb * Math.trunc(8191 / stp)) << 11;
       }
-    }
-
-    if (ctrls.mpeEnabled) {
-      const d = Math.trunc((((this.mpePitchBend - 0x2000) << 11) * ctrls.mpePitchBendRange) / 12.0);
-      pb += d;
     }
 
     // BC/AT pitch bias shifts pitch like a bend (applies to fixed ops too).
@@ -446,21 +426,13 @@ export class Dx7Note {
     }
   }
 
-  update(patch: Uint8Array, midinote: number, velocity: number, _channel: number): void {
+  update(patch: Uint8Array, midinote: number, velocity: number): void {
     const rates = new Int32Array(4);
     const levels = new Int32Array(4);
 
     for (let op = 0; op < 6; op++) {
       const off = op * 21;
-      const mode = patch[off + 17];
-      const coarse = patch[off + 18];
-      const fine = patch[off + 19];
-      const detune = patch[off + 20];
-      this.basepitch[op] =
-        this.oscFreq(midinote, mode, coarse, fine, detune) +
-        (mode === 0 ? this.randPitchOffset : 0);
-      this.ampmodsens[op] = this.amsTableValue(this.amsForOp(op, patch));
-      this.opMode[op] = mode;
+      this.loadOscillator(op, patch, midinote);
 
       for (let i = 0; i < 4; i++) {
         rates[i] = patch[off + i];
@@ -511,21 +483,6 @@ export class Dx7Note {
     }
     status.pitchStep = this.pitchenv.getPosition();
     status.pitchLevel = this.pitchenv.getLevel();
-  }
-
-  transferState(src: Dx7Note): void {
-    for (let i = 0; i < 6; i++) {
-      this.env[i].transfer(src.env[i]);
-      this.params[i].gainOut = src.params[i].gainOut;
-      this.params[i].phase = src.params[i].phase;
-    }
-  }
-
-  transferSignal(src: Dx7Note): void {
-    for (let i = 0; i < 6; i++) {
-      this.params[i].gainOut = src.params[i].gainOut;
-      this.params[i].phase = src.params[i].phase;
-    }
   }
 
   transferPhase(src: Dx7Note): void {

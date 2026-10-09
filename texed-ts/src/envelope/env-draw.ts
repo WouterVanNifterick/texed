@@ -72,11 +72,14 @@ export function py(g: DrawGeom, levelQ24: number): number {
   return g.pad + g.ymap.levelToY01(levelQ24) * (g.H - 2 * g.pad);
 }
 
-/** Polyline point string for the dense curve. */
-export function curvePoints(trace: EnvTrace, g: DrawGeom): string {
-  return trace.curve
-    .map((p) => `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`)
-    .join(' ');
+type CurvePoint = EnvTrace['curve'][number];
+
+const xy = (g: DrawGeom, p: CurvePoint) =>
+  `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`;
+
+/** Polyline point string for a run of curve samples. */
+export function polylinePoints(pts: CurvePoint[], g: DrawGeom): string {
+  return pts.map((p) => xy(g, p)).join(' ');
 }
 
 /**
@@ -89,24 +92,22 @@ export function curvePoints(trace: EnvTrace, g: DrawGeom): string {
 export function curveSegments(trace: EnvTrace, g: DrawGeom): { points: string; held: boolean }[] {
   const pts = trace.curve;
   if (pts.length === 0) return [];
-  const xy = (p: { timeSec: number; levelQ24: number }) =>
-    `${px(g, p.timeSec).toFixed(2)},${py(g, p.levelQ24).toFixed(2)}`;
-  const held = (a: (typeof pts)[number], b: (typeof pts)[number]) =>
+  const held = (a: CurvePoint, b: CurvePoint) =>
     a.timeSec >= trace.sustainSec - 1e-6 &&
     Math.abs(py(g, b.levelQ24) - py(g, a.levelQ24)) < 0.4 && // visually horizontal
     px(g, b.timeSec) - px(g, a.timeSec) > 0.3; // with real horizontal extent
 
   const out: { points: string; held: boolean }[] = [];
-  let run = [xy(pts[0])];
+  let run = [xy(g, pts[0])];
   let runHeld = pts.length > 1 ? held(pts[0], pts[1]) : false;
   for (let i = 1; i < pts.length; i++) {
     const segHeld = held(pts[i - 1], pts[i]);
     if (segHeld !== runHeld) {
       out.push({ points: run.join(' '), held: runHeld });
-      run = [xy(pts[i - 1])]; // repeat the boundary vertex to connect runs
+      run = [xy(g, pts[i - 1])]; // repeat the boundary vertex to connect runs
       runHeld = segHeld;
     }
-    run.push(xy(pts[i]));
+    run.push(xy(g, pts[i]));
   }
   out.push({ points: run.join(' '), held: runHeld });
   return out;
@@ -119,17 +120,23 @@ export function fillPoints(trace: EnvTrace, g: DrawGeom): string {
   const last = trace.curve[trace.curve.length - 1];
   return (
     `${px(g, first.timeSec).toFixed(2)},${y0.toFixed(2)} ` +
-    curvePoints(trace, g) +
+    polylinePoints(trace.curve, g) +
     ` ${px(g, last.timeSec).toFixed(2)},${y0.toFixed(2)}`
   );
 }
 
-/** [startSec, endSec] of the given stage, for the active-segment highlight. */
-export function stageWindow(trace: EnvTrace, stage: number): [number, number] {
+/** [startSec, endSec] of the given stage. */
+function stageWindow(trace: EnvTrace, stage: number): [number, number] {
   if (stage <= 0) return [0, trace.nodes[0].timeSec];
   if (stage === 1) return [trace.nodes[0].timeSec, trace.nodes[1].timeSec];
   if (stage === 2) return [trace.nodes[1].timeSec, trace.nodes[2].timeSec];
   return [trace.gateSec, trace.releaseEndSec];
+}
+
+/** The curve samples inside the given stage, for the active-segment highlight. */
+export function stageCurve(trace: EnvTrace, stage: number): CurvePoint[] {
+  const [from, to] = stageWindow(trace, stage);
+  return trace.curve.filter((p) => p.timeSec >= from - 1e-6 && p.timeSec <= to + 1e-6);
 }
 
 /**
@@ -140,14 +147,9 @@ export function stageWindow(trace: EnvTrace, stage: number): [number, number] {
  * samples made the dot visibly step. During a constant sustain/hold no span
  * contains the level, and it parks at the nearest end instead.
  */
-export function playheadPoint(
-  trace: EnvTrace,
-  stage: number,
-  levelQ24: number,
-): { timeSec: number; levelQ24: number } | null {
+export function playheadPoint(trace: EnvTrace, stage: number, levelQ24: number): CurvePoint | null {
   if (stage < 0 || stage > 3) return null;
-  const [from, to] = stageWindow(trace, stage);
-  const pts = trace.curve.filter((p) => p.timeSec >= from - 1e-6 && p.timeSec <= to + 1e-6);
+  const pts = stageCurve(trace, stage);
   if (pts.length === 0) return null;
 
   let best = pts[0];

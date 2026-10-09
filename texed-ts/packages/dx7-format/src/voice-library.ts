@@ -43,20 +43,13 @@ export function voiceRefEquals(a: VoiceRef, b: VoiceRef): boolean {
   return a.bank === b.bank && a.program === b.program;
 }
 
-/** Decode a raw DX7II PMEM/PCED voice byte (0–127). */
+/**
+ * Decode a raw DX7II PMEM/PCED voice byte (0–127): INT 1–64 then CRT 1–64,
+ * which is VOICE_BANK_ORDER in steps of 32.
+ */
 export function decodeDx7iiVoiceRef(raw: number): VoiceRef {
   const v = raw & 0x7f;
-  if (v >= 64) {
-    const cart = v - 64;
-    return {
-      bank: cart >= 32 ? 'cartridgeB' : 'cartridgeA',
-      program: cart % 32,
-    };
-  }
-  return {
-    bank: v >= 32 ? 'internalB' : 'internalA',
-    program: v % 32,
-  };
+  return { bank: VOICE_BANK_ORDER[v >> 5], program: v % 32 };
 }
 
 /** Decode a TX802 TPMEM voice number (1–128, 1-based). Voice 0 = no voice assigned. */
@@ -64,25 +57,6 @@ export function decodeTx802VoiceRef(vnum: number): VoiceRef | null {
   const v = vnum & 0x7f;
   if (v === 0) return null;
   return decodeDx7iiVoiceRef(v - 1);
-}
-
-/** Encode a VoiceRef back to a DX7II PMEM voice byte. */
-export function encodeDx7iiVoiceRef(ref: VoiceRef): number {
-  let base = ref.program % 32;
-  switch (ref.bank) {
-    case 'internalB':
-      base += 32;
-      break;
-    case 'cartridgeA':
-      base += 64;
-      break;
-    case 'cartridgeB':
-      base += 96;
-      break;
-    default:
-      break;
-  }
-  return base;
 }
 
 function createEmptySlot(): VoiceSlot {
@@ -104,7 +78,7 @@ export class VoiceLibrary {
   systemSetup: SystemSetup | null = null;
   performances: ParsedPerformance[] = [];
   performanceIndex = 0;
-  /** Parsed microtuning blobs (not yet applied to playback). */
+  /** Raw 256-byte micro-tuning payloads, in the order they were loaded. */
   microtunings: Uint8Array[] = [];
 
   private ensureBank(bank: VoiceBankId): VoiceSlot[] {
@@ -143,11 +117,6 @@ export class VoiceLibrary {
         slots[i].amem.set(packed.subarray(off, off + AMEM_SLOT_SIZE));
       }
     }
-  }
-
-  /** Load a single-cartridge file into internalA (legacy / simple dumps). */
-  loadLegacyCartridge(cart: Cartridge): void {
-    this.loadVmemBank('internalA', cart);
   }
 
   /**
@@ -204,11 +173,6 @@ export class VoiceLibrary {
       }
     }
     return out;
-  }
-
-  findProgramOptionIndex(ref: VoiceRef): number {
-    const opts = this.programOptions();
-    return opts.findIndex((o) => voiceRefEquals(o.ref, ref));
   }
 
   /** Human-readable label for a voice ref (from loaded banks). */

@@ -3,7 +3,7 @@
 // today; the same messages fit a hardware-MIDI or native (JUCE) bridge.
 
 import type { PartConfig, ProgramOption } from '@texed/dx7-format/part-config';
-import type { VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
+import type { BankInfo, VoiceRef, VoiceBankId } from '@texed/dx7-format/voice-library';
 import type { LoadReport } from '@texed/dx7-format/sysex-loader';
 import type { RackState } from '@texed/dx7-format/rack-state';
 import type { GlobalSettings } from '@texed/dx7-format/global-settings';
@@ -234,7 +234,7 @@ export type SynthCommand =
 export interface ProgramStateMsg {
   type: 'programState';
   options: ProgramOption[];
-  banks: { id: VoiceBankId; label: string; populated: boolean }[];
+  banks: BankInfo[];
 }
 export interface LoadReportMsg {
   type: 'loadReport';
